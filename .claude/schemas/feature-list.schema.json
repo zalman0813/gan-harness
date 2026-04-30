@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gan-harness/schemas/feature-list.schema.json",
+  "title": "Feature List",
+  "description": "Batch-scope task manifest: vertical slices the generator implements and the evaluator verifies. Lives only during a batch (specs/_batch/feature-list.json); archived to specs/completed/{slug}/ on /finalize. The codebase is the SSoT for per-feature details after the batch ends.",
+  "type": "object",
+  "required": ["batch_slug", "base_commit", "features"],
+  "additionalProperties": false,
+  "properties": {
+    "batch_slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "description": "Batch identifier (kebab-case). Names specs/completed/{slug}/ and tags master .history.md entries."
+    },
+    "base_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$",
+      "description": "Git commit hash the planner started from. Lets sensors detect drift if anyone pushes during the batch."
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/feature" },
+      "description": "Vertical slices in this batch."
+    }
+  },
+
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "required": [
+        "id", "name", "state", "priority",
+        "depends_on", "module_path", "spec", "test_contract"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^F[0-9]{2,3}$",
+          "description": "Feature id. Greppable, never reused."
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+          "description": "Human-readable kebab-case slug. Last segment of module_path under the stack's case rules."
+        },
+        "state": {
+          "enum": ["TODO", "WIP", "DONE", "BLOCKED"],
+          "description": "Lifecycle state. TODO at /prd, WIP when generator starts, DONE on evaluator PASS, BLOCKED after 3 failed rounds."
+        },
+        "priority": {
+          "enum": ["P1", "P2", "P3"],
+          "description": "Feature-level priority. P1 = blocker (batch can't ship without it). P2 = important. P3 = nice-to-have."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^F[0-9]{2,3}$" },
+          "uniqueItems": true,
+          "description": "Same-batch feature ids this feature requires DONE before it can start. Cross-batch dependencies belong in spec.preconditions."
+        },
+        "decision_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Paths to existing ADRs (docs/adr/NNNN-*.md) this feature relies on. Reference only; new ADRs come from the planner's proposed-ADR set."
+        },
+        "module_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative directory the feature owns. Generator creates files here; evaluator architectural_reflection.py verifies it exists."
+        },
+        "spec":          { "$ref": "#/$defs/spec" },
+        "test_contract": { "$ref": "#/$defs/test_contract" }
+      }
+    },
+
+    "spec": {
+      "type": "object",
+      "required": ["user_story", "ac"],
+      "additionalProperties": false,
+      "properties": {
+        "user_story": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 200,
+          "description": "One-sentence Cohn-form user story: \"As a {role} I {action} so that {value}.\""
+        },
+        "preconditions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "State the feature assumes (Cockburn preconditions / Pact providerState). Cross-batch dependencies live here, not in depends_on."
+        },
+        "business_rules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "Feature-local business rules. Cross-feature rules belong in plan.md ## Architectural Decisions, not here."
+        },
+        "open_questions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/open_question" },
+          "default": [],
+          "description": "Questions raised during /prd grill. Each must declare resolution_kind so /finalize knows where the answer sinks."
+        },
+        "ac": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/ac" },
+          "description": "Acceptance criteria. Each is one discriminating eval. \"10 great evals\" cap; over 10 = split the feature."
+        }
+      }
+    },
+
+    "open_question": {
+      "type": "object",
+      "required": ["id", "question", "resolution_kind", "resolution"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^Q-[0-9]{2,3}$",
+          "description": "Question id, greppable."
+        },
+        "question": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The unresolved question (raised in /prd grill or by planner during design)."
+        },
+        "resolution_kind": {
+          "enum": ["feature_local", "architectural", "glossary"],
+          "description": "Routing for the answer when /finalize sinks. feature_local → spec.business_rules (dies with batch). architectural → docs/adr/NNNN-*.md (proposed → accepted). glossary → CONTEXT.md (Domain terms section). No deferred — every question resolves in-batch or batch scope is wrong (escalate at /plan Phase 2 walk)."
+        },
+        "resolution": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Answer text — non-empty at all times. Planner writes a recommended resolution at /plan Phase 1 self-verify; user reviews/edits/approves at /plan Phase 2 per-Q walk. If planner cannot recommend, the batch scope is wrong: escalate, do not write null."
+        }
+      }
+    },
+
+    "ac": {
+      "type": "object",
+      "required": [
+        "id", "title", "kind", "priority",
+        "given", "when", "then",
+        "eval_anchors", "must_not"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^AC-[0-9]{2,3}$",
+          "description": "AC id, greppable, never reused."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "description": "Short headline used as test group name suffix."
+        },
+        "kind": {
+          "enum": ["positive", "negative", "error"],
+          "description": "Eval kind. positive = happy path. negative = behavior the user MUST NOT observe. error = system-level error condition (network, DB down)."
+        },
+        "priority": {
+          "enum": ["P1", "P2", "P3"],
+          "description": "AC-level priority. P1 fail = batch BLOCKED. P2 fail = retry. P3 fail = WARN + AskUserQuestion."
+        },
+        "given": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Gherkin Given clause: precondition state."
+        },
+        "when": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Gherkin When clause: triggering action."
+        },
+        "then": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Gherkin Then clause: expected outcome. Must contain MUST NOT when kind = negative."
+        },
+        "eval_anchors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "description": "Literal strings the test file must contain (visible text or test ids — language-neutral). ac_content_gate.py greps the test file for each anchor."
+        },
+        "must_not": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "description": "Literal strings the test file must NOT contain in the negative scenario. Required non-empty when kind = negative."
+        },
+        "example": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Worked example with real values, helps generator instantiate placeholder vars. Optional."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "negative" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "then":     { "pattern": "MUST NOT" },
+              "must_not": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+
+    "test_contract": {
+      "type": "object",
+      "required": ["l1_command", "l2_path"],
+      "additionalProperties": false,
+      "properties": {
+        "l1_command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Static-analysis command. The active stack skill provides the template (e.g. linter + module path)."
+        },
+        "l2_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unit/component test directory the runner targets."
+        },
+        "l5_smoke_path": {
+          "type": ["string", "null"],
+          "description": "End-to-end smoke test file path. null when this feature does not need L5 (e.g., pure backend or data-model-only). UI features must have a non-null l5_smoke_path."
+        }
+      }
+    }
+  }
+}
