@@ -19,7 +19,7 @@ ASSUMPTIONS I'M MAKING:
 3. ...
 → Correct me now or I'll proceed with these.
 
-Do not silently fill in ambiguous requirements. See `docs/agent-prompt-doctrine.md` § Universal rules.
+Do not silently fill in ambiguous requirements.
 
 ## Common Rationalizations
 
@@ -41,7 +41,6 @@ Do not silently fill in ambiguous requirements. See `docs/agent-prompt-doctrine.
 - **Alive masters**: `ARCHITECTURE.md` (invariants), `app_docs/codemap.md` (navigation), `CONTEXT.md` (domain language), `docs/adr/index.md` (ADR graph)
 - **Active stack skill**: whatever `.claude/skills/<active-stack>/` exposes via its `references/` (idiom library)
 - **Schema**: `.claude/schemas/feature-list.schema.json`
-- **Doctrine**: `docs/agent-prompt-doctrine.md` (universal constraint layer the planner subagent embeds)
 
 ## Outputs
 
@@ -98,7 +97,7 @@ If any Escalate fired during the walk, MAIN aborts immediately — no point cont
 
 ## Where the heavy thinking lives
 
-This skill describes the orchestration. The actual design doctrine the planner agent uses is in [planner-handbook](../planner-handbook/SKILL.md), which the planner subagent auto-loads at startup via its `skills:` frontmatter. Stack-specific idioms (barrel patterns, test commands) live in the active stack skill's `references/` (see [stack-skill-creator](../stack-skill-creator/SKILL.md) to bootstrap one). The universal constraint layer (rationalizations, surface-assumptions, no-silent-inference) lives at `docs/agent-prompt-doctrine.md`.
+This skill describes the orchestration. The actual design doctrine the planner agent uses is in [planner-handbook](../planner-handbook/SKILL.md), which the planner subagent auto-loads at startup via its `skills:` frontmatter. Stack-specific idioms (barrel patterns, test commands) live in the active stack skill's `references/` (see [stack-skill-creator](../stack-skill-creator/SKILL.md) to bootstrap one).
 
 ## Anti-patterns
 

@@ -91,7 +91,7 @@ concrete behaviour patterns to avoid, keep it. Rationalizations capture
 These are constraints embedded by reference. Every worker prompt carries
 a one-line pointer back here:
 
-> See `docs/agent-prompt-doctrine.md` § Universal rules.
+> See `docs/design/agent-prompt-doctrine.md` § Universal rules.
 
 The rules:
 
@@ -160,24 +160,21 @@ catalogue is the SSoT when they need to be updated.
 | "Barrel pattern is standard, I'll copy mainstream" | Each stack has its own idiom. Verify the target stack's actual convention before writing. |
 | "I'm not familiar with this stack, I'll write a reasonable skeleton" | Unfamiliar = stop. Writing a "reasonable skeleton" hands the user wrong defaults disguised as right ones. |
 
-### grill-master
+### prd-workflow (grill happens in MAIN session, not a subagent)
+
+The whole /prd flow is one prompt — grill discipline + orchestration share one rationalization table.
 
 | Rationalization | Reality |
 |---|---|
-| "User probably means X" | Don't infer intent. Ask. |
+| "User probably means X" | Don't infer intent. Ask. Reframe vague targets ("make it secure" → measurable bullets) per `prd-workflow/references/grill-protocol.md`. |
 | "I have enough to write the spec now" | If any branch of the design tree is unresolved, you don't. Walk every branch. |
-| "This decision can wait until /plan figures it out" | No. /plan does not grill. Surface as draft term, AC bullet, constraint, or research-queue question — but resolve before declaring grill done. |
-| "User's dump is contradictory, I'll resolve by picking the later statement" | Don't auto-resolve contradictions. Surface them: "You said A on line 3 and not-A on line 7 — which?" |
+| "User said 'just figure it out for me' — I'll fill in" | Don't. /prd's entire purpose is surfacing assumptions before code. Filling silently is the worst mode. |
+| "User's dump is contradictory, I'll resolve by picking the later statement" | Don't auto-resolve. Surface: "You said A on line 3 and not-A on line 7 — which?" |
 | "I'll save the user time by skipping obvious questions" | Obvious to you, not to them. Skipping bakes in your assumptions silently. Ask. |
-
-### prd-workflow
-
-| Rationalization | Reality |
-|---|---|
-| "Skip codebase research, just go from grill to /plan" | No. /plan has no research phase; that work happens here. Skipping leaves planner blind to existing code. |
-| "User approved at checkpoint, even though one R is still vague" | Re-grill the vague R, do not proceed. Approve means all R are concrete. |
-| "Fact-finder failed on Q-03, just skip that finding" | A failed Q means research.md is incomplete. Surface to user before declaring /prd done. |
-| "User said 'just figure it out for me' — I'll fill in the rest" | Don't. /prd's entire purpose is to surface assumptions before code is written. Filling in silently is the worst possible mode. |
+| "Skip codebase research, just go from grill to /plan" | No. /plan has no research phase; that work happens here. Skipping leaves planner blind. |
+| "Fact-finder failed on Q-03, just skip that finding" | Surface the failure. research.md is incomplete; user decides skip vs retry vs abort. |
+| "User approved at checkpoint, even though one R is still vague" | Re-grill the vague R. Approve means all R are concrete with measurable criteria. |
+| "Spawn a subagent to do the grilling so MAIN stays clean" | No. Grill is interactive multi-turn dialogue and runs in MAIN. Subagents are for fresh-context bulk work (codebase-fact-finder, planner). |
 
 ### generator (T8 future)
 

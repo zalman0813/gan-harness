@@ -1,6 +1,6 @@
 # TODO
 
-Handoff state for resuming gan-harness construction. Read this + `ARCHITECTURE.md` + `CONTEXT.md` + `docs/agent-prompt-doctrine.md` before picking up work.
+Handoff state for resuming gan-harness construction. Read this + `ARCHITECTURE.md` + `CONTEXT.md` + `docs/design/agent-prompt-doctrine.md` before picking up work.
 
 ## 5-step plan progress
 
@@ -68,7 +68,7 @@ After each Edit/Reject, re-run the three-script trio before continuing the walk.
 
 ### Doctrine
 
-`docs/agent-prompt-doctrine.md` is the SSoT for the universal constraint layer every worker prompt embeds:
+`docs/design/agent-prompt-doctrine.md` is the SSoT for the universal constraint layer every worker prompt embeds:
 
 - Mandatory before starting (surface assumptions explicitly)
 - Common Rationalizations (per-agent table, 5±2 rows)
@@ -95,20 +95,24 @@ It does NOT pre-create:
 
 **Delivered** (May 2026):
 
-- `.claude/agents/grill-master.md` — grilling subagent with doctrine three sections, Cohn user-story format, transient research-queue output
-- `.claude/skills/prd-workflow/SKILL.md` — 4-phase orchestration (Pre-flight / Grill / Post-grill checkpoint / Research dispatch / Synth)
+- `.claude/skills/prd-workflow/SKILL.md` — 4-phase orchestration (Pre-flight / Grill in MAIN / Post-grill checkpoint / Research dispatch / Synth)
+- `.claude/skills/prd-workflow/references/grill-protocol.md` — grill discipline (one-Q-at-a-time, surface assumptions, **Reframe vague targets** as measurable success criteria, contradiction surfacing, output formats for prd.md + _research-queue.md)
 - `.claude/skills/prd-workflow/scripts/prd_lint.py` — PASS/FAIL structural lint (L01 H1, L02 R sections, L03 sub-sections, L04 Cohn stories, L05 AC checkboxes, L06 forbidden top-level)
 - `.claude/commands/prd.md` — thin command
 
 **Decisions made during T7 implementation** (locked, do not re-litigate):
 
-- Format reference (`CONTEXT-FORMAT`) inlined into `grill-master.md` under § Output format. SKILL.md stayed under 200 lines so split was not needed.
-- No `prd.schema.json` — prd.md is markdown; `prd_lint.py` enforces structure.
-- Transient files: `specs/_batch/_research-queue.md` (grill-master output → fact-finder input → deleted at synth) and `specs/_batch/_research-findings/Q-NN.md` (fact-finder output → compiled into research.md → directory deleted at synth).
-- Pre-flight rule: if `specs/_batch/` contains `prd.md` or `feature-list.json`, abort (prior batch must be /finalize-archived first). If only `_research-queue.md` is stale, delete and proceed.
-- Post-grill checkpoint is the SINGLE human checkpoint per ARCHITECTURE.md invariant. Grill itself uses many AskUserQuestion turns but those are conversation, not gates. Three options: Approve / Revise / Abort.
-- Research is non-interactive after Phase 2 checkpoint. Fact-finder failures surface in research.md as `Unanswerable` / `Unverified` entries; user reviews at /plan time, not at /prd.
-- prd_lint.py runs at end of Phase 4 synth. Failure blocks /prd from declaring done.
+- **Grill runs in MAIN session, not in a subagent.** Subagents are for fresh-context bulk work (codebase-fact-finder, planner); interactive multi-turn dialogue belongs in MAIN. Pocock's grill-with-docs aligns. Initial grill-master.md draft was deleted in favor of `references/grill-protocol.md` loaded by SKILL.md at Phase 1.
+- **Reframe vague targets pattern adopted** (Addy Osmani convention): when user gives immeasurable input ("make it secure", "make it fast"), translate into concrete bullets and bounce back ("→ Are these the right targets?"). Each reframed bullet becomes a candidate AC. Lives in `grill-protocol.md` § Core rules #4.
+- **No `prd.schema.json`** — prd.md is markdown; `prd_lint.py` enforces structure.
+- **Format reference (`CONTEXT-FORMAT` for Domain terms)** inlined into `grill-protocol.md` under § Output format. Not split out as separate file (SKILL.md + grill-protocol.md is enough granularity for now).
+- **Transient files**: `specs/_batch/_research-queue.md` (grill output → fact-finder input → deleted at synth) and `specs/_batch/_research-findings/Q-NN.md` (fact-finder output → compiled into research.md → directory deleted at synth).
+- **Pre-flight rule**: if `specs/_batch/` contains `prd.md` or `feature-list.json`, abort (prior batch must be /finalize-archived first). If only `_research-queue.md` is stale, delete and proceed.
+- **Post-grill checkpoint is the SINGLE human checkpoint** per ARCHITECTURE.md invariant. Grill itself uses many AskUserQuestion turns but those are conversation, not gates. Three options: Approve / Revise / Abort.
+- **Research is non-interactive** after Phase 2 checkpoint. Fact-finder failures surface in research.md as `Unanswerable` / `Unverified` entries; user reviews at /plan time, not at /prd.
+- **prd_lint.py runs at end of Phase 4 synth**. Failure blocks /prd from declaring done.
+
+**Osmani spec template — explicitly NOT adopted as PRD format.** Tech Stack / Commands / Project Structure / Code Style / Testing Strategy / Boundaries are project-level / stack-level concerns; in our pipeline they live in `stack skill references/`, `ARCHITECTURE.md`, and `agent-prompt-doctrine.md` — not in per-batch PRD. Only the **Reframe pattern** was absorbed.
 
 ---
 
@@ -163,17 +167,20 @@ It does NOT pre-create:
 | **C. Domain layout** | single CONTEXT.md vs multi-context with CONTEXT-MAP.md | single | (write nothing — lazy) |
 | **D. ADR location** | `docs/adr/` (Pocock + MADR convention) | `docs/adr/` | (write nothing — lazy) |
 
-**Always-emitted scaffolding**:
+**Always-emitted scaffolding** (different content from gan-harness's own master files — target project gets a TEMPLATE with placeholders, not gan-harness's actual files):
 - `ARCHITECTURE.md` template (matklad form; invariant placeholders for user to fill per project)
 - `README.md` template
 - `.claude/` tree (copy from harness)
 - `specs/_batch/.gitkeep`, `specs/completed/.gitkeep`
-- `docs/agent-prompt-doctrine.md` (copy verbatim — universal constraint layer)
 
 **Lazy** (DO NOT pre-create):
 - `CONTEXT.md`
 - `docs/adr/` + `index.md`
 - `app_docs/codemap.md`
+
+**Do NOT copy to target** (gan-harness-maintainer-internal, stays in harness repo only):
+- `docs/design/` — entire directory (agent-prompt-doctrine, harness-reference, feature-list-spec are tools for harness maintainers, not target-project artefacts)
+- `TODO.md` — handoff state for ongoing harness development
 
 **Pocock's interaction protocol** (must adopt):
 1. Explore first (`git remote -v`, look for existing `CLAUDE.md` / `AGENTS.md` / `CONTEXT.md` / `docs/adr/`). Don't assume.
@@ -217,7 +224,7 @@ Raw URL pattern: `https://raw.githubusercontent.com/mattpocock/skills/main/<path
 
 - `ARCHITECTURE.md` — 7 invariants the system must not violate
 - `CONTEXT.md` — domain ubiquitous language (Pocock-style, slim)
-- `docs/agent-prompt-doctrine.md` — universal constraint layer every worker prompt embeds
+- `docs/design/agent-prompt-doctrine.md` — universal constraint layer every worker prompt embeds
 - `README.md` — pipeline diagram + project layout
 - `.claude/agents/planner.md` — example agent definition with full doctrine three sections
 - `.claude/skills/plan-workflow/SKILL.md` — example workflow skill with doctrine
@@ -232,10 +239,10 @@ Raw URL pattern: `https://raw.githubusercontent.com/mattpocock/skills/main/<path
 - Don't reintroduce `risks` / `tech_debt` / `cross_r_risks` fields — schema's `additionalProperties: false` rejects them; planner must resolve to ADR / open_question / feature.
 - Don't add WARN severity to lint scripts — PASS/FAIL only.
 - Don't move `ARCHITECTURE.md` content into `CLAUDE.md` — different concerns; subagents don't auto-inherit `CLAUDE.md` anyway. Per-agent `Inputs` lists are the right mechanism.
-- Don't add a `docs/agents/` layer (Pocock has it; we don't need it because doctrine lives in `docs/agent-prompt-doctrine.md` + per-agent prompts).
+- Don't add a `docs/agents/` layer (Pocock has it; we don't need it because doctrine lives in `docs/design/agent-prompt-doctrine.md` + per-agent prompts).
 - Don't introduce a new top-level master file without a sink target.
 - Don't lint-enforce deep-module heuristics — design-time doctrine only.
 - Don't pre-create empty `CONTEXT.md` / `docs/adr/index.md` / `app_docs/codemap.md` stubs at setup — they are lazy.
 - Don't merge `prd.md` and `research.md` — different rot lifecycles (intent stable, codebase snapshot may stale). Two files per batch.
 - Don't shard prd/research per-R into subdirs — single batch-level file each, H2 sections per R. The 1M context makes sharding's token argument moot; planner needs cross-R coherence anyway.
-- Don't write any worker prompt without embedding the doctrine three sections (Mandatory before starting + Common Rationalizations + reference to `docs/agent-prompt-doctrine.md`). Agent rationalization tables are catalogued there for reuse.
+- Don't write any worker prompt without embedding the doctrine three sections (Mandatory before starting + Common Rationalizations + reference to `docs/design/agent-prompt-doctrine.md`). Agent rationalization tables are catalogued there for reuse.

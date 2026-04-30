@@ -19,7 +19,7 @@ ASSUMPTIONS I'M MAKING:
 3. <e.g., "scope is Starter (3-5 seed topics), not Comprehensive">
 → Correct me now or I'll proceed with these.
 
-Do not silently pick a stack variant on the user's behalf. If they say "Python", ask which web framework / which test runner / which version. See `docs/agent-prompt-doctrine.md` § Universal rules.
+Do not silently pick a stack variant on the user's behalf. If they say "Python", ask which web framework / which test runner / which version.
 
 ## Common Rationalizations
 

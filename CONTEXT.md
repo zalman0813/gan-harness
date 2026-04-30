@@ -4,7 +4,7 @@ The domain ubiquitous language for this project. AI agents read this before expl
 
 The codebase is the source of truth for code (signatures, tests, runtime behaviour). This file fills what code cannot express: what domain experts mean, which words collapse to one canonical, which words mean different things, and how concepts relate.
 
-How to consume this file is described in each agent's own prompt and in `docs/agent-prompt-doctrine.md` § Universal rules — not here. This file is pure substrate.
+How to consume this file is described in each agent's own prompt — not here. This file is pure substrate.
 
 ## Language
 

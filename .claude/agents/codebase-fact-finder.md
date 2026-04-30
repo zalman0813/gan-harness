@@ -19,7 +19,7 @@ ASSUMPTIONS I'M MAKING:
 2. <e.g., "I should search the entire repo, not a specific subdir">
 → If wrong, the caller corrects me before I start. If they don't reply, I proceed and flag the assumption in the output.
 
-Do not silently fill in ambiguous question wording. If the question is unclear, write `Unanswerable: question ambiguous on <X>` in the output and return early. See `docs/agent-prompt-doctrine.md` § Universal rules.
+Do not silently fill in ambiguous question wording. If the question is unclear, write `Unanswerable: question ambiguous on <X>` in the output and return early.
 
 ## Common Rationalizations
 

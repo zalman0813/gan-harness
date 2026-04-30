@@ -18,8 +18,6 @@ Usage:
     uv run .claude/skills/batch-gc/scripts/stagnation_audit.py
     python3 .claude/skills/batch-gc/scripts/stagnation_audit.py --json
 
-Design reference: docs/harness-reference.md (current architecture);
-see docs/archive/pre-ref-arch/ for historical rot-evidence proposals.
 """
 
 from __future__ import annotations

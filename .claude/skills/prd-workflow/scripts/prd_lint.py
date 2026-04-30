@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Structural lint for specs/_batch/prd.md.
 
-PASS/FAIL only. No WARN, no STRICT, no TODO — see ARCHITECTURE.md
-invariants and docs/agent-prompt-doctrine.md § Universal rules.
+PASS/FAIL only. No WARN, no STRICT, no TODO.
 
 Checks:
   L01  H1 line matches `# Batch PRD — <kebab-slug>`

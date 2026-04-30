@@ -27,9 +27,8 @@ The codebase is authoritative for everything per-feature. Alive docs at the
 repo root supplement only what the codebase cannot express:
 
 - `ARCHITECTURE.md` — invariants (this file; "absence of X" facts)
-- `docs/adr/` — decision rationale + rejected options (MADR, immutable)
 - `CONTEXT.md` — domain ubiquitous language (Pocock-style substrate)
-- `docs/agent-prompt-doctrine.md` — universal constraint layer every worker prompt embeds (rationalizations, surface-assumptions, no-silent-inference)
+- `docs/adr/` — decision rationale + rejected options (MADR, immutable)
 - `app_docs/codemap.md` — auto-generated module map (read-only output)
 
 If information lives in code (per-feature tests, API signatures, in-code

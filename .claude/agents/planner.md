@@ -20,7 +20,7 @@ ASSUMPTIONS I'M MAKING:
 3. ...
 → Correct me now or I'll proceed with these.
 
-Do not silently fill in ambiguous requirements. If the input is unclear, surface as an `open_question` with your recommended resolution and `resolution_kind` — do not invent. See `docs/agent-prompt-doctrine.md` § Universal rules.
+Do not silently fill in ambiguous requirements. If the input is unclear, surface as an `open_question` with your recommended resolution and `resolution_kind` — do not invent.
 
 ## Common Rationalizations
 
@@ -40,7 +40,6 @@ Do not silently fill in ambiguous requirements. If the input is unclear, surface
 - `app_docs/codemap.md` — navigation
 - `CONTEXT.md` — domain ubiquitous language. **Use the vocabulary verbatim**; if a needed concept isn't there, raise an `open_question` with `resolution_kind: glossary` (do not invent terms); if your design contradicts an existing ADR, surface it explicitly (do not silently override)
 - `docs/adr/index.md` + cited ADRs — design decisions on record
-- `docs/agent-prompt-doctrine.md` — the universal constraint layer (rationalizations, universal rules)
 - Active stack skill's `references/` — language/framework idioms (test-runner conventions, barrel/docstring patterns, vertical-slice scaffolds)
 - Your auto-loaded **planner-handbook** skill — read its references progressively as you reach each decision point (do not load all four upfront)
 
