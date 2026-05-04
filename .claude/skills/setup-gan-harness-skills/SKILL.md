@@ -36,6 +36,21 @@ not to myself.
 | "Section walk is tedious; I'll bulk-ask everything in one prompt" | No. One `AskUserQuestion` per section, with explainer first. The interactive cadence IS the contract; bulk-ask collapses it. |
 | "Agent frontmatter edit is mechanical; I'll inline the change without a script" | Use `wire_stack_skills.py`. Mechanical edits go through the script so behaviour is reproducible and testable. |
 | "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /prd /plan etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents auto-load their own handbooks; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
+| "User asked me to add a principle to `## Principles` section; I'll write it however reads naturally" | NO. Use the Karpathy 5-element format (see § Principle format below). Ad-hoc principle structures rot — they accumulate inconsistencies that make the section unreadable as it grows. The 5 elements (numbered heading / tagline / paragraph / bullets / "The test:" sentence) are non-negotiable. |
+
+## Principle format
+
+When the user asks to add or edit a principle in any project's CLAUDE.md `## Principles` section, follow the Karpathy 5-element format (source: <https://github.com/forrestchang/andrej-karpathy-skills>):
+
+1. `### N. Title` — numbered heading. Increment monotonically; never reuse a number even if a principle is removed (so `git log -S "### 3. "` always finds history).
+2. `**Tagline**` — one line, bold, imperative. Should fit on a single line and convey the rule independently.
+3. **Explanatory paragraph** — rationale + cost of violating + when it applies. 2–4 sentences. Names the concrete consequence the rule prevents.
+4. **4–5 bullets** — concrete actionable directives, each atomic and grep-able. Bullets describe the FORBIDDEN action or the REQUIRED action; not abstract advice.
+5. **`The test: …`** — a yes/no self-check Claude can run while writing code. If you can't write a "The test:" sentence for the principle, the principle isn't operational — refine until you can.
+
+**Anti-rationalization**: any principle missing the "The test:" sentence is a slogan, not a rule. Refuse to write a slogan-only principle; either complete the 5 elements or surface as `open_question` to the user.
+
+**Where this format lives at runtime**: each project's `CLAUDE.md` `## Principles` section opens with a `> Format for adding new principles: ...` block-quote preamble that mirrors this. The preamble is per-project (lives in target's CLAUDE.md, not in the injected template) so principles can grow project-by-project without setup re-injection.
 
 ## When to use
 
