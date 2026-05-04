@@ -38,7 +38,7 @@ Do not silently fill in ambiguous requirements.
 ## Inputs
 
 - **From /prd**: `specs/_batch/prd.md` (batch-level PRD; H2 sections per R; Domain terms draft per R), `specs/_batch/research.md` (batch-level codebase facts with base_commit + timestamp)
-- **Alive masters**: `ARCHITECTURE.md` (invariants), `app_docs/codemap.md` (navigation), `CONTEXT.md` (domain language), `docs/adr/index.md` (ADR graph)
+- **Alive masters**: `CODEMAP.md` (navigation), `CONTEXT.md` (domain language), `docs/adr/index.md` (ADR graph). Design concepts (guides/sensors, three-layer model) live in `README.md` § Core design concepts.
 - **Active stack skill**: whatever `.claude/skills/<active-stack>/` exposes via its `references/` (idiom library)
 - **Schema**: `.claude/schemas/feature-list.schema.json`
 
@@ -67,7 +67,64 @@ All three are PASS/FAIL only. Any FAIL → planner reads violations → fixes th
 
 If 3 rounds elapse and any script still FAILs, MAIN aborts with diagnostic. The design is fundamentally wrong — escalate to /prd for re-scope, do not grind further.
 
-### Phase 2 — Per-question human checkpoint walk
+### Phase 2 — Pre-walk surfacing + per-question human checkpoint
+
+#### Phase 2.0 — Pre-walk: surface planner's ASSUMPTIONS + escalations
+
+Read the planner subagent's final summary (the message returned to MAIN at the end of Phase 1). Extract the following H2 blocks (header text must match verbatim — see planner.md § Outputs for the contract):
+
+- `## Assumptions I made` — premises planner proceeded with
+- `## Cannot recommend` — `Q-NN (Fxx): <reason>` entries planner couldn't answer
+
+**If both blocks are absent**: skip Phase 2.0 entirely, proceed to Phase 2.1.
+
+**If either block is present**: render one `AskUserQuestion` with the rendered blocks and three options:
+
+```
+Planner self-verify is complete. Before walking the open_questions and ADRs,
+review the planner's surfaced premises:
+
+## Assumptions I made
+<rendered bullets, or omit this H2 if planner emitted no assumption block>
+
+## Cannot recommend
+<rendered Q-NN list, or omit this H2 if planner recommended every answer>
+
+Options:
+- Approve            — premises are correct; proceed to per-Q walk.
+- Re-spawn planner   — at least one assumption is wrong, or a "Cannot
+                       recommend" needs your answer now; re-spawn planner
+                       with corrections, then loop back here.
+- Abort              — batch scope is wrong; exit /plan and re-enter /prd.
+```
+
+Branch:
+
+- **Approve** → continue to Phase 2.1.
+- **Re-spawn planner** → user provides corrections (free-form text). MAIN re-spawns the `planner` subagent with a scoped amendment prompt:
+
+  ```
+  You are amending an existing batch's feature-list.json after the
+  pre-walk checkpoint. The user has reviewed your prior assumptions /
+  escalations and provided corrections. Apply them, then re-run the
+  three-script self-verify trio.
+
+  Corrections:
+  <user-supplied text>
+
+  After applying: run scripts/plan_validator.py, lift_capabilities.py,
+  and plan_lint.py. Return a fresh final summary in the same H2 format
+  (## Assumptions I made + ## Cannot recommend, omitting either H2 if
+  empty).
+  ```
+
+  After the re-spawned planner returns, **loop back to Phase 2.0** with the new final summary. No round budget on re-spawns — user keeps Re-spawning until satisfied or chooses Abort.
+
+- **Abort** → exit /plan with a "rerun /prd to re-scope" diagnostic. Do NOT delete `feature-list.json` or any ADR files — user may want to inspect them.
+
+The pre-walk checkpoint is conversation, not a gate (same exemption Phase 2.1 uses), so it does not violate the "single human checkpoint per stage" invariant.
+
+#### Phase 2.1 — Per-question walk
 
 MAIN walks every open_question (across all features) where `resolution_kind ∈ {feature_local, architectural, glossary}` AND every proposed ADR. One AskUserQuestion per item, in this order:
 
@@ -113,5 +170,6 @@ This skill describes the orchestration. The actual design doctrine the planner a
 
 - [ ] `specs/_batch/feature-list.json` exists, three-script trio PASS
 - [ ] `docs/adr/NNNN-*.md` × M (status:proposed) exist for every architectural decision the planner identified
-- [ ] Phase 2 checkpoint walked every open_question and every proposed ADR; all answered Approve or Edit (no Escalate, no Reject leaving inconsistent state)
+- [ ] Phase 2.0 pre-walk completed (skipped if planner emitted no assumptions/escalations, OR user Approved, OR user Re-spawned and re-Approved)
+- [ ] Phase 2.1 walked every open_question and every proposed ADR; all answered Approve or Edit (no Escalate, no Reject leaving inconsistent state)
 - [ ] Final report printed; `/execution-loop` suggested

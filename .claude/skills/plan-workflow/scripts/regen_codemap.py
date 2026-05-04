@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate app_docs/codemap.md by extracting module-level docstrings
+"""Regenerate CODEMAP.md (project root) by extracting module-level docstrings
 from barrel files in the source tree.
 
 Walks the source tree, identifies barrels by language convention, extracts
 the first module-level docstring block via per-language regex, and writes
-a flat codemap.md. No LLM involvement; deterministic.
+a flat CODEMAP.md. No LLM involvement; deterministic.
 
 Default barrel patterns (used when no stack skill override):
   *.dart   barrel — .dart file containing top-level `library;`
@@ -18,7 +18,7 @@ its directory listing patterns; this script reads it if present (best-effort,
 not yet contracted — placeholder for next stage).
 
 Usage:
-  regen_codemap.py [--src-root .] [--out app_docs/codemap.md]
+  regen_codemap.py [--src-root .] [--out CODEMAP.md]
 
 Exit:
   0 OK
@@ -95,7 +95,7 @@ def find_default_barrels(src_root: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src-root", default=".", help="source tree root (default: .)")
-    ap.add_argument("--out", default="app_docs/codemap.md", help="output path")
+    ap.add_argument("--out", default="CODEMAP.md", help="output path")
     args = ap.parse_args()
 
     src_root = Path(args.src_root).resolve()

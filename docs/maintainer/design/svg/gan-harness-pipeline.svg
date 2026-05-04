@@ -1,0 +1,444 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <radialGradient id="bg-grad" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#0e1420"/>
+      <stop offset="100%" stop-color="#060810"/>
+    </radialGradient>
+
+    <filter id="glow-amber" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#e8a020" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#36f9f6" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#fede5d" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-teal" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#38c8c8" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#5b8af0" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#72f1b8" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-pink" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#ff7edb" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-orange" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#ff9e64" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-line" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <style>
+      .phase-0 { opacity: 0; animation: fadeIn 0.8s ease-out 0.4s forwards; }
+      .phase-1 { opacity: 0; animation: fadeIn 0.9s ease-out 1.2s forwards; }
+      .phase-2 { opacity: 0; animation: fadeIn 0.9s ease-out 2.4s forwards; }
+      .phase-3 { opacity: 0; animation: fadeIn 0.9s ease-out 3.6s forwards; }
+      .phase-4 { opacity: 0; animation: fadeIn 0.9s ease-out 4.8s forwards; }
+      .phase-flow { opacity: 0; animation: fadeIn 0.9s ease-out 6.0s forwards; }
+      .phase-legend { opacity: 0; animation: fadeIn 0.9s ease-out 6.8s forwards; }
+
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+      .pulse-line { animation: linePulse 3s ease-in-out infinite; }
+      @keyframes linePulse {
+        0%, 100% { opacity: 0.4; } 50% { opacity: 0.95; }
+      }
+
+      .dot {
+        opacity: 0;
+        animation: appear 0.1s ease 7.5s forwards,
+                   travel 4s ease-in-out 7.5s infinite;
+        filter: url(#glow-line);
+      }
+      @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes travel {
+        0%   { offset-distance: 0%;   opacity: 1; }
+        50%  { offset-distance: 100%; opacity: 1; }
+        51%  { offset-distance: 100%; opacity: 0; }
+        100% { offset-distance: 0%;   opacity: 0; }
+      }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#bg-grad)"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.03" stroke="#36f9f6" stroke-width="0.5">
+    <line x1="0" y1="200" x2="1920" y2="200"/>
+    <line x1="0" y1="400" x2="1920" y2="400"/>
+    <line x1="0" y1="600" x2="1920" y2="600"/>
+    <line x1="0" y1="800" x2="1920" y2="800"/>
+    <line x1="200" y1="0" x2="200" y2="1080"/>
+    <line x1="400" y1="0" x2="400" y2="1080"/>
+    <line x1="600" y1="0" x2="600" y2="1080"/>
+    <line x1="800" y1="0" x2="800" y2="1080"/>
+    <line x1="1000" y1="0" x2="1000" y2="1080"/>
+    <line x1="1200" y1="0" x2="1200" y2="1080"/>
+    <line x1="1400" y1="0" x2="1400" y2="1080"/>
+    <line x1="1600" y1="0" x2="1600" y2="1080"/>
+    <line x1="1800" y1="0" x2="1800" y2="1080"/>
+  </g>
+
+  <!-- Title -->
+  <g class="phase-0">
+    <text x="960" y="42" text-anchor="middle" fill="#36f9f6" font-size="22" font-weight="700" letter-spacing="4">
+      GAN-HARNESS · 4-STAGE OUTER HARNESS
+    </text>
+    <text x="960" y="68" text-anchor="middle" fill="#888" font-size="11" font-weight="600" letter-spacing="3">
+      /prd → /plan → /execution-loop → /finalize · generator ↔ evaluator adversarial loop
+    </text>
+  </g>
+
+  <!-- Engineer at top -->
+  <g class="phase-0">
+    <circle cx="960" cy="108" r="6" fill="#e0e0e0"/>
+    <path d="M946 134 Q946 121 954 121 L966 121 Q974 121 974 134" fill="none" stroke="#e0e0e0" stroke-width="1.8" stroke-linecap="round"/>
+    <text x="960" y="155" text-anchor="middle" fill="#e0e0e0" font-size="11" font-weight="600">You, the Engineer</text>
+    <line x1="960" y1="160" x2="960" y2="190" stroke="#e8a020" stroke-width="1.2" opacity="0.5" stroke-dasharray="3,3"/>
+  </g>
+
+  <!-- Column headers -->
+  <g class="phase-0">
+    <text x="280" y="210" text-anchor="middle" fill="#e0e0e0" font-size="14" font-weight="700" letter-spacing="3">/prd</text>
+    <text x="280" y="230" text-anchor="middle" fill="#888" font-size="9" font-weight="600" letter-spacing="1">intent → verifiable spec</text>
+    <line x1="120" y1="245" x2="440" y2="245" stroke="#e0e0e0" stroke-width="1" opacity="0.4"/>
+
+    <text x="720" y="210" text-anchor="middle" fill="#e0e0e0" font-size="14" font-weight="700" letter-spacing="3">/plan</text>
+    <text x="720" y="230" text-anchor="middle" fill="#888" font-size="9" font-weight="600" letter-spacing="1">spec → feature contract</text>
+    <line x1="560" y1="245" x2="880" y2="245" stroke="#e0e0e0" stroke-width="1" opacity="0.4"/>
+
+    <text x="1180" y="210" text-anchor="middle" fill="#e0e0e0" font-size="14" font-weight="700" letter-spacing="3">/execution-loop</text>
+    <text x="1180" y="230" text-anchor="middle" fill="#888" font-size="9" font-weight="600" letter-spacing="1">contract → code · max 3 rounds / feature</text>
+    <line x1="980" y1="245" x2="1380" y2="245" stroke="#e0e0e0" stroke-width="1" opacity="0.4"/>
+
+    <text x="1640" y="210" text-anchor="middle" fill="#e0e0e0" font-size="14" font-weight="700" letter-spacing="3">/finalize</text>
+    <text x="1640" y="230" text-anchor="middle" fill="#888" font-size="9" font-weight="600" letter-spacing="1">close the batch</text>
+    <line x1="1480" y1="245" x2="1800" y2="245" stroke="#e0e0e0" stroke-width="1" opacity="0.4"/>
+  </g>
+
+  <!-- ============== COL 1: /prd ============== -->
+  <g class="phase-1">
+    <rect x="200" y="280" width="160" height="44" rx="12" fill="#0e1420" stroke="#36f9f6" stroke-width="2.2" filter="url(#glow-cyan)"/>
+    <text x="280" y="302" text-anchor="middle" fill="#36f9f6" font-size="14" font-weight="700">/prd</text>
+    <text x="280" y="318" text-anchor="middle" fill="#888" font-size="9">Skill tool</text>
+
+    <rect x="200" y="360" width="160" height="44" rx="12" fill="#0e1420" stroke="#36f9f6" stroke-width="2.2" filter="url(#glow-cyan)"/>
+    <text x="280" y="382" text-anchor="middle" fill="#36f9f6" font-size="13" font-weight="700">MAIN: grill</text>
+    <text x="280" y="397" text-anchor="middle" fill="#888" font-size="9">interactive Q&amp;A</text>
+
+    <rect x="155" y="445" width="80" height="38" rx="10" fill="#0e1420" stroke="#fede5d" stroke-width="1.8" filter="url(#glow-gold)"/>
+    <text x="195" y="463" text-anchor="middle" fill="#fede5d" font-size="10" font-weight="700">fact-finder</text>
+    <text x="195" y="476" text-anchor="middle" fill="#888" font-size="8">Q1</text>
+
+    <rect x="240" y="445" width="80" height="38" rx="10" fill="#0e1420" stroke="#fede5d" stroke-width="1.8" filter="url(#glow-gold)"/>
+    <text x="280" y="463" text-anchor="middle" fill="#fede5d" font-size="10" font-weight="700">fact-finder</text>
+    <text x="280" y="476" text-anchor="middle" fill="#888" font-size="8">Q2</text>
+
+    <rect x="325" y="445" width="80" height="38" rx="10" fill="#0e1420" stroke="#fede5d" stroke-width="1.8" filter="url(#glow-gold)"/>
+    <text x="365" y="463" text-anchor="middle" fill="#fede5d" font-size="10" font-weight="700">fact-finder</text>
+    <text x="365" y="476" text-anchor="middle" fill="#888" font-size="8">Qn</text>
+
+    <text x="280" y="500" text-anchor="middle" fill="#888" font-size="9" font-style="italic">parallel · blindfold · file:line evidence</text>
+
+    <rect x="200" y="525" width="160" height="36" rx="8" fill="#0e1420" stroke="#36f9f6" stroke-width="1.5"/>
+    <text x="280" y="544" text-anchor="middle" fill="#36f9f6" font-size="10" font-weight="600">prd_lint.py</text>
+    <text x="280" y="556" text-anchor="middle" fill="#888" font-size="8">L01–L06 · PASS/FAIL</text>
+
+    <polygon points="280,585 322,615 280,645 238,615" fill="#0e1420" stroke="#e8a020" stroke-width="1.8" filter="url(#glow-amber)"/>
+    <text x="280" y="612" text-anchor="middle" fill="#e8a020" font-size="9" font-weight="700">post-grill</text>
+    <text x="280" y="624" text-anchor="middle" fill="#e0e0e0" font-size="9">A / R / X ?</text>
+
+    <rect x="170" y="680" width="100" height="32" rx="6" fill="#0a0f18" stroke="#fede5d" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="220" y="697" text-anchor="middle" fill="#fede5d" font-size="9" font-weight="500">prd.md</text>
+    <text x="220" y="708" text-anchor="middle" fill="#888" font-size="7">specs/_batch/</text>
+
+    <rect x="290" y="680" width="100" height="32" rx="6" fill="#0a0f18" stroke="#fede5d" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="340" y="697" text-anchor="middle" fill="#fede5d" font-size="9" font-weight="500">research.md</text>
+    <text x="340" y="708" text-anchor="middle" fill="#888" font-size="7">file:line · base_commit</text>
+
+    <line x1="280" y1="324" x2="280" y2="360" stroke="#36f9f6" stroke-width="1.2" opacity="0.4"/>
+    <line x1="280" y1="404" x2="280" y2="445" stroke="#fede5d" stroke-width="1" opacity="0.4" stroke-dasharray="3,3"/>
+    <line x1="280" y1="483" x2="280" y2="525" stroke="#36f9f6" stroke-width="1.2" opacity="0.4"/>
+    <line x1="280" y1="561" x2="280" y2="585" stroke="#36f9f6" stroke-width="1.2" opacity="0.4"/>
+    <path d="M260 645 L220 680" fill="none" stroke="#fede5d" stroke-width="1" opacity="0.4"/>
+    <path d="M300 645 L340 680" fill="none" stroke="#fede5d" stroke-width="1" opacity="0.4"/>
+  </g>
+
+  <!-- ============== COL 2: /plan ============== -->
+  <g class="phase-2">
+    <rect x="640" y="280" width="160" height="44" rx="12" fill="#0e1420" stroke="#36f9f6" stroke-width="2.2" filter="url(#glow-cyan)"/>
+    <text x="720" y="302" text-anchor="middle" fill="#36f9f6" font-size="14" font-weight="700">/plan</text>
+    <text x="720" y="318" text-anchor="middle" fill="#888" font-size="9">Skill tool</text>
+
+    <rect x="640" y="360" width="160" height="44" rx="12" fill="#0e1420" stroke="#38c8c8" stroke-width="2.2" filter="url(#glow-teal)"/>
+    <text x="720" y="382" text-anchor="middle" fill="#38c8c8" font-size="13" font-weight="700">planner</text>
+    <text x="720" y="397" text-anchor="middle" fill="#888" font-size="9">vertical-slice features</text>
+
+    <rect x="600" y="438" width="82" height="32" rx="6" fill="#0e1420" stroke="#38c8c8" stroke-width="1.4"/>
+    <text x="641" y="453" text-anchor="middle" fill="#38c8c8" font-size="8" font-weight="600">plan_validator</text>
+    <text x="641" y="464" text-anchor="middle" fill="#888" font-size="7">JSON Schema · DAG</text>
+
+    <rect x="687" y="438" width="74" height="32" rx="6" fill="#0e1420" stroke="#38c8c8" stroke-width="1.4"/>
+    <text x="724" y="453" text-anchor="middle" fill="#38c8c8" font-size="8" font-weight="600">lift_caps</text>
+    <text x="724" y="464" text-anchor="middle" fill="#888" font-size="7">dup IDs · refs</text>
+
+    <rect x="766" y="438" width="74" height="32" rx="6" fill="#0e1420" stroke="#38c8c8" stroke-width="1.4"/>
+    <text x="803" y="453" text-anchor="middle" fill="#38c8c8" font-size="8" font-weight="600">plan_lint</text>
+    <text x="803" y="464" text-anchor="middle" fill="#888" font-size="7">L10a/b design</text>
+
+    <text x="720" y="488" text-anchor="middle" fill="#888" font-size="9" font-style="italic">three-script self-verify · PASS/FAIL only</text>
+
+    <polygon points="720,518 770,553 720,588 670,553" fill="#0e1420" stroke="#e8a020" stroke-width="1.8" filter="url(#glow-amber)"/>
+    <text x="720" y="549" text-anchor="middle" fill="#e8a020" font-size="9" font-weight="700">per-Q walk</text>
+    <text x="720" y="561" text-anchor="middle" fill="#e0e0e0" font-size="9">A / E / X ?</text>
+    <text x="720" y="573" text-anchor="middle" fill="#888" font-size="7">AskUserQuestion × N</text>
+
+    <rect x="610" y="630" width="100" height="32" rx="6" fill="#0a0f18" stroke="#38c8c8" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="660" y="647" text-anchor="middle" fill="#38c8c8" font-size="9" font-weight="500">feature-list.json</text>
+    <text x="660" y="658" text-anchor="middle" fill="#888" font-size="7">immutable contract</text>
+
+    <rect x="730" y="630" width="100" height="32" rx="6" fill="#0a0f18" stroke="#38c8c8" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="780" y="647" text-anchor="middle" fill="#38c8c8" font-size="9" font-weight="500">ADR × M</text>
+    <text x="780" y="658" text-anchor="middle" fill="#888" font-size="7">status: proposed</text>
+
+    <line x1="720" y1="324" x2="720" y2="360" stroke="#36f9f6" stroke-width="1.2" opacity="0.4"/>
+    <line x1="720" y1="404" x2="720" y2="438" stroke="#38c8c8" stroke-width="1.2" opacity="0.4"/>
+    <line x1="720" y1="470" x2="720" y2="518" stroke="#38c8c8" stroke-width="1.2" opacity="0.4"/>
+    <path d="M700 588 L660 630" fill="none" stroke="#38c8c8" stroke-width="1" opacity="0.4"/>
+    <path d="M740 588 L780 630" fill="none" stroke="#38c8c8" stroke-width="1" opacity="0.4"/>
+  </g>
+
+  <!-- ============== COL 3: /execution-loop ============== -->
+  <g class="phase-3">
+    <rect x="1100" y="280" width="160" height="44" rx="12" fill="#0e1420" stroke="#36f9f6" stroke-width="2.2" filter="url(#glow-cyan)"/>
+    <text x="1180" y="302" text-anchor="middle" fill="#36f9f6" font-size="14" font-weight="700">/execution-loop</text>
+    <text x="1180" y="318" text-anchor="middle" fill="#888" font-size="9">walk depends_on DAG</text>
+
+    <rect x="1100" y="358" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff9e64" stroke-width="1.4"/>
+    <text x="1180" y="377" text-anchor="middle" fill="#ff9e64" font-size="10" font-weight="700">per feature · round R ∈ {1,2,3}</text>
+
+    <rect x="1010" y="420" width="140" height="48" rx="12" fill="#0e1420" stroke="#5b8af0" stroke-width="2.2" filter="url(#glow-blue)"/>
+    <text x="1080" y="441" text-anchor="middle" fill="#5b8af0" font-size="13" font-weight="700">generator</text>
+    <text x="1080" y="457" text-anchor="middle" fill="#888" font-size="9">code + tests + commit</text>
+
+    <rect x="1210" y="420" width="140" height="48" rx="12" fill="#0e1420" stroke="#72f1b8" stroke-width="2.2" filter="url(#glow-green)"/>
+    <text x="1280" y="441" text-anchor="middle" fill="#72f1b8" font-size="13" font-weight="700">evaluator</text>
+    <text x="1280" y="457" text-anchor="middle" fill="#888" font-size="9">spec · adversarial probes</text>
+
+    <path d="M1150 444 L1210 444" fill="none" stroke="#5b8af0" stroke-width="1.6" opacity="0.7" class="pulse-line"/>
+    <polygon points="1210,444 1200,440 1200,448" fill="#5b8af0"/>
+    <text x="1180" y="437" text-anchor="middle" fill="#888" font-size="8" font-style="italic">trace</text>
+
+    <rect x="1010" y="490" width="140" height="28" rx="6" fill="#0e1420" stroke="#5b8af0" stroke-width="1.2"/>
+    <text x="1080" y="508" text-anchor="middle" fill="#5b8af0" font-size="9" font-weight="600">gate_gen_precommit</text>
+
+    <rect x="1210" y="490" width="140" height="28" rx="6" fill="#0e1420" stroke="#72f1b8" stroke-width="1.2"/>
+    <text x="1280" y="508" text-anchor="middle" fill="#72f1b8" font-size="9" font-weight="600">gate_eval_postcommit</text>
+
+    <polygon points="1180,545 1240,580 1180,615 1120,580" fill="#0e1420" stroke="#b893ce" stroke-width="1.8"/>
+    <text x="1180" y="577" text-anchor="middle" fill="#e0e0e0" font-size="10" font-weight="700">verdict</text>
+    <text x="1180" y="591" text-anchor="middle" fill="#888" font-size="7">PASS · FAIL · DEFERRED</text>
+
+    <text x="1080" y="612" text-anchor="middle" fill="#72f1b8" font-size="9" font-weight="600">PASS</text>
+    <path d="M1120 580 L1080 600 L1080 700" fill="none" stroke="#72f1b8" stroke-width="1.2" opacity="0.5"/>
+    <polygon points="1080,700 1076,690 1084,690" fill="#72f1b8"/>
+
+    <text x="1340" y="540" text-anchor="middle" fill="#ff9e64" font-size="9" font-weight="600">FAIL · R&lt;3</text>
+    <path d="M1240 580 Q 1340 580 1340 480 Q 1340 420 1290 420" fill="none" stroke="#ff9e64" stroke-width="1.4" opacity="0.6" stroke-dasharray="4,3"/>
+    <polygon points="1290,420 1300,416 1300,424" fill="#ff9e64"/>
+    <text x="1360" y="500" fill="#ff9e64" font-size="8" font-style="italic" opacity="0.85">retry</text>
+
+    <text x="1180" y="635" text-anchor="middle" fill="#ff6e96" font-size="9" font-weight="600">FAIL @ R3 → status: deferred</text>
+
+    <rect x="1060" y="710" width="110" height="32" rx="6" fill="#0a0f18" stroke="#36f9f6" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="1115" y="727" text-anchor="middle" fill="#36f9f6" font-size="9" font-weight="500">progress.tsv</text>
+    <text x="1115" y="738" text-anchor="middle" fill="#888" font-size="7">append-only</text>
+
+    <rect x="1190" y="710" width="110" height="32" rx="6" fill="#0a0f18" stroke="#72f1b8" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="1245" y="727" text-anchor="middle" fill="#72f1b8" font-size="9" font-weight="500">F{NN}-R{N}.json</text>
+    <text x="1245" y="738" text-anchor="middle" fill="#888" font-size="7">eval JSON · _evals/</text>
+
+    <rect x="1010" y="760" width="340" height="28" rx="6" fill="#0a0f18" stroke="#888" stroke-width="0.8" stroke-dasharray="2,2"/>
+    <text x="1180" y="778" text-anchor="middle" fill="#888" font-size="9">hooks: block_pretool · log_subagent_stop · _traces/</text>
+
+    <line x1="1180" y1="324" x2="1180" y2="358" stroke="#36f9f6" stroke-width="1.2" opacity="0.4"/>
+    <line x1="1180" y1="388" x2="1180" y2="420" stroke="#ff9e64" stroke-width="1.2" opacity="0.4" stroke-dasharray="2,2"/>
+    <line x1="1080" y1="468" x2="1080" y2="490" stroke="#5b8af0" stroke-width="1.2" opacity="0.4"/>
+    <line x1="1280" y1="468" x2="1280" y2="490" stroke="#72f1b8" stroke-width="1.2" opacity="0.4"/>
+    <path d="M1080 518 Q 1080 540 1140 555" fill="none" stroke="#5b8af0" stroke-width="1.2" opacity="0.4"/>
+    <path d="M1280 518 Q 1280 540 1220 555" fill="none" stroke="#72f1b8" stroke-width="1.2" opacity="0.4"/>
+  </g>
+
+  <!-- ============== COL 4: /finalize ============== -->
+  <g class="phase-4">
+    <rect x="1560" y="280" width="160" height="44" rx="12" fill="#0e1420" stroke="#36f9f6" stroke-width="2.2" filter="url(#glow-cyan)"/>
+    <text x="1640" y="302" text-anchor="middle" fill="#36f9f6" font-size="14" font-weight="700">/finalize</text>
+    <text x="1640" y="318" text-anchor="middle" fill="#888" font-size="9">close the batch</text>
+
+    <rect x="1560" y="360" width="160" height="36" rx="8" fill="#0e1420" stroke="#ff7edb" stroke-width="1.6"/>
+    <text x="1640" y="378" text-anchor="middle" fill="#ff7edb" font-size="10" font-weight="700">preflight.py</text>
+    <text x="1640" y="390" text-anchor="middle" fill="#888" font-size="8">scan feature.status</text>
+
+    <polygon points="1640,420 1700,460 1640,500 1580,460" fill="#0e1420" stroke="#b893ce" stroke-width="1.8"/>
+    <text x="1640" y="457" text-anchor="middle" fill="#e0e0e0" font-size="10" font-weight="700">all PASS?</text>
+    <text x="1640" y="472" text-anchor="middle" fill="#888" font-size="8">branch</text>
+
+    <text x="1500" y="463" text-anchor="middle" fill="#ff7edb" font-size="9" font-weight="600">YES</text>
+    <text x="1500" y="475" text-anchor="middle" fill="#888" font-size="8">archive</text>
+
+    <rect x="1430" y="495" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff7edb" stroke-width="1.4" filter="url(#glow-pink)"/>
+    <text x="1510" y="514" text-anchor="middle" fill="#ff7edb" font-size="10" font-weight="600">finalize_adr.py</text>
+
+    <rect x="1430" y="535" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff7edb" stroke-width="1.4" filter="url(#glow-pink)"/>
+    <text x="1510" y="554" text-anchor="middle" fill="#ff7edb" font-size="10" font-weight="600">merge_domain_terms.py</text>
+
+    <rect x="1430" y="575" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff7edb" stroke-width="1.4" filter="url(#glow-pink)"/>
+    <text x="1510" y="594" text-anchor="middle" fill="#ff7edb" font-size="10" font-weight="600">regen_codemap.py</text>
+
+    <rect x="1430" y="615" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff7edb" stroke-width="1.4" filter="url(#glow-pink)"/>
+    <text x="1510" y="634" text-anchor="middle" fill="#ff7edb" font-size="10" font-weight="600">archive_batch.sh</text>
+
+    <rect x="1430" y="665" width="160" height="38" rx="6" fill="#0a0f18" stroke="#ff7edb" stroke-width="1" stroke-dasharray="5,3" opacity="0.85"/>
+    <text x="1510" y="683" text-anchor="middle" fill="#ff7edb" font-size="9" font-weight="500">specs/completed/&lt;slug&gt;/</text>
+    <text x="1510" y="695" text-anchor="middle" fill="#888" font-size="7">+ ADR accepted · CONTEXT · CODEMAP</text>
+
+    <text x="1780" y="463" text-anchor="middle" fill="#ff9e64" font-size="9" font-weight="600">NO</text>
+    <text x="1780" y="475" text-anchor="middle" fill="#888" font-size="8">retro</text>
+
+    <rect x="1700" y="495" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff9e64" stroke-width="1.4" filter="url(#glow-orange)"/>
+    <text x="1780" y="514" text-anchor="middle" fill="#ff9e64" font-size="10" font-weight="600">walk open_questions</text>
+
+    <rect x="1700" y="535" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff9e64" stroke-width="1.4" filter="url(#glow-orange)"/>
+    <text x="1780" y="554" text-anchor="middle" fill="#ff9e64" font-size="10" font-weight="600">AskUserQuestion</text>
+
+    <rect x="1700" y="575" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff9e64" stroke-width="1.4" filter="url(#glow-orange)"/>
+    <text x="1780" y="594" text-anchor="middle" fill="#ff9e64" font-size="10" font-weight="600">planner: re-decompose</text>
+
+    <rect x="1700" y="615" width="160" height="30" rx="6" fill="#0e1420" stroke="#ff9e64" stroke-width="1.4" filter="url(#glow-orange)"/>
+    <text x="1780" y="634" text-anchor="middle" fill="#ff9e64" font-size="10" font-weight="600">reset status: todo</text>
+
+    <text x="1780" y="685" text-anchor="middle" fill="#888" font-size="9" font-style="italic">→ rerun /execution-loop</text>
+
+    <line x1="1640" y1="324" x2="1640" y2="360" stroke="#36f9f6" stroke-width="1.2" opacity="0.4"/>
+    <line x1="1640" y1="396" x2="1640" y2="420" stroke="#ff7edb" stroke-width="1.2" opacity="0.4"/>
+    <path d="M1580 460 L 1510 495" fill="none" stroke="#ff7edb" stroke-width="1.2" opacity="0.5"/>
+    <path d="M1700 460 L 1780 495" fill="none" stroke="#ff9e64" stroke-width="1.2" opacity="0.5" stroke-dasharray="4,3"/>
+    <line x1="1510" y1="525" x2="1510" y2="535" stroke="#ff7edb" stroke-width="1" opacity="0.4"/>
+    <line x1="1510" y1="565" x2="1510" y2="575" stroke="#ff7edb" stroke-width="1" opacity="0.4"/>
+    <line x1="1510" y1="605" x2="1510" y2="615" stroke="#ff7edb" stroke-width="1" opacity="0.4"/>
+    <line x1="1510" y1="645" x2="1510" y2="665" stroke="#ff7edb" stroke-width="1" opacity="0.4"/>
+    <line x1="1780" y1="525" x2="1780" y2="535" stroke="#ff9e64" stroke-width="1" opacity="0.4" stroke-dasharray="3,3"/>
+    <line x1="1780" y1="565" x2="1780" y2="575" stroke="#ff9e64" stroke-width="1" opacity="0.4" stroke-dasharray="3,3"/>
+    <line x1="1780" y1="605" x2="1780" y2="615" stroke="#ff9e64" stroke-width="1" opacity="0.4" stroke-dasharray="3,3"/>
+  </g>
+
+  <!-- ============== INTER-COLUMN FLOW ============== -->
+  <g class="phase-flow">
+    <path id="flow-12" d="M390 696 Q 500 696 500 380 Q 500 280 640 280" fill="none" stroke="#36f9f6" stroke-width="1.4" opacity="0.5" class="pulse-line"/>
+    <polygon points="640,280 630,276 630,284" fill="#36f9f6"/>
+
+    <path id="flow-23" d="M830 646 Q 950 646 950 380 Q 950 280 1100 280" fill="none" stroke="#36f9f6" stroke-width="1.4" opacity="0.5" class="pulse-line"/>
+    <polygon points="1100,280 1090,276 1090,284" fill="#36f9f6"/>
+
+    <path id="flow-34" d="M1300 726 Q 1430 726 1430 380 Q 1430 280 1560 280" fill="none" stroke="#36f9f6" stroke-width="1.4" opacity="0.5" class="pulse-line"/>
+    <polygon points="1560,280 1550,276 1550,284" fill="#36f9f6"/>
+
+    <path d="M1700 645 Q 1450 830 1180 790" fill="none" stroke="#ff9e64" stroke-width="1.2" opacity="0.45" stroke-dasharray="5,4"/>
+    <polygon points="1180,790 1190,784 1190,796" fill="#ff9e64"/>
+    <text x="1410" y="820" text-anchor="middle" fill="#ff9e64" font-size="9" font-style="italic" opacity="0.8">retro · re-run /execution-loop</text>
+  </g>
+
+  <!-- Pulse dots -->
+  <circle r="4" fill="#36f9f6" class="dot" style="offset-path: path('M390 696 Q 500 696 500 380 Q 500 280 640 280');"/>
+  <circle r="4" fill="#36f9f6" class="dot" style="offset-path: path('M830 646 Q 950 646 950 380 Q 950 280 1100 280');"/>
+  <circle r="4" fill="#36f9f6" class="dot" style="offset-path: path('M1300 726 Q 1430 726 1430 380 Q 1430 280 1560 280');"/>
+
+  <!-- ============== LEGEND ============== -->
+  <g class="phase-legend">
+    <rect x="80" y="855" width="1760" height="190" rx="10" fill="#0a0f18" stroke="#555" stroke-width="0.8"/>
+    <text x="100" y="883" fill="#e0e0e0" font-size="11" font-weight="700" letter-spacing="2">LEGEND · TIERS &amp; SHAPES</text>
+
+    <circle cx="115" cy="912" r="6" fill="#e8a020"/>
+    <text x="130" y="916" fill="#e0e0e0" font-size="11" font-weight="600">Human · checkpoint</text>
+    <text x="295" y="916" fill="#888" font-size="10">engineer trigger + AskUserQuestion gates</text>
+
+    <circle cx="115" cy="936" r="6" fill="#36f9f6"/>
+    <text x="130" y="940" fill="#e0e0e0" font-size="11" font-weight="600">MAIN session</text>
+    <text x="295" y="940" fill="#888" font-size="10">orchestrator · slash command · pipeline arrows</text>
+
+    <circle cx="115" cy="960" r="6" fill="#fede5d"/>
+    <text x="130" y="964" fill="#e0e0e0" font-size="11" font-weight="600">/prd input · fact-finder</text>
+    <text x="295" y="964" fill="#888" font-size="10">blindfold codebase research · file:line evidence</text>
+
+    <circle cx="115" cy="984" r="6" fill="#38c8c8"/>
+    <text x="130" y="988" fill="#e0e0e0" font-size="11" font-weight="600">planner</text>
+    <text x="295" y="988" fill="#888" font-size="10">vertical-slice decomposition · 3-script self-verify</text>
+
+    <circle cx="115" cy="1008" r="6" fill="#5b8af0"/>
+    <text x="130" y="1012" fill="#e0e0e0" font-size="11" font-weight="600">generator</text>
+    <text x="295" y="1012" fill="#888" font-size="10">implements one feature · writes tests · commits</text>
+
+    <circle cx="640" cy="912" r="6" fill="#72f1b8"/>
+    <text x="655" y="916" fill="#e0e0e0" font-size="11" font-weight="600">evaluator</text>
+    <text x="785" y="916" fill="#888" font-size="10">verifies vs spec · adversarial probes · eval JSON</text>
+
+    <circle cx="640" cy="936" r="6" fill="#ff7edb"/>
+    <text x="655" y="940" fill="#e0e0e0" font-size="11" font-weight="600">/finalize archive</text>
+    <text x="785" y="940" fill="#888" font-size="10">ADR promote · CONTEXT merge · codemap regen</text>
+
+    <circle cx="640" cy="960" r="6" fill="#ff9e64"/>
+    <text x="655" y="964" fill="#e0e0e0" font-size="11" font-weight="600">retry · retro path</text>
+    <text x="785" y="964" fill="#888" font-size="10">round 1→2→3 retry · DEFERRED → re-grill planner</text>
+
+    <polygon points="640,978 650,985 640,992 630,985" fill="#0e1420" stroke="#b893ce" stroke-width="1.4"/>
+    <text x="655" y="989" fill="#e0e0e0" font-size="11" font-weight="600">decision diamond</text>
+    <text x="785" y="989" fill="#888" font-size="10">verdict / branch (post-grill · per-Q · all PASS?)</text>
+
+    <rect x="630" y="1004" width="20" height="12" rx="2" fill="#0a0f18" stroke="#fede5d" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="655" y="1014" fill="#e0e0e0" font-size="11" font-weight="600">artifact</text>
+    <text x="785" y="1014" fill="#888" font-size="10">file output · prd.md · feature-list.json · etc.</text>
+
+    <text x="1170" y="883" fill="#e0e0e0" font-size="11" font-weight="700" letter-spacing="2">CORE PRINCIPLES</text>
+    <text x="1170" y="908" fill="#888" font-size="10">· vertical slice — features cross every layer (no horizontal phases; plan_lint L10a)</text>
+    <text x="1170" y="928" fill="#888" font-size="10">· PASS / FAIL only — no WARN, no STRICT, no PASS_WITH_TODO</text>
+    <text x="1170" y="948" fill="#888" font-size="10">· no deferred punt — open_questions resolve in-batch (feature_local · architectural · glossary)</text>
+    <text x="1170" y="968" fill="#888" font-size="10">· bounded loop — max 3 rounds per feature; round-3 FAIL → status: deferred</text>
+    <text x="1170" y="988" fill="#888" font-size="10">· lint is the contract — fix the source design when checks fight you</text>
+    <text x="1170" y="1008" fill="#888" font-size="10">· codebase as SSoT — alive docs (CONTEXT.md · ADRs · CODEMAP) supplement only</text>
+    <text x="1170" y="1028" fill="#888" font-size="10">· skill-shaped agents — no agent code outside skills; prompts inline their constraints</text>
+  </g>
+
+  <!-- Credit -->
+  <text x="1900" y="1065" text-anchor="end" fill="#555" font-size="8" opacity="0.4">gan-harness · TAC Style</text>
+</svg>

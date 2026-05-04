@@ -1,33 +1,26 @@
 ---
-allowed-tools: Read, Edit, Write, Bash, Grep, Glob, AskUserQuestion, Agent
-description: Post-batch ceremony — drain dreamer proposals via AskUserQuestion, promote glossary/codemap, archive batch to specs/completed/{slug}/, spawn doc-garden agent
-argument-hint: [path-to-feature-list (default: docs/feature-list.json)]
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, TaskCreate, TaskUpdate, TaskList, Agent
+description: Stage 4 — close out a /execution-loop batch. Archive path (all passed) promotes ADRs, merges Domain terms, regens CODEMAP, archives to specs/completed/{slug}/, single commit. Retro path (any deferred) walks open_questions per AskUserQuestion, routes fixes to planner agent, resets features to todo for re-run.
+argument-hint: "(none — reads specs/_batch/feature-list.json)"
 model: sonnet
 ---
 
-Invoke the batch-gc skill (which owns the /finalize ceremony).
+Invoke `.claude/skills/finalize-workflow/SKILL.md`. The skill owns the
+phases, scripts, and branch logic. This command only routes control flow.
+When command and skill disagree, the skill wins — fix this command.
 
-FEATURE_LIST: $ARGUMENTS or docs/feature-list.json (default)
+1. Pre-flight (`scripts/preflight.py` — verifies feature-list, all features
+   terminal, prd.md present; outputs `SLUG`, `BRANCH=archive|retro`)
+2. If `BRANCH=retro`: walk each deferred feature's open_questions via
+   AskUserQuestion (Approve / Edit / Escalate); spawn `planner` agent with
+   scoped amendment prompt; reset affected features to `todo`; report and
+   stop (no commit)
+3. If `BRANCH=archive`: single AskUserQuestion checkpoint (Approve / Edit
+   slug / Abort); promote ADRs (`finalize_adr.py`); merge Domain terms
+   (`merge_domain_terms.py`); regen CODEMAP (`regen_codemap.py`);
+   summarize + archive (`summarize_batch.py` + `archive_batch.sh`); single
+   `chore(finalize):` commit; report
 
-Post-batch ceremony after all features reach terminal state (DONE or
-BLOCKED) AND gen-dreamer + eval-dreamer have produced
-`docs/progress/DREAM-gen.md` + `docs/progress/DREAM-eval.md`.
-
-Four phases + commit:
-
-1. **Dreamer Review** — parse P-NN proposals from DREAM-*.md; walk each
-   through `AskUserQuestion(approve / reject / edit)`; apply approved
-   changes to capsules / SKILL.md / anti-patterns / prunes.
-2. **Promote** — glossary-draft merge into `CONTEXT.md`; codemap
-   sync for new feature dirs; feature-barrel backlog pass into
-   `docs/tech-debt-tracker.md`.
-3. **Archive** — parse slug from `specs/_batch/plan.md` H1; move all
-   spec + batch artifacts into `specs/completed/{slug}/`; summarize raw
-   `docs/progress/F*-progress-R*.md` + `F*-eval-R*.md` into
-   `BATCH_SUMMARY.md`; delete raw progress files.
-4. **Scan** — spawn `doc-garden` agent for post-finalize drift scan;
-   findings land in `docs/tech-debt-tracker.md`.
-5. **Commit** — single `chore(finalize):` commit covering applied
-   proposals + archived batch + scan findings.
-
-Next step: `/prd` (for next batch).
+Next step:
+- Archive path → `/prd` (for next batch)
+- Retro path → `/execution-loop` (re-run features just reset to todo)

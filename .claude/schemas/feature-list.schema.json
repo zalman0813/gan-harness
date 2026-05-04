@@ -29,7 +29,7 @@
     "feature": {
       "type": "object",
       "required": [
-        "id", "name", "state", "priority",
+        "id", "name", "status", "priority",
         "depends_on", "module_path", "spec", "test_contract"
       ],
       "additionalProperties": false,
@@ -44,9 +44,10 @@
           "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
           "description": "Human-readable kebab-case slug. Last segment of module_path under the stack's case rules."
         },
-        "state": {
-          "enum": ["TODO", "WIP", "DONE", "BLOCKED"],
-          "description": "Lifecycle state. TODO at /prd, WIP when generator starts, DONE on evaluator PASS, BLOCKED after 3 failed rounds."
+        "status": {
+          "enum": ["todo", "passed", "deferred", "blocked-by-ancestor"],
+          "default": "todo",
+          "description": "Terminal verdict on this feature. Planner writes `todo`. Harness-loop sets `passed` on evaluator PASS, `deferred` on evaluator DEFERRED or 3 failed rounds, `blocked-by-ancestor` when an upstream feature in `depends_on` is `deferred`/`blocked-by-ancestor`. WIP is implicit (no terminal row yet in `specs/_batch/progress.tsv`) — not stored here."
         },
         "priority": {
           "enum": ["P1", "P2", "P3"],
@@ -71,7 +72,81 @@
           "description": "Repo-relative directory the feature owns. Generator creates files here; evaluator architectural_reflection.py verifies it exists."
         },
         "spec":          { "$ref": "#/$defs/spec" },
-        "test_contract": { "$ref": "#/$defs/test_contract" }
+        "test_contract": { "$ref": "#/$defs/test_contract" },
+        "mutation_threshold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 70,
+          "description": "Mutation-score floor as a percentage. A future stack-specific mutation adapter (consuming sensors.ini [mutation]) FAILs the feature if its score (killed / (killed + survived)) falls below this. Default 70; set 80 for hard-to-reverse modules. 0 disables mutation enforcement for this feature even if the stack's [mutation] section is configured."
+        },
+        "acl_pairs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/acl_pair" },
+          "uniqueItems": false,
+          "default": [],
+          "description": "Anti-corruption-layer constraints this feature relies on. Each pair declares: a domain module path that MUST NOT directly import any package in `forbidden`. The pre-commit gate's module-ACL stage renders these into per-stack lint config (Python → import-linter contract; TS → dependency-cruiser rule) using the active stack skill's sensors.ini. Empty default = feature has no ACL constraint and the module-ACL stage SKIPs for this feature."
+        },
+        "quarantined_tests": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/quarantine_entry" },
+          "uniqueItems": false,
+          "default": [],
+          "description": "Tracked exceptions to '100% test pass'. Each entry: a test that fails or is unstable but the generator could not (or chose not to) fix this round. Replaces silent .skip / xfail. Rate limit: generator may add ≤1 entry per round (enforced by harness-loop). /finalize archive REFUSES to proceed if any entry's expires_after_batch == current_batch_slug — those must be resolved (entry removed) or have their expires_after_batch extended before archive."
+        }
+      }
+    },
+
+    "acl_pair": {
+      "type": "object",
+      "required": ["domain", "forbidden"],
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Module path of the protected domain (e.g. 'src.domain' for Python, 'src/domain' for TS). Format follows the active stack skill's import convention."
+        },
+        "forbidden": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "minItems": 1,
+          "description": "External package names that domain modules MUST NOT import directly. e.g., ['boto3', 'stripe', 'requests']."
+        },
+        "adapter_hint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional. Where domain code SHOULD route through instead (e.g. 'src.adapters.aws'). Informational only — used in error messages when a violation fires; not enforced by the module-ACL stage."
+        }
+      }
+    },
+
+    "quarantine_entry": {
+      "type": "object",
+      "required": ["test_id", "ac_id", "quarantine_reason", "expires_after_batch"],
+      "additionalProperties": false,
+      "properties": {
+        "test_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique test identifier — function name, group label, or path:line. Used by future batches to find and resolve. e.g., 'test_AC_02_email_validation' or 'foo.test.ts:42'."
+        },
+        "ac_id": {
+          "type": "string",
+          "pattern": "^AC-[0-9]{2,3}$",
+          "description": "AC the quarantined test was meant to verify. ac_coverage gate still expects the AC's anchors to appear elsewhere; quarantine is per-test, not per-AC."
+        },
+        "quarantine_reason": {
+          "type": "string",
+          "minLength": 10,
+          "description": "≥10 chars. Must describe a SPECIFIC cause; bare reasons like 'flaky' alone are insufficient. Examples: 'race condition between fixture and DB cleanup; needs lock', 'mock server returns 502 occasionally; investigate retry policy', 'platform-dependent timing on M-series chips; pinning host'."
+        },
+        "expires_after_batch": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+          "description": "Batch slug this quarantine MUST be resolved by. /finalize refuses archive if any quarantine entry has expires_after_batch == current_batch_slug AND the entry is still present. Use the next foreseeable batch slug; do NOT use 'never' or the current batch's own slug as a perpetual escape."
+        }
       }
     },
 

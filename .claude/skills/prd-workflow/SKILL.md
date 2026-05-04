@@ -7,7 +7,7 @@ description: Drive Stage 1 of the gan-harness — turn free-form user intent int
 
 Stage 1 of the harness. One command (`/prd`), four phases, one human checkpoint, one structural lint. Produces a per-batch PRD draft + a snapshot of the relevant codebase facts that downstream stages (plan, execute, finalize) consume.
 
-Pipeline shape (locked by `TODO.md` § Locked decisions):
+Pipeline shape:
 
 ```
 /prd
@@ -51,7 +51,6 @@ Do not silently fill in ambiguous requirements.
 - `$ARGUMENTS` — user's intent dump (paragraph, list, file path, or empty)
 - `CONTEXT.md` — domain ubiquitous language
 - `docs/adr/index.md` — accepted ADR catalogue
-- `ARCHITECTURE.md` — invariants
 - [`references/grill-protocol.md`](references/grill-protocol.md) — grill discipline + output formats (loaded at Phase 1)
 - Active stack skill at `.claude/skills/<active-stack>/`
 
@@ -179,7 +178,7 @@ This skill describes the orchestration. The grilling discipline (one-question-at
 - **Embedding research findings inside prd.md** — research goes to `research.md`. prd.md is intent. Different rot lifecycles, different files.
 - **Skipping prd_lint.py** — lint is the contract. /plan trusts that prd.md is well-formed because /prd ran lint.
 - **Persisting `_research-queue.md` past Phase 4** — transient by design. Deletion at end of synth is the contract.
-- **Per-R subdirs (`specs/R1/`, `specs/R2/`)** — single batch-level files, H2 sections per R. See `TODO.md` § Locked decisions.
+- **Per-R subdirs (`specs/R1/`, `specs/R2/`)** — single batch-level files, H2 sections per R. With 1M context the planner needs cross-R coherence in one read; sharding wastes tokens and breaks `depends_on` reasoning across R boundaries.
 - **Forbidden PRD sections** — prd_lint.py rejects `## Implementation Decisions`, `## Tech Stack`, `## Architecture`, `## Risks`, `## Tech Debt`, `## Timeline`. Industry convention: PRD = what/why, plan = how.
 - **Auto-resolving vague targets** — reframe into measurable success criteria + bounce back ("Are these the right targets?"). Don't pick thresholds without confirmation.
 

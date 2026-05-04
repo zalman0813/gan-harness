@@ -1,0 +1,66 @@
+# <Methodology Name> — Foundation
+
+Shared by all consuming agents (<list of loaders>). Always read this first before reading your role's slice (if your role has one).
+
+## §1 Definitions
+
+All terms below are qualitative unless explicitly marked. If you find yourself wanting a quantitative threshold, check the methodology's primary source — most methodologies deliberately leave the threshold to context. Inventing a numeric gate where the source gives none turns doctrine into folklore.
+
+| Term | Definition (with primary source) | Qualitative check |
+|---|---|---|
+| **<Term 1>** | <one-sentence definition> (<Source: Author, *Title*, year, ch.X>) | <one-sentence check the agent can apply at decision time> |
+| **<Term 2>** | <…> | <…> |
+| **<Term 3>** | <…> | <…> |
+
+## §2 Applicability
+
+This methodology applies when:
+
+- <applicability condition 1 — e.g. "the system has long-lived business logic separable from infrastructure">
+- <applicability condition 2>
+- <applicability condition 3>
+
+This methodology does **NOT** apply (and forcing it produces over-built code) when:
+
+- <non-applicability condition 1 — e.g. "the work is a one-shot exploratory script">
+- <non-applicability condition 2 — e.g. "the module is a thin DTO mapping with no behaviour">
+- <non-applicability condition 3 — e.g. "the deadline forces a known-throwaway prototype">
+
+The "when NOT to apply" half is non-negotiable. If you cannot bound the methodology's applicability, the doctrine is too broad and will be wrongly applied. Re-read the primary source for scope claims before shipping the handbook.
+
+## §3 Red flags
+
+Each flag uses the uniform schema (inherited from `deep-module-handbook/foundation.md`) so evaluator can process flags from any approach handbook with the same machinery.
+
+### <RF-1: short flag name>
+
+- **Source**: <where this flag came from — e.g. "Cockburn 2005 hexagonal pattern, §3"; or "internal/team-X-2026-Q2-retro" for non-academic sources>
+- **Pattern**: <what the flag looks like in code or design — be specific enough to grep/eyeball>
+- **Trigger**: <what condition makes you suspect the flag fires — the boundary case, not the obvious case>
+- **If-fires-recommend**: <what action to recommend — open_question / ADR proposal / refactor target / decline-the-feature>
+- **Retirement-criteria**: <what evidence would justify removing or relaxing this flag — e.g. "if the team adopts <other methodology> as primary, this flag is subsumed">
+
+### <RF-2: short flag name>
+
+- **Source**: <…>
+- **Pattern**: <…>
+- **Trigger**: <…>
+- **If-fires-recommend**: <…>
+- **Retirement-criteria**: <…>
+
+### <RF-3: short flag name>
+
+- **Source**: <…>
+- **Pattern**: <…>
+- **Trigger**: <…>
+- **If-fires-recommend**: <…>
+- **Retirement-criteria**: <…>
+
+## §4 Pointers (optional)
+
+If this methodology partially overlaps another methodology already in the repo (e.g. TDD overlaps deep-module-handbook on "test boundaries reveal interface depth"), name the overlap explicitly here so consumers know not to double-apply both handbooks' overlapping rules.
+
+- <overlap pointer 1, e.g. "Overlaps deep-module-handbook §3 RF-deep-2 on pass-through methods. When both flags fire, prefer this handbook's recommendation because <reason>.">
+- <overlap pointer 2>
+
+If no overlaps exist, write `_(none)_` rather than removing the section — its absence is reviewable.

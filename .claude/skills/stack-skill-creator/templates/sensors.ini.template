@@ -1,0 +1,93 @@
+# sensors.ini — stack sensor command contract
+#
+# Annotated template (Python + Ruff + mypy + pytest + import-linter).
+# Substitute the commands for your stack, validate, and ship at
+# .claude/skills/<stack>/sensors.ini.
+#
+# Placeholders the harness substitutes at invocation time:
+#   {scope}        gate_gen_precommit: changed files; gate_eval_postcommit: feature.module_path
+#   {config_path}  gate_gen_precommit.py (module-ACL stage): path to a tmp config rendered from feature.acl_pairs[]
+
+
+[lint]
+# Stage 1 of gate_gen_precommit (<1s budget). Auto-fix in place; the
+# generator commits the fixed files. gate_eval_postcommit does NOT run this
+# (no in-place mutation during evaluation).
+fix = ruff check --fix --silent {scope}
+
+# Stage 2 of gate_gen_precommit AND L1 of gate_eval_postcommit (<5s budget).
+# Read-only; fail loud. No --fix.
+check = ruff check {scope}
+
+
+[typecheck]
+# Stage 2 of gate_gen_precommit AND L1 of gate_eval_postcommit. Strict mode is the
+# project default per generator-handbook conservative-defaults; loosen
+# only with cause.
+command = mypy --strict {scope}
+
+
+[test]
+# Unit / component runner. {scope} = changed files (gate_gen_precommit)
+# or module_path (gate_eval_postcommit).
+unit = pytest -x --tb=short {scope}
+
+# Optional smoke runner. gate_eval_postcommit uses this only when
+# feature.test_contract.l5_smoke_path is non-null. Leave EMPTY to skip
+# entirely (gate_eval_postcommit logs SKIPPED, does not error).
+smoke = pytest --no-header {scope}
+
+
+[acl]
+# Anti-corruption-layer check. gate_gen_precommit.py (module-ACL stage) renders feature.acl_pairs[]
+# into the format `tool` expects, writes it to a tmp file, then runs
+# `invoke` with {config_path} substituted.
+#
+# Supported `tool` values today: import-linter | dependency-cruiser | none.
+# Set tool = none until a per-stack adapter exists; the module-ACL stage SKIPs.
+tool = import-linter
+config_format = ini
+invoke = lint-imports --config {config_path}
+
+
+[anchors]
+# Optional hints for gate_gen_precommit.py (AC-coverage stage). Python files use stdlib `ast`
+# (these hints are ignored). Non-Python files use heuristic block
+# splitting; setting `language` improves block detection.
+#
+# Supported language values: python | javascript | go | rust | java | dart
+language = python
+
+# Comma-separated extra absence markers for kind:negative AC must_not
+# pairings. ac_coverage ships defaults covering most stacks; only add
+# here if your test framework uses an idiom not in the defaults.
+# Example for Jest: extra_absence_markers = not.toBeInTheDocument, expect.not
+extra_absence_markers =
+
+
+[mutation]
+# Mutation-testing runner. (future stack adapter) runs `run`, then `summary`,
+# parses survivor counts per `tool`'s output format, and compares the
+# resulting score to feature.mutation_threshold (default 70%).
+#
+# Supported tool values today: mutmut (Python) | stryker (TS/JS, stub)
+# | pit (Java, stub) | none.
+# Set tool = none on stacks where you don't want mutation-score
+# enforcement; (future stack adapter) returns SKIPPED for the feature.
+#
+# Mutator subset (per ADR rationale): the tool's natural defaults are
+# fine; (future stack adapter) does not currently filter operators. Future
+# work: prune to Math + NegateConditionals + ConditionalsBoundary +
+# Increments per the locked subset.
+tool = none
+
+# Full mutator command. Run from project root. {scope} = changed
+# files (gate_gen_precommit) or module_path (gate_eval_postcommit). Leave empty
+# when tool = none.
+run =
+
+# Summary command — prints survivor / killed counts the parser can
+# read. mutmut's text output ("Killed X/Y", "Survived A/B") is parsed
+# automatically; other tools require their own parser registered in
+# (future stack adapter). Leave empty when tool = none.
+summary =

@@ -64,6 +64,50 @@ Create the skill directory: `.claude/skills/<stack-name>/references/`.
 - Strip framework-version-specific notes if user pinned a version; otherwise keep version markers.
 - Include code examples verbatim — those are the most useful part for downstream agents.
 
+### Step 2.5 — Emit sensors.ini (the harness command contract)
+
+Every stack skill MUST produce a `sensors.ini` at its top level (sibling
+of `SKILL.md`). This is the machine-readable command contract the
+harness gates (`generator-handbook/scripts/gate_gen_precommit.py` +
+`evaluator-handbook/scripts/gate_eval_postcommit.py`) consume to invoke
+lint / typecheck / test / ACL checks for this stack. The pre-commit gate
+inlines AC-literal coverage and module-ACL checks; there are no
+separate sensor scripts.
+
+**This is NOT vendored prose**; it's a structured INI file with
+required sections and keys. See [references/sensors-contract.md](references/sensors-contract.md)
+for the full spec.
+
+Procedure:
+
+1. Copy `templates/sensors.ini.template` to
+   `.claude/skills/<stack-name>/sensors.ini`.
+2. Substitute the example commands (Ruff / mypy / pytest /
+   import-linter) for the active stack's equivalents.
+3. Set `[acl] tool = none` if no ACL tool exists for the stack yet
+   (the pre-commit gate's module-ACL stage will SKIP for this stack until a per-stack
+   adapter ships).
+4. Validate (Step 4 below covers this).
+
+If the user asks to skip sensors.ini ("we'll fill it later"), refuse:
+the harness gates will hard-fail on a missing required key. Better to
+emit a stub with `tool = none` and obviously-wrong placeholder
+commands (e.g., `command = TODO`) than to ship a stack skill the
+harness cannot consume.
+
+### Step 2.6 — PBT support (optional)
+
+If the stack supports property-based testing (Python via Hypothesis,
+TypeScript via fast-check, similar runners on other stacks), add a
+short `references/testing.md` that captures the stack's PBT idiom and
+points generators at it. See [references/pbt-patterns.md](references/pbt-patterns.md)
+for templates (idempotency, round-trip, monotonicity, etc.) and
+language-specific examples.
+
+PBT does NOT need a separate `[pbt]` section in `sensors.ini` —
+property tests are decorated unit tests that run through the existing
+`[test] unit` command. The patterns doc explains why.
+
 ### Step 3 — Write SKILL.md for the new stack skill
 
 Use this template (substitute `<stack-name>` and the references list):
@@ -107,8 +151,15 @@ Run minimal checks (inline, not a separate script):
 - `references/` exists with ≥1 file
 - `references/upstream.md` exists if any web-vendored content (otherwise N/A)
 - No file in `references/` exceeds 500 lines (warn if so, suggest splitting)
+- `sensors.ini` exists at the skill's top level
+- `sensors.ini` has all required sections + keys per
+  [references/sensors-contract.md](references/sensors-contract.md):
+  `[lint] fix`, `[lint] check`, `[typecheck] command`,
+  `[test] unit`, `[acl] tool`. If `acl.tool != none`, also
+  `[acl] config_format` and `[acl] invoke`.
+- `[acl] tool` value ∈ {`import-linter`, `dependency-cruiser`, `none`}
 
-Print summary: skill path, references file count, total LOC, vendored URLs.
+Print summary: skill path, references file count, total LOC, vendored URLs, sensors.ini status.
 
 ### Step 5 — Hand off
 
@@ -118,7 +169,7 @@ Tell the user:
 
 ## Anti-patterns
 
-- **Pre-baking role-specific content** — do NOT create files like `references/sink-module-doc.md` or `references/test-contract.md` predicting what planner or generator will want. Those agents define their own consumption contract; the creator's job is to vendor raw idioms, not to predict roles.
+- **Pre-baking role-specific content under `references/`** — do NOT create files like `references/sink-module-doc.md` or `references/test-contract.md` predicting what planner or generator will want as vendored prose. Those agents define their own consumption contract; the creator's job under `references/` is to vendor raw stack idioms, not to predict roles. (This anti-pattern targets `references/` only — the structural deliverable `sensors.ini` is intentionally exempt because the harness gates have a defined contract for it; see Step 2.5.)
 - **One mega-reference file** — splitting a 3000-line dump into a single file makes Claude skim and miss specifics. One topic per file.
 - **Skipping provenance** — without `references/upstream.md`, vendored content becomes mystery code. Always log source.
 - **Editing vendored files in place** — re-vendor with new revision and update the log instead.
