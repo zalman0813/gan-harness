@@ -73,51 +73,12 @@
         },
         "spec":          { "$ref": "#/$defs/spec" },
         "test_contract": { "$ref": "#/$defs/test_contract" },
-        "mutation_threshold": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 100,
-          "default": 70,
-          "description": "Mutation-score floor as a percentage. A future stack-specific mutation adapter (consuming sensors.ini [mutation]) FAILs the feature if its score (killed / (killed + survived)) falls below this. Default 70; set 80 for hard-to-reverse modules. 0 disables mutation enforcement for this feature even if the stack's [mutation] section is configured."
-        },
-        "acl_pairs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/acl_pair" },
-          "uniqueItems": false,
-          "default": [],
-          "description": "Anti-corruption-layer constraints this feature relies on. Each pair declares: a domain module path that MUST NOT directly import any package in `forbidden`. The pre-commit gate's module-ACL stage renders these into per-stack lint config (Python → import-linter contract; TS → dependency-cruiser rule) using the active stack skill's sensors.ini. Empty default = feature has no ACL constraint and the module-ACL stage SKIPs for this feature."
-        },
         "quarantined_tests": {
           "type": "array",
           "items": { "$ref": "#/$defs/quarantine_entry" },
           "uniqueItems": false,
           "default": [],
           "description": "Tracked exceptions to '100% test pass'. Each entry: a test that fails or is unstable but the generator could not (or chose not to) fix this round. Replaces silent .skip / xfail. Rate limit: generator may add ≤1 entry per round (enforced by harness-loop). /finalize archive REFUSES to proceed if any entry's expires_after_batch == current_batch_slug — those must be resolved (entry removed) or have their expires_after_batch extended before archive."
-        }
-      }
-    },
-
-    "acl_pair": {
-      "type": "object",
-      "required": ["domain", "forbidden"],
-      "additionalProperties": false,
-      "properties": {
-        "domain": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Module path of the protected domain (e.g. 'src.domain' for Python, 'src/domain' for TS). Format follows the active stack skill's import convention."
-        },
-        "forbidden": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true,
-          "minItems": 1,
-          "description": "External package names that domain modules MUST NOT import directly. e.g., ['boto3', 'stripe', 'requests']."
-        },
-        "adapter_hint": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Optional. Where domain code SHOULD route through instead (e.g. 'src.adapters.aws'). Informational only — used in error messages when a violation fires; not enforced by the module-ACL stage."
         }
       }
     },

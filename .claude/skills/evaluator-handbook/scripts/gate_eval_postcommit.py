@@ -16,7 +16,6 @@ Differences from gate_gen_precommit.py:
       + anchor check + must_not check" step in the verdict process).
       gate_gen_precommit ran ac_coverage as generator's self-check;
       evaluator independently re-verifies via its own grading.
-    - Does NOT run module_acl — gate_gen_precommit ran it pre-commit.
 
 Stages:
     L1: lint.check + typecheck over module_path

@@ -12,11 +12,9 @@ script before `git commit`, and subprocess-invokes it. Inlined here:
         [typecheck] command via stack's sensors.ini
         [test] unit         via stack's sensors.ini, scope=changed-files
         ac_coverage         INLINE (was sensor_ac_coverage.py)
-        module_acl          INLINE (was sensor_module_acl.py)
 
-There is NO separate sensor_*.py file. AC literal coverage and module ACL
-boundaries are implemented as functions in this file — single caller, no
-reuse, no subprocess hop.
+There is NO separate sensor_*.py file. AC literal coverage is implemented
+as a function in this file — single caller, no reuse, no subprocess hop.
 
 The auto-fired Claude SubagentStop hook does NOT re-run ac_coverage. The
 adversarial verification of AC literal coverage is performed by the
@@ -42,7 +40,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Iterable
 
@@ -322,133 +319,6 @@ def _stage_ac_coverage(feature: dict, project_dir: Path) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Module ACL check (was sensor_module_acl.py — inlined)
-# ---------------------------------------------------------------------------
-
-_ACL_TOOLS = ("import-linter", "dependency-cruiser", "none")
-
-
-def _read_acl_section(sensors_ini: Path) -> dict[str, str] | None:
-    cp = configparser.ConfigParser(interpolation=None, allow_no_value=True)
-    if not cp.read(sensors_ini):
-        return None
-    if not cp.has_section("acl"):
-        return None
-    return {k: cp.get("acl", k, fallback="") or "" for k in cp.options("acl")}
-
-
-def _render_import_linter(acl_pairs: list[dict], root_package: str) -> str:
-    lines = [
-        "[importlinter]",
-        "root_packages =",
-        f"    {root_package}",
-        "include_external_packages = True",
-        "",
-    ]
-    for i, pair in enumerate(acl_pairs, start=1):
-        domain = pair["domain"]
-        name = f"acl-{i}-domain-{domain.replace('.', '-')}"
-        lines.append(f"[importlinter:contract:{i}]")
-        lines.append(f"name = {name}")
-        lines.append("type = forbidden")
-        lines.append("source_modules =")
-        lines.append(f"    {domain}")
-        lines.append("forbidden_modules =")
-        for fm in pair["forbidden"]:
-            lines.append(f"    {fm}")
-        if pair.get("adapter_hint"):
-            lines.append(f"# adapter_hint: {pair['adapter_hint']}")
-        lines.append("")
-    return "\n".join(lines).strip() + "\n"
-
-
-def _render_dependency_cruiser(acl_pairs: list[dict]) -> str:
-    rules: list[str] = []
-    for i, pair in enumerate(acl_pairs, start=1):
-        domain = pair["domain"]
-        forbidden_pat = "|".join(pair["forbidden"])
-        hint = pair.get("adapter_hint", "")
-        comment = f"// adapter_hint: {hint}" if hint else ""
-        rules.append(
-            f"    {{\n"
-            f"      name: 'acl-{i}-{domain.replace('.', '-').replace('/', '-')}',\n"
-            f"      severity: 'error',\n"
-            f"      from: {{ path: '^{domain.replace('.', '/')}' }},\n"
-            f"      to: {{ path: '^node_modules/({forbidden_pat})' }}\n"
-            f"    }}{comment}"
-        )
-    body = ",\n".join(rules)
-    return f"module.exports = {{\n  forbidden: [\n{body}\n  ]\n}};\n"
-
-
-def _stage_module_acl(feature: dict, stack: Path, project_dir: Path) -> int:
-    print()
-    print("▶ Stage 2 / module_acl")
-    acl_pairs = feature.get("acl_pairs", []) or []
-    if not acl_pairs:
-        print("  (skipped: feature has no acl_pairs)")
-        return 0
-    acl = _read_acl_section(stack / "sensors.ini")
-    if acl is None:
-        print("  (skipped: sensors.ini has no [acl] section)")
-        return 0
-    tool = acl.get("tool", "").strip()
-    if tool not in _ACL_TOOLS:
-        print(f"  ✗ FAIL: acl.tool='{tool}' not in {_ACL_TOOLS}")
-        return 1
-    if tool == "none":
-        print(f"  (skipped: stack '{stack.name}' has acl.tool=none)")
-        return 0
-
-    invoke = acl.get("invoke", "").strip()
-    config_format = acl.get("config_format", "").strip()
-
-    if tool == "import-linter":
-        if config_format != "ini":
-            print(f"  ✗ FAIL: import-linter expects config_format=ini, got '{config_format}'")
-            return 1
-        root = acl_pairs[0]["domain"].split(".")[0].split("/")[0]
-        config_text = _render_import_linter(acl_pairs, root)
-        suffix = ".ini"
-    else:  # dependency-cruiser
-        if config_format != "cjs":
-            print(f"  ✗ FAIL: dependency-cruiser expects config_format=cjs, got '{config_format}'")
-            return 1
-        config_text = _render_dependency_cruiser(acl_pairs)
-        suffix = ".cjs"
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=suffix, delete=False, encoding="utf-8"
-    ) as tf:
-        tf.write(config_text)
-        config_path = Path(tf.name)
-    try:
-        cmd = invoke.replace("{config_path}", str(config_path))
-        print(f"  $ {cmd}")
-        res = subprocess.run(
-            cmd, shell=True, cwd=str(project_dir),
-            capture_output=True, text=True, check=False,
-        )
-    finally:
-        try:
-            config_path.unlink()
-        except OSError:
-            pass
-
-    if res.returncode == 0:
-        print("  ✓ pass")
-        return 0
-    print(f"  ✗ FAIL (exit {res.returncode})")
-    if res.stdout:
-        for line in res.stdout.splitlines()[:30]:
-            print(f"    {line}")
-    if res.stderr:
-        for line in res.stderr.splitlines()[:30]:
-            print(f"    err: {line}")
-    return 1
-
-
-# ---------------------------------------------------------------------------
 # Feature lookup
 # ---------------------------------------------------------------------------
 
@@ -517,16 +387,14 @@ def main() -> int:
         if _run_shell(label, cmd, project_dir) != 0:
             overall = 1
 
-    # --- Stage 2 inlined sensors (need feature dict) ---
+    # --- Stage 2 inlined ac_coverage (needs feature dict) ---
     feature = _find_feature(feature_list_path, feature_id)
     if feature is None:
         print()
         print(f"WARN: {feature_list_path} missing or feature {feature_id} not found; "
-              "skipping ac_coverage + module_acl")
+              "skipping ac_coverage")
     else:
         if _stage_ac_coverage(feature, project_dir) != 0:
-            overall = 1
-        if _stage_module_acl(feature, stack, project_dir) != 0:
             overall = 1
 
     print()

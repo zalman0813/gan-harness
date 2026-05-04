@@ -70,9 +70,8 @@ Every stack skill MUST produce a `sensors.ini` at its top level (sibling
 of `SKILL.md`). This is the machine-readable command contract the
 harness gates (`generator-handbook/scripts/gate_gen_precommit.py` +
 `evaluator-handbook/scripts/gate_eval_postcommit.py`) consume to invoke
-lint / typecheck / test / ACL checks for this stack. The pre-commit gate
-inlines AC-literal coverage and module-ACL checks; there are no
-separate sensor scripts.
+lint / typecheck / test for this stack. The pre-commit gate inlines
+AC-literal coverage; there is no separate sensor script.
 
 **This is NOT vendored prose**; it's a structured INI file with
 required sections and keys. See [references/sensors-contract.md](references/sensors-contract.md)
@@ -82,18 +81,14 @@ Procedure:
 
 1. Copy `templates/sensors.ini.template` to
    `.claude/skills/<stack-name>/sensors.ini`.
-2. Substitute the example commands (Ruff / mypy / pytest /
-   import-linter) for the active stack's equivalents.
-3. Set `[acl] tool = none` if no ACL tool exists for the stack yet
-   (the pre-commit gate's module-ACL stage will SKIP for this stack until a per-stack
-   adapter ships).
-4. Validate (Step 4 below covers this).
+2. Substitute the example commands (Ruff / mypy / pytest) for the
+   active stack's equivalents.
+3. Validate (Step 4 below covers this).
 
 If the user asks to skip sensors.ini ("we'll fill it later"), refuse:
 the harness gates will hard-fail on a missing required key. Better to
-emit a stub with `tool = none` and obviously-wrong placeholder
-commands (e.g., `command = TODO`) than to ship a stack skill the
-harness cannot consume.
+emit a stub with obviously-wrong placeholder commands (e.g.,
+`command = TODO`) than to ship a stack skill the harness cannot consume.
 
 ### Step 2.6 — PBT support (optional)
 
@@ -155,9 +150,7 @@ Run minimal checks (inline, not a separate script):
 - `sensors.ini` has all required sections + keys per
   [references/sensors-contract.md](references/sensors-contract.md):
   `[lint] fix`, `[lint] check`, `[typecheck] command`,
-  `[test] unit`, `[acl] tool`. If `acl.tool != none`, also
-  `[acl] config_format` and `[acl] invoke`.
-- `[acl] tool` value ∈ {`import-linter`, `dependency-cruiser`, `none`}
+  `[test] unit`.
 
 Print summary: skill path, references file count, total LOC, vendored URLs, sensors.ini status.
 
