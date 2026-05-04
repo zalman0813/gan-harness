@@ -59,10 +59,3 @@ _Avoid_: sprint, iteration, milestone
 > **User**: "We also have a 'customer' concept — is that the same as User?"
 >
 > **Planner**: "That's an **open question** with `resolution_kind: glossary` — I don't see Customer defined in `CONTEXT.md`. My recommendation: distinct concepts. Customer = the human owning the account; User = an authentication identity (a Customer can have multiple Users for shared corporate accounts). Approve / edit / escalate?"
-
-## Flagged ambiguities
-
-- "phase" was previously used to mean a horizontal layer (DB phase, API phase) — resolved: **features are vertical slices**; phase-named features are rejected by `plan_lint.py L10a`.
-- "framework skill" / "language skill" — resolved: collapsed into **Stack skill**. One skill per stack covers both language and framework idioms.
-- "tech debt" / "risk" as planner output — resolved: removed entirely. Every identified concern resolves into an ADR proposal, an open_question, or a new feature/AC. See `README.md` § 4 Invariants (Zero debt) and `docs/maintainer/design/agent-prompt-doctrine.md` § Universal rules.
-- "deferred" as a question state — resolved: removed. Every open_question resolves in-batch (feature_local / architectural / glossary). If genuinely unresolvable, batch scope is wrong → escalate at /plan Phase 2 walk → re-grill at /prd.

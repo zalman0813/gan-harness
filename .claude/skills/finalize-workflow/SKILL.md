@@ -38,6 +38,7 @@ non-terminal (`todo`), ABORT. /execution-loop must run first.
 | "Some features deferred — I'll archive anyway, retro can wait" | No. Archive only when every feature is `passed`. Otherwise the alive `specs/_batch/` is the truth and retro is the next move. |
 | "Retro is small, skip the planner agent and edit feature-list.json directly" | No. Planner owns feature-list.json invariants (schema + trio). Direct edits skip lint and risk drift; reuse the planner agent. |
 | "Single commit feels too coarse — split into multiple" | No. /finalize lands as one `chore(finalize): close batch <slug>` commit so the archival is atomic and reviewable. |
+| "Some terms had naming history (X used to be called Y); I'll add a `## Flagged ambiguities` section to CONTEXT.md to record it" | NO. CONTEXT.md has exactly two sections: `## Language` and `## Relationships`. Resolved naming lives in the term's `_Avoid_` line; do not duplicate into a separate section. Naming history (commit-log evidence, "we used to call this X") belongs in commit messages, ADR rationale, or code comments — not in vocabulary. The `merge_domain_terms.py` script writes only under `## Language`; do not hand-edit any other section into existence. |
 
 ## When to use
 
@@ -345,6 +346,14 @@ Next: /prd  (for the next batch)
 - **Committing in the retro path.** Retro is mid-batch. The next
   /execution-loop pass is the real continuation; no commit until
   archive.
+- **Inflating CONTEXT.md beyond `## Language` + `## Relationships`.**
+  No `## Flagged ambiguities`, no `## Example dialogue` recreated by
+  agents, no `## Naming history`. Resolved naming lives in each term's
+  `_Avoid_` line; process anti-patterns live in the relevant agent's
+  handbook; implementation history lives in commit messages and ADR
+  rationale. CONTEXT.md is pure current-canonical vocabulary —
+  duplication and historical commentary make it harder to scan as it
+  grows.
 
 ## Done when
 
