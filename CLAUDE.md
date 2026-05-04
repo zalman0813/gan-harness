@@ -7,7 +7,6 @@ maintainer-only refs into the prompts that get shipped to target
 projects.
 
 @CONTEXT.md
-@docs/maintainer/adr/index.md
 
 ## Behavioral foundation
 
