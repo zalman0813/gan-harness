@@ -1,6 +1,6 @@
 ---
 name: setup-gan-harness-skills
-description: One-time bootstrap that scaffolds the gan-harness substrate into a target project — copies the .claude/ tree, injects an ## Agent skills block into CLAUDE.md or AGENTS.md, chain-calls stack-skill-creator for each detected stack, and wires produced stack skill names into planner / generator / evaluator frontmatter `skills:` lists. Pocock-style 5-step flow (Explore / Ask one-at-a-time / Confirm / Write / Done). Lazy-creates CONTEXT.md / CODEMAP.md / docs/adr/ on demand by downstream stages, never preempts. Use when the user runs this skill to initialize a fresh target project for gan-harness.
+description: One-time bootstrap that scaffolds the gan-harness substrate into a target project — copies the .claude/ tree, injects a minimal ### Domain docs block into CLAUDE.md or AGENTS.md, chain-calls stack-skill-creator for each detected stack, and wires produced stack skill names into planner / generator / evaluator frontmatter `skills:` lists. Pocock-style 5-step flow (Explore / Ask one-at-a-time / Confirm / Write / Done). Lazy-creates CONTEXT.md / CODEMAP.md / docs/adr/ on demand by downstream stages, never preempts. Use when the user runs this skill to initialize a fresh target project for gan-harness.
 disable-model-invocation: true
 ---
 
@@ -31,10 +31,11 @@ not to myself.
 |---|---|
 | "User didn't choose, sane default is fine" | For load-bearing decisions (stack, layout, memory file), ask. For purely cosmetic, default may be fine but say which I picked. |
 | "This file might be needed later, I'll create a stub now" | Lazy creation. No empty stubs for `CONTEXT.md` / `CODEMAP.md` / `docs/adr/index.md` — producer creates on first real content. |
-| "User's edits to `README.md` / `CLAUDE.md` look wrong" | Not my call to revise. They own per-project decisions. I only inject the `## Agent skills` block; I never touch surrounding sections. |
+| "User's edits to `README.md` / `CLAUDE.md` look wrong" | Not my call to revise. They own per-project decisions. I only inject the `### Domain docs` block; I never touch surrounding sections. |
 | "Stack detection found nothing, I'll guess from filenames" | No. If detection is empty, surface that to the user and let them name the stack — or skip stack wiring entirely. Inventing a stack creates a wrong skill that drifts forever. |
 | "Section walk is tedious; I'll bulk-ask everything in one prompt" | No. One `AskUserQuestion` per section, with explainer first. The interactive cadence IS the contract; bulk-ask collapses it. |
 | "Agent frontmatter edit is mechanical; I'll inline the change without a script" | Use `wire_stack_skills.py`. Mechanical edits go through the script so behaviour is reproducible and testable. |
+| "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /prd /plan etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents auto-load their own handbooks; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
 
 ## When to use
 
@@ -67,7 +68,7 @@ After successful run:
 - `target/.claude/` — full copy of source `.claude/` minus exclusions
   (`setup-gan-harness-skills/` itself, `__pycache__`, `.DS_Store`)
 - `target/README.md` — from template (only if target had none)
-- `target/CLAUDE.md` or `target/AGENTS.md` — `## Agent skills` block
+- `target/CLAUDE.md` or `target/AGENTS.md` — `### Domain docs` block
   injected (created if neither existed; updated in-place if one did)
 - `target/.claude/skills/<stack-name>/` × N — one per confirmed stack,
   produced by chain-called stack-skill-creator
@@ -128,7 +129,8 @@ or Cancel.").
 #### Section B — Project identity
 
 > The README.md template needs a project name and one-line description.
-> These appear at the top of the README and in the `## Agent skills` block.
+> These appear at the top of the README. (The injected `### Domain docs`
+> block is fixed content; it does not take the project name.)
 
 Two AskUserQuestion calls (one per field): `name` (kebab-case slug) and
 `one_line_description`.
@@ -136,8 +138,10 @@ Two AskUserQuestion calls (one per field): `name` (kebab-case slug) and
 #### Section C — Memory file
 
 > Claude Code reads either `CLAUDE.md` or `AGENTS.md` (never both) at
-> session start to learn project context. Setup will inject an
-> `## Agent skills` block describing the gan-harness pipeline.
+> session start to learn project context. Setup will inject a minimal
+> `### Domain docs` block pointing at CONTEXT.md / docs/adr/ / CODEMAP.md
+> (3 bullets; no Pipeline / Conventions / Stack subsections — those are
+> intentionally omitted; see Common Rationalizations).
 
 Branch on Phase 1's `HAS_CLAUDE_MD` / `HAS_AGENTS_MD`:
 - both false → AskUserQuestion: "Create CLAUDE.md or AGENTS.md?"
@@ -182,7 +186,7 @@ Show the user a single confirmation block:
 Ready to write to <target>:
 
   README.md           : <new from template / skip — already exists>
-  CLAUDE.md           : <inject ## Agent skills block>
+  CLAUDE.md           : <inject ### Domain docs block>
   .claude/            : copy from <source>/.claude/ (excluding setup-gan-harness-skills/)
   Stack skills        : <list of names from Section D>
   Wire stacks into    : agents/{planner,generator,evaluator}.md `skills:`
@@ -219,18 +223,18 @@ Write to `$PWD/README.md`.
 
 If `HAS_README=true`, skip (the user owns their README).
 
-#### 4c. Memory file `## Agent skills` block
+#### 4c. Memory file `### Domain docs` block
 
-Render
+Read
 `.claude/skills/setup-gan-harness-skills/templates/claude-md-skills-block.template.md`
-with `{{project_name}}` substituted. Then:
+verbatim (no token substitution; the template is fixed content). Then:
 
-- If a `## Agent skills` section already exists in the chosen memory
+- If a `### Domain docs` section already exists in the chosen memory
   file (`CLAUDE.md` or `AGENTS.md`), update it in-place. Do not touch
   surrounding sections.
-- Else append the rendered block at the end of the file.
+- Else append the block at the end of the file.
 - If neither memory file exists, create the chosen one with frontmatter
-  + the rendered block.
+  + the block.
 
 This MUST preserve user edits to other sections of the file.
 
@@ -266,7 +270,7 @@ setup-gan-harness-skills complete — <project_name>
 
 Wrote .claude/                        ✓
 Wrote README.md                       <✓ / skipped — existed>
-Updated <CLAUDE.md|AGENTS.md>         ✓ (## Agent skills block)
+Updated <CLAUDE.md|AGENTS.md>         ✓ (### Domain docs block)
 Built stack skills                    <list or "none">
 Wired stacks into agent frontmatter   <✓ / skipped — no stacks>
 Sentinels                             specs/{_batch,completed}/.gitkeep
@@ -288,8 +292,14 @@ Next: /prd  (start your first batch)
 - **Pre-creating `CONTEXT.md` / `CODEMAP.md` / `docs/adr/`.** Lazy
   per locked decision. Stubs are lies.
 - **Editing surrounding sections of an existing CLAUDE.md / AGENTS.md /
-  README.md.** Setup only owns the `## Agent skills` block (and a fresh
+  README.md.** Setup only owns the `### Domain docs` block (and a fresh
   README from template if missing). Anything else is the user's.
+- **Bloating the injected block.** The `### Domain docs` block is
+  intentionally 3 bullets. Don't add Pipeline / Conventions / Stack
+  subsections back in: subagents auto-load their own handbooks; slash
+  commands self-document at invocation time; main-session Claude can
+  grep `.claude/commands/` if it needs to know what `/prd` etc. do.
+  Pre-explaining is documentation, not actionable context.
 - **Using both CLAUDE.md AND AGENTS.md.** Pocock rule: pick one. Setup
   refuses to proceed if both exist (manual cleanup needed first).
 - **Bulk-asking all sections at once.** Walk one-at-a-time, each with
@@ -304,7 +314,7 @@ Next: /prd  (start your first batch)
 - [ ] Phase 3 confirm Approve received
 - [ ] `.claude/` copied (minus setup-gan-harness-skills, `__pycache__`)
 - [ ] README.md present (template-rendered or pre-existing)
-- [ ] CLAUDE.md or AGENTS.md has `## Agent skills` block
+- [ ] CLAUDE.md or AGENTS.md has `### Domain docs` block
 - [ ] Stack skills (if any) built + wired into agent frontmatter
 - [ ] `specs/_batch/.gitkeep` + `specs/completed/.gitkeep` present
 - [ ] Final report printed; `/prd` suggested
