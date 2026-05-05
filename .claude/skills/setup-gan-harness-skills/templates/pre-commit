@@ -276,8 +276,28 @@ def _ac_id_in_body(ac_id: str, body: str) -> bool:
     return ac_id in body or ac_id.replace("-", "_") in body
 
 
-def _check_one_ac(ac: dict, test_index: dict[Path, list[tuple[str, str]]]) -> list[dict]:
+def _rel_path(path: Path, project_dir: Path) -> str:
+    try:
+        return str(path.relative_to(project_dir))
+    except ValueError:
+        return str(path)
+
+
+def _format_found_in(blocks: list[tuple[Path, str, str]], project_dir: Path,
+                     limit: int = 5) -> str:
+    locations = sorted({
+        f"{_rel_path(path, project_dir)} :: {block_id}"
+        for path, block_id, _ in blocks
+    })
+    shown = locations[:limit]
+    suffix = f" (and {len(locations) - limit} more)" if len(locations) > limit else ""
+    return "; ".join(shown) + suffix
+
+
+def _check_one_ac(ac: dict, test_index: dict[Path, list[tuple[str, str]]],
+                  project_dir: Path) -> list[dict]:
     ac_id = ac["id"]
+    underscore_variant = ac_id.replace("-", "_")
     missing: list[dict] = []
     blocks_containing_id: list[tuple[Path, str, str]] = []
     for path, blocks in test_index.items():
@@ -287,14 +307,27 @@ def _check_one_ac(ac: dict, test_index: dict[Path, list[tuple[str, str]]]) -> li
     if not blocks_containing_id:
         missing.append({
             "ac_id": ac_id, "kind": "ac_id_missing",
-            "detail": f"literal '{ac_id}' (or underscore variant) not found in any test body after stripping comments",
+            "detail": (
+                f"no test function/block contains the literal '{ac_id}' "
+                f"(or underscore variant '{underscore_variant}') after stripping comments. "
+                f"FIX: write a test whose function name, docstring, or body contains "
+                f"'{ac_id}' as a literal string — e.g., `def test_{underscore_variant}_<desc>(...)` "
+                f"(Python) or `it('{ac_id}: <desc>', () => ...)` (JS/TS)."
+            ),
         })
         return missing
+    found_in = _format_found_in(blocks_containing_id, project_dir)
     for anchor in ac.get("eval_anchors", []) or []:
         if not any(anchor in body for _, _, body in blocks_containing_id):
             missing.append({
                 "ac_id": ac_id, "kind": "eval_anchor_missing", "anchor": anchor,
-                "detail": f"eval_anchor '{anchor}' not present in any test body that references {ac_id}",
+                "detail": (
+                    f"eval_anchor '{anchor}' must appear inside the SAME test "
+                    f"function/block as the AC literal '{ac_id}' (not merely the "
+                    f"same file). '{ac_id}' currently lives in: {found_in}. "
+                    f"FIX: add the literal string '{anchor}' inside the body of "
+                    f"one of those tests."
+                ),
             })
     if ac.get("kind") == "negative":
         for must_not in ac.get("must_not", []) or []:
@@ -305,7 +338,16 @@ def _check_one_ac(ac: dict, test_index: dict[Path, list[tuple[str, str]]]) -> li
             if not paired:
                 missing.append({
                     "ac_id": ac_id, "kind": "must_not_unpaired", "must_not": must_not,
-                    "detail": f"must_not literal '{must_not}' for negative AC {ac_id} has no paired absence-assertion",
+                    "detail": (
+                        f"negative AC '{ac_id}': literal '{must_not}' must appear "
+                        f"in a test that references '{ac_id}' AND that test must "
+                        f"contain a paired absence-assertion (e.g., "
+                        f"`assert '{must_not}' not in <output>` Python, or "
+                        f"`expect(<output>).not.toContain('{must_not}')` JS/TS). "
+                        f"'{ac_id}' currently lives in: {found_in}. "
+                        f"FIX: add the literal '{must_not}' AND a not-contains-style "
+                        f"assertion inside the body of one of those tests."
+                    ),
                 })
     return missing
 
@@ -332,7 +374,7 @@ def _stage_ac_coverage(feature: dict, project_dir: Path) -> int:
     test_index = _collect_test_blocks(test_files)
     all_missing: list[dict] = []
     for ac in feature.get("spec", {}).get("ac", []) or []:
-        all_missing.extend(_check_one_ac(ac, test_index))
+        all_missing.extend(_check_one_ac(ac, test_index, project_dir))
     if all_missing:
         print(f"  ✗ FAIL ({len(all_missing)} missing across {len(test_files)} test files)")
         for m in all_missing:
