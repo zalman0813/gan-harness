@@ -25,7 +25,7 @@ import json
 import re
 import sys
 
-LEAKABLE_TOOLS = {"Read", "Grep", "Glob"}
+LEAKABLE_TOOLS = {"Read", "Grep", "Glob", "Bash"}
 
 RULES: dict[str, tuple[str, str] | None] = {
     "codebase-fact-finder": (
@@ -40,21 +40,26 @@ RULES: dict[str, tuple[str, str] | None] = {
     "planner": None,
     "generator": (
         r"\.claude/agents/evaluator\.md"
-        r'|\.claude/skills/evaluator-handbook(/|"|$)',
+        r'|\.claude/skills/evaluator-handbook(/|"|$)'
+        r"|\.git/hooks/",
         "Generator is forbidden from reading evaluator-private paths "
-        "(.claude/agents/evaluator.md, .claude/skills/evaluator-handbook/). "
-        "Implement from the feature spec — do not teach-to-the-test. Shared "
-        "skills (deep-module-handbook, planner-handbook, stack skills) are "
-        "allowed.",
+        "(.claude/agents/evaluator.md, .claude/skills/evaluator-handbook/) "
+        "and the project's git hooks (.git/hooks/). The pre-commit hook is "
+        "the single enforcement point and must remain opaque — fix from "
+        "commit stderr (the failing tool's own output), not by reading the "
+        "gate source. Shared skills (deep-module-handbook, planner-handbook, "
+        "stack skills) are allowed.",
     ),
     "evaluator": (
         r"\.claude/agents/generator\.md"
-        r'|\.claude/skills/generator-handbook(/|"|$)',
+        r'|\.claude/skills/generator-handbook(/|"|$)'
+        r"|\.git/hooks/",
         "Evaluator is forbidden from reading generator-private paths "
-        "(.claude/agents/generator.md, .claude/skills/generator-handbook/). "
-        "Grade the artefact (feature spec + generator trace + git diff + "
-        "your own probes) independently — do not anchor on the generator's "
-        "worldview. Shared skills are allowed.",
+        "(.claude/agents/generator.md, .claude/skills/generator-handbook/) "
+        "and the project's git hooks (.git/hooks/). Grade the artefact "
+        "(feature spec + generator trace + git diff + your own probes) "
+        "independently — do not anchor on the generator's worldview or the "
+        "gate's internal logic. Shared skills are allowed.",
     ),
 }
 

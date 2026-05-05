@@ -89,6 +89,8 @@ After successful run:
   produced by chain-called stack-skill-creator
 - `target/.claude/agents/{planner,generator,evaluator}.md` — frontmatter
   `skills:` list extended with each new stack name
+- `target/.git/hooks/pre-commit` — the harness gate, the SOLE enforcement
+  point for lint/typecheck/test/ac_coverage on every `git commit`
 - `target/specs/_batch/.gitkeep`, `target/specs/completed/.gitkeep`
 
 NOT created (lazy by downstream stages):
@@ -267,7 +269,26 @@ The script edits frontmatter `skills:` of `planner.md`, `generator.md`,
 
 If `STACKS_TO_WIRE` is empty (Section D entirely skipped), no-op.
 
-#### 4e. Empty container sentinels
+#### 4e. Pre-commit hook (the harness gate's only enforcement point)
+
+Install the project's `.git/hooks/pre-commit` so every `git commit`
+automatically runs the gate (lint.fix → lint.check → typecheck →
+test.unit → ac_coverage) over the active stack's `sensors.ini`. The
+hook short-circuits to allow normal maintainer commits when no batch
+is in flight (`specs/_batch/_traces/current-context.json` absent).
+
+```
+bash .claude/skills/setup-gan-harness-skills/scripts/install_pre_commit_hook.sh "$PWD"
+```
+
+If the script aborts (target already has a `.git/hooks/pre-commit`),
+the operator must reconcile manually before re-running setup. Diff
+hint is printed to stderr.
+
+This is the SOLE enforcement point — generator agents do not invoke
+the gate manually, and the prompt must not instruct them to.
+
+#### 4f. Empty container sentinels
 
 ```
 mkdir -p specs/_batch specs/completed
@@ -288,6 +309,7 @@ Wrote README.md                       <✓ / skipped — existed>
 Updated <CLAUDE.md|AGENTS.md>         ✓ (### Domain docs block)
 Built stack skills                    <list or "none">
 Wired stacks into agent frontmatter   <✓ / skipped — no stacks>
+Installed git pre-commit hook         ✓ (.git/hooks/pre-commit)
 Sentinels                             specs/{_batch,completed}/.gitkeep
 
 Lazy (will be created when first needed):
@@ -331,5 +353,6 @@ Next: /prd  (start your first batch)
 - [ ] README.md present (template-rendered or pre-existing)
 - [ ] CLAUDE.md or AGENTS.md has `### Domain docs` block
 - [ ] Stack skills (if any) built + wired into agent frontmatter
+- [ ] `.git/hooks/pre-commit` installed + executable
 - [ ] `specs/_batch/.gitkeep` + `specs/completed/.gitkeep` present
 - [ ] Final report printed; `/prd` suggested

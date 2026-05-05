@@ -5,13 +5,13 @@ Every stack skill under `.claude/skills/<stack>/` MUST provide a
 `references/`). It declares the lint/typecheck/test commands the
 harness gates invoke for this stack.
 
-The harness gates that consume `sensors.ini`:
+The harness components that consume `sensors.ini`:
 
-- `.claude/skills/generator-handbook/scripts/gate_gen_precommit.py` —
-  generator's pre-commit gate (Stripe-style two stages: <1s autofix →
-  <5s read-only check). Internal stages cover lint.fix → lint.check →
-  typecheck → test.unit → AC literal coverage. AC literal coverage is
-  inlined; there is no separate sensor script.
+- The project's git pre-commit hook at `.git/hooks/pre-commit` —
+  installed by setup-gan-harness-skills. Stripe-style two stages
+  (<1s autofix → <5s read-only check). Internal stages cover lint.fix
+  → lint.check → typecheck → test.unit → AC literal coverage. AC literal
+  coverage is inlined; there is no separate sensor script.
 - `.claude/skills/evaluator-handbook/scripts/gate_eval_postcommit.py` —
   evaluator's L1+L2 wrapper (full `module_path` scope + optional L5
   smoke). The evaluator's grading process verifies AC literal coverage
@@ -35,7 +35,7 @@ The harness substitutes this in any command string before execution:
 
 | Placeholder | Substituted by | Value |
 |---|---|---|
-| `{scope}` | `gate_gen_precommit.py` / `gate_eval_postcommit.py` | gen: changed files (`git diff --name-only`); eval: `feature.module_path` (L1), `feature.test_contract.l2_path` (L2), or `feature.test_contract.l5_smoke_path` (L5) |
+| `{scope}` | git pre-commit hook / `gate_eval_postcommit.py` | pre-commit: changed files (`git diff --name-only`); eval: `feature.module_path` (L1), `feature.test_contract.l2_path` (L2), or `feature.test_contract.l5_smoke_path` (L5) |
 
 ALWAYS quote `{scope}` in the command string if your tool is
 whitespace-sensitive (most modern lints handle multiple paths).
@@ -46,6 +46,41 @@ If a key value is empty (e.g., `smoke =`), the harness skips that step
 silently. `gate_eval_postcommit.py` will not error on an empty `smoke`
 even when `feature.test_contract.l5_smoke_path` is set; it logs a
 SKIPPED note.
+
+## Known limitation: dual-consumer scope semantics
+
+The same `[test] unit` line is consumed by **two callers with different
+scope semantics**:
+
+| Caller | What `{scope}` is substituted with | What the runner should do |
+|---|---|---|
+| Pre-commit hook (`.git/hooks/pre-commit`) | Changed files (`git diff --name-only`) — typically a mix of source + test files | Run only the tests covering those changes |
+| `gate_eval_postcommit.py` (evaluator) | `feature.test_contract.l2_path` (a directory) | Run all tests under that path |
+
+Most test runners' positional CLI args are filename filters (substring
+or glob match against test files). That works for the evaluator case
+(directory path matches its tests) but is lossy for the pre-commit case
+(source files don't match any test filename → 0 tests run unless the
+runner has explicit "tests covering this source file" support).
+
+Stack-specific runners that handle the gen-side correctly:
+- `vitest --related <files>` (uses Vite's module graph)
+- `jest --findRelatedTests <files>` (uses Jest's coverage map)
+- pytest has no equivalent — use pytest-testmon or similar
+
+Stacks where the runner does NOT handle source→test mapping should
+adopt one of:
+1. **Accept gen-side weakness + strong evaluator gate** (the GAN-pattern
+   default). Use `--passWithNoTests` (vitest) or equivalent so 0-match
+   doesn't fail. Document in sensors.ini comments. Evaluator's full L2
+   sweep is the real safety net.
+2. **Wait for two-key contract.** If false-PASS becomes a real problem,
+   split into `unit_changed` (hook) + `unit_path` (evaluator) — but that
+   requires changing both gate scripts; not done today.
+
+NEVER hard-code a path like `__tests__` in place of `{scope}` — that
+ignores the "changed files only" contract entirely and runs the whole
+suite every commit (slow + defeats the purpose of scoping).
 
 ## Self-validation
 

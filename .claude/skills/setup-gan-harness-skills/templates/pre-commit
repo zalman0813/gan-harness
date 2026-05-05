@@ -1,42 +1,39 @@
 #!/usr/bin/env python3
-"""gate_gen_precommit.py — generator's pre-commit batch gate.
+"""pre-commit — gan-harness gate, the only enforcement point.
 
-The generator subagent reads its handbook, sees the doctrine to run this
-script before `git commit`, and subprocess-invokes it. Inlined here:
+Installed by setup-gan-harness-skills into <target>/.git/hooks/pre-commit.
+Self-contained — no other harness file invokes this; the project's
+generator subagent does NOT run any gate manually. Every `git commit`
+attempt fires this hook; non-zero exit aborts the commit.
 
-    Stage 1 (autofix in place):
-        [lint] fix          via stack's sensors.ini
-
-    Stage 2 (read-only verification):
-        [lint] check        via stack's sensors.ini
-        [typecheck] command via stack's sensors.ini
-        [test] unit         via stack's sensors.ini, scope=changed-files
-        ac_coverage         INLINE (was sensor_ac_coverage.py)
-
-There is NO separate sensor_*.py file. AC literal coverage is implemented
-as a function in this file — single caller, no reuse, no subprocess hop.
-
-The auto-fired Claude SubagentStop hook does NOT re-run ac_coverage. The
-adversarial verification of AC literal coverage is performed by the
-evaluator subagent's verdict process (see evaluator.md and
-evaluator-handbook). This is the GAN pattern: generator self-checks here,
-evaluator independently re-verifies on the next stage.
-
-Usage:
-    gate_gen_precommit.py <feature_id> [round]
+Behaviour:
+    - When specs/_batch/_traces/current-context.json is absent or malformed
+      → exit 0 (allow normal maintainer commits outside a live batch).
+    - When the file is present with feature + round → run the gate over
+      the active stack skill's sensors.ini commands:
+          Stage 1 (autofix in place):
+              [lint] fix          via stack's sensors.ini
+          Stage 2 (read-only verification):
+              [lint] check        via stack's sensors.ini
+              [typecheck] command via stack's sensors.ini
+              [test] unit         via stack's sensors.ini, scope=changed-files
+              ac_coverage         INLINE — every AC literal appears in a test
+                                  body, eval_anchors string match, and for
+                                  `kind: negative` ACs the must_not literal
+                                  is paired with an absence-assertion.
 
 Exit codes:
-    0  all stages PASS; safe to commit
-    1  any stage FAILED; do NOT commit (fix above + retry)
-    2  script error (bad args, sensors.ini missing, no stack skill,
-       feature not found in feature-list.json)
+    0  PASS or short-circuit (commit allowed)
+    1  any stage FAIL (commit aborted)
+    2  script error (sensors.ini missing, stack skill missing, malformed
+       feature-list.json) — also aborts the commit because we are inside
+       a live batch and cannot verify
 """
 from __future__ import annotations
 
 import ast
 import configparser
 import json
-import os
 import re
 import subprocess
 import sys
@@ -47,12 +44,41 @@ _BAR = "────────────────────────
 
 
 # ---------------------------------------------------------------------------
-# sensors.ini reader (was sensor_io.py — inlined, no module dep)
+# Repo root + short-circuit on absent / malformed context
 # ---------------------------------------------------------------------------
 
-def _read_sensor(stack: Path | str, section: str, key: str) -> str:
+def _repo_root() -> Path:
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, timeout=5,
+    )
+    if out.returncode != 0:
+        sys.exit(0)
+    return Path(out.stdout.strip())
+
+
+def _read_context(project_dir: Path) -> tuple[str, int] | None:
+    ctx_path = project_dir / "specs" / "_batch" / "_traces" / "current-context.json"
+    if not ctx_path.is_file():
+        return None
+    try:
+        ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
+        feature = str(ctx.get("feature") or "").strip()
+        round_int = int(ctx.get("round") or 0)
+    except (json.JSONDecodeError, OSError, ValueError):
+        return None
+    if not feature or round_int <= 0:
+        return None
+    return feature, round_int
+
+
+# ---------------------------------------------------------------------------
+# sensors.ini reader
+# ---------------------------------------------------------------------------
+
+def _read_sensor(stack: Path, section: str, key: str) -> str:
     parser = configparser.ConfigParser(interpolation=None, allow_no_value=True)
-    if not parser.read(Path(stack) / "sensors.ini", encoding="utf-8"):
+    if not parser.read(stack / "sensors.ini", encoding="utf-8"):
         return ""
     if not parser.has_section(section) or not parser.has_option(section, key):
         return ""
@@ -65,10 +91,6 @@ def _render_sensor(template: str, **subs: str) -> str:
         out = out.replace("{" + k + "}", str(v))
     return out
 
-
-# ---------------------------------------------------------------------------
-# Stack discovery + change scope
-# ---------------------------------------------------------------------------
 
 def _find_stack(project_dir: Path) -> Path | None:
     skills_root = project_dir / ".claude" / "skills"
@@ -110,7 +132,10 @@ def _run_shell(label: str, cmd: str, project_dir: Path) -> int:
         return 0
     print(f"  $ {cmd}")
     try:
-        rc = subprocess.run(cmd, shell=True, cwd=project_dir).returncode
+        rc = subprocess.run(cmd, shell=True, cwd=project_dir, timeout=240).returncode
+    except subprocess.TimeoutExpired:
+        print("  ✗ FAIL (subprocess timeout 240s — check sensors.ini for watch-mode / TTY hangs)")
+        return 1
     except (subprocess.SubprocessError, OSError) as exc:
         print(f"  ✗ FAIL (subprocess error: {exc})")
         return 1
@@ -122,7 +147,7 @@ def _run_shell(label: str, cmd: str, project_dir: Path) -> int:
 
 
 # ---------------------------------------------------------------------------
-# AC coverage check (was sensor_ac_coverage.py — inlined)
+# AC coverage check (inlined; was sensor_ac_coverage.py)
 # ---------------------------------------------------------------------------
 
 _TEST_FILE_GLOBS = [
@@ -286,7 +311,6 @@ def _check_one_ac(ac: dict, test_index: dict[Path, list[tuple[str, str]]]) -> li
 
 
 def _stage_ac_coverage(feature: dict, project_dir: Path) -> int:
-    """Return 0 if PASS, 1 if FAIL. Prints banner + missing entries."""
     print()
     print("▶ Stage 2 / ac_coverage")
     tc = feature.get("test_contract", {}) or {}
@@ -318,10 +342,6 @@ def _stage_ac_coverage(feature: dict, project_dir: Path) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Feature lookup
-# ---------------------------------------------------------------------------
-
 def _find_feature(feature_list_path: Path, fid: str) -> dict | None:
     try:
         data = json.loads(feature_list_path.read_text(encoding="utf-8"))
@@ -338,44 +358,38 @@ def _find_feature(feature_list_path: Path, fid: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("usage: gate_gen_precommit.py <feature_id> [round]", file=sys.stderr)
-        return 2
-    feature_id = sys.argv[1]
-    round_ = sys.argv[2] if len(sys.argv) > 2 else "0"
-
-    project_dir = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()).resolve()
-    feature_list_path = project_dir / "specs" / "_batch" / "feature-list.json"
+    project_dir = _repo_root()
+    ctx = _read_context(project_dir)
+    if ctx is None:
+        return 0  # short-circuit: no live batch
+    feature_id, round_int = ctx
 
     stack = _find_stack(project_dir)
     if stack is None:
-        print(
-            f"ERROR: no .claude/skills/<stack>/sensors.ini found under {project_dir}",
-            file=sys.stderr,
-        )
+        print(f"ERROR: no .claude/skills/<stack>/sensors.ini under {project_dir}",
+              file=sys.stderr)
         return 2
 
     scope = _collect_changed_scope(project_dir)
+    feature_list_path = project_dir / "specs" / "_batch" / "feature-list.json"
 
     print(_BAR)
-    print(f"gate_gen_precommit: feature={feature_id} round={round_} stack={stack.name}")
+    print(f"pre-commit gate: feature={feature_id} round={round_int} stack={stack.name}")
     print(_BAR)
     if not scope:
         print("WARN: no changed files detected; running gates with empty scope.")
 
     overall = 0
 
-    # --- Stage 1: autofix ---
     fix_cmd = _render_sensor(_read_sensor(stack, "lint", "fix"), scope=scope)
     rc = _run_shell("Stage 1 / lint.fix", fix_cmd, project_dir)
     if rc != 0:
         print()
         print(_BAR)
-        print("gate_gen_precommit: FAIL (stage 1)")
+        print("pre-commit gate: FAIL (stage 1)")
         print(_BAR)
         return 1
 
-    # --- Stage 2 read-only checks ---
     for label, cmd in (
         ("Stage 2 / lint.check",
          _render_sensor(_read_sensor(stack, "lint", "check"), scope=scope)),
@@ -387,7 +401,6 @@ def main() -> int:
         if _run_shell(label, cmd, project_dir) != 0:
             overall = 1
 
-    # --- Stage 2 inlined ac_coverage (needs feature dict) ---
     feature = _find_feature(feature_list_path, feature_id)
     if feature is None:
         print()
@@ -400,9 +413,9 @@ def main() -> int:
     print()
     print(_BAR)
     if overall == 0:
-        print("gate_gen_precommit: PASS — safe to commit")
+        print("pre-commit gate: PASS — commit allowed")
     else:
-        print("gate_gen_precommit: FAIL — do NOT commit; fix above and retry")
+        print("pre-commit gate: FAIL — commit aborted; fix above and retry")
     print(_BAR)
     return overall
 

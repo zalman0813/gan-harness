@@ -50,7 +50,6 @@ overriding and why, so the override is auditable.
 | `.claude/agents/`, `.claude/skills/`, `.claude/hooks/`, `.claude/scripts/`, `.claude/commands/` | **YES (full copy)** — except `.claude/skills/setup-gan-harness-skills/` itself (bootstrap-only, hard-excluded by `copy_substrate.sh`) | the target project's runtime — the target does NOT have `docs/maintainer/`, does NOT see gan-harness's own ADRs |
 | `.claude/skills/setup-gan-harness-skills/` | NO (excluded by `copy_substrate.sh`; also fail-safe rm + post-copy assertion) | gan-harness maintainers — runs IN gan-harness, validates source has `docs/maintainer/design/agent-prompt-doctrine.md` as marker |
 | `templates/README.template.md`, `templates/claude-md-skills-block.template.md` | YES (rendered into target's files) | target maintainer |
-| `docs/maintainer/` (entire tree, including `docs/maintainer/adr/*`) | **NO** | gan-harness maintainers only |
 | `README.md` | NO (target gets its own from template) | gan-harness contributors |
 | `CONTEXT.md` (this file's ubiquitous-language sibling) | NO (target lazy-creates its own) | gan-harness maintainers + Claude in this repo |
 | `CLAUDE.md` (this file) | NO (target gets its own via skills-block injector) | gan-harness maintainers + Claude in this repo |
@@ -62,11 +61,6 @@ Source of truth for the boundary: `setup-gan-harness-skills/scripts/copy_substra
 1. **Never reference `docs/maintainer/...` from any file that gets copied to target.**
    Those files get copied to target projects where `docs/maintainer/` does not exist. Every `[link](docs/maintainer/...)`, every `@docs/maintainer/...`, every prose ref becomes a broken link on every setup.
    - Sole exception: files under `.claude/skills/setup-gan-harness-skills/` are excluded from copy, so they MAY ref `docs/maintainer/` (e.g., to validate that the source path looks like a gan-harness checkout). To verify exclusion before referencing, check `.claude/skills/setup-gan-harness-skills/scripts/copy_substrate.sh` exclusion list.
-
-2. **Never reference any `ADR-NNNN` by id from any file under `.claude/` or `templates/`.**
-   gan-harness's own ADRs (`docs/maintainer/adr/0001-*.md` etc.) are maintainer-internal. Target projects have their own `docs/adr/` lazy-created with their own numbering. A `(per ADR-0003)` ref in a prompt is broken on the target.
-   - **The right way:** inline the ADR's behavioural conclusion. ADRs explain *why* (rationale, for maintainers); prompts express *what* (behaviour, for the runtime agent). Different audience → different surface.
-   - Example: ❌ `the hook (per ADR-0003) cascades round=FAIL`  →  ✅ `the hook cascades round=FAIL`. The maintainer ADR still lives in `docs/maintainer/adr/` as the rationale record; the prompt just says what happens.
 
 3. **Don't write target-project-specific content into `CONTEXT.md`.**
    This `CONTEXT.md` is gan-harness's own ubiquitous language for maintainer use. Target projects lazy-create their own `CONTEXT.md` describing THEIR domain (their User, their Order, their Customer) — they do NOT inherit this one.

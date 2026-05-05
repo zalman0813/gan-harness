@@ -138,7 +138,7 @@ When you create a new stack skill that should support PBT:
 ## Out of scope for the stack skill
 
 The harness ships no PBT-specific gate. PBT failures surface through
-the unit-test runner, get caught by gate_gen_precommit's
+the unit-test runner, get caught by the pre-commit hook's
 `[test] unit` step, and are FAILed in the round just like any other
 test failure.
 

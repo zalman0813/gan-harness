@@ -67,11 +67,11 @@ Create the skill directory: `.claude/skills/<stack-name>/references/`.
 ### Step 2.5 — Emit sensors.ini (the harness command contract)
 
 Every stack skill MUST produce a `sensors.ini` at its top level (sibling
-of `SKILL.md`). This is the machine-readable command contract the
-harness gates (`generator-handbook/scripts/gate_gen_precommit.py` +
-`evaluator-handbook/scripts/gate_eval_postcommit.py`) consume to invoke
-lint / typecheck / test for this stack. The pre-commit gate inlines
-AC-literal coverage; there is no separate sensor script.
+of `SKILL.md`). This is the machine-readable command contract that two
+harness components consume to invoke lint / typecheck / test for this
+stack: the project's git pre-commit hook (installed by setup) and
+`evaluator-handbook/scripts/gate_eval_postcommit.py`. The pre-commit
+hook inlines AC-literal coverage; there is no separate sensor script.
 
 **This is NOT vendored prose**; it's a structured INI file with
 required sections and keys. See [references/sensors-contract.md](references/sensors-contract.md)

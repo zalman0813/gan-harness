@@ -17,7 +17,8 @@ specs/_batch/_traces/<agent>-<ts>.md with no progress.tsv row.
 
 This hook does NO validation — it just records. AC literal coverage is
 verified by:
-    - generator's pre-commit gate (gate_gen_precommit.py) at write time
+    - the project's git pre-commit hook (.git/hooks/pre-commit) at commit
+      time — installed by setup-gan-harness-skills
     - evaluator's verdict process (per evaluator.md Principle #4) on review
 """
 from __future__ import annotations

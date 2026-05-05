@@ -97,20 +97,9 @@ final response, not a unilateral edit to feature-list.json.
 
 Every test you write must reference its AC id. The literal `AC-NN`
 (or stack-skill-specific variant like `R03-AC-1`) appears in the test's
-function name, group label, docstring, or body. The pre-commit gate's
-inlined AC-coverage stage greps for these literals before you commit;
-missing literal → gate FAILs and you cannot commit. The evaluator
-independently re-greps as part of its grading.
-
-### 2-stage division of labour for AC literal coverage
-
-AC literal coverage is checked at two distinct points per round, each
-in a different role:
-
-| Stage | Who runs it | Role | What FAIL means |
-|---|---|---|---|
-| `gate_gen_precommit.py` (you, before commit) | Generator (you) | **Self-check** — catch missing literals before commit | Fix and re-stage; do NOT commit until PASS |
-| Evaluator's verdict process | Evaluator subagent | **Adversarial verification** — independent re-grep of test bodies | Records `expectations[].passed=false` in the eval JSON, contributing to FAIL |
+function name, group label, docstring, or body. The evaluator
+independently re-greps test bodies as part of its grading; missing
+literal = AC FAIL.
 
 Comments are stripped before grep, so a `# AC-01 fake` reference will
 not pass. The literal must live in code: function name, docstring, or a

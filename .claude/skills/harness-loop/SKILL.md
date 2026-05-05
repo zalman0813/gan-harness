@@ -98,9 +98,10 @@ upstream cascades):
         (treated same as DEFERRED for /finalize purposes); break.
 
    The previous "ac_coverage gate short-circuit before evaluator spawn"
-   step has been removed. Generator self-checks AC literals in
-   `gate_gen_precommit.py`; evaluator independently re-verifies as part
-   of its grading. The hook layer no longer runs ac_coverage.
+   step has been removed. AC literal coverage is enforced at commit time
+   by the project's git pre-commit hook (installed by setup) and
+   re-verified adversarially by the evaluator during grading. The
+   harness-loop SubagentStop hook no longer runs ac_coverage.
 3. **Cascade.** When a feature hits `deferred` or `blocked-by-ancestor`,
    immediately mark every direct downstream feature (i.e. every feature
    whose `depends_on` includes this id) as `blocked-by-ancestor`. The

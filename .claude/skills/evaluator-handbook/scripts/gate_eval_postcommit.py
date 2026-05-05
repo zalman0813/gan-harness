@@ -4,7 +4,7 @@
 Evaluator subagent reads its handbook, sees the doctrine to run this
 script when forming a verdict, and subprocess-invokes it.
 
-Differences from gate_gen_precommit.py:
+Differences from the project's git pre-commit hook:
 
     - NO autofix (no in-place mutation during evaluation)
     - L1 scope = feature.module_path (whole module, not changed files)
@@ -14,8 +14,8 @@ Differences from gate_gen_precommit.py:
       adversarial verifier of AC literal coverage (per evaluator.md
       Principle #4 and the "Coverage check (AC-NN literal in test body)
       + anchor check + must_not check" step in the verdict process).
-      gate_gen_precommit ran ac_coverage as generator's self-check;
-      evaluator independently re-verifies via its own grading.
+      The pre-commit hook ran ac_coverage at commit time as a mechanical
+      gate; the evaluator independently re-verifies via its own grading.
 
 Stages:
     L1: lint.check + typecheck over module_path

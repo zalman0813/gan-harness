@@ -15,7 +15,7 @@ when the generator reaches the relevant decision point.
 | Designing a module's public surface (functions, types, error modes) | [`deep-module-handbook` skill](../deep-module-handbook/SKILL.md) (foundation.md + the slice file generator-handbook will eventually own) |
 | Tempted to add validation / safety / fallback that AC didn't ask for | [references/conservative-defaults.md](references/conservative-defaults.md) |
 | Tempted to narrow the feature's scope ("this is bigger than I thought") | [references/anti-under-scope.md](references/anti-under-scope.md) |
-| Writing tests that must trace back to AC ids (cascade-FAIL'd by `ac_coverage` hook) | [references/anti-under-scope.md](references/anti-under-scope.md) § "Test traceability" |
+| Writing tests that must trace back to AC ids | [references/anti-under-scope.md](references/anti-under-scope.md) § "Test traceability" |
 
 ## Loading order
 

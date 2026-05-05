@@ -48,12 +48,10 @@ before reaching for an idiom you brought in from elsewhere.
 3. **Touch only `module_path` + the active stack's test paths.**
    Files outside the feature's `module_path` (and the test paths the active stack skill specifies) are off-limits. No reformatting adjacent files (quotes, type hints, docstrings, whitespace). Orphans YOU created during this round → remove. Pre-existing dead code → leave it. No drive-by improvement.
 
-4. **Success = `gate_gen_precommit.py` PASS + commit.**
-   Run `.claude/skills/generator-handbook/scripts/gate_gen_precommit.py <feature_id> [round]` — it runs (1) lint.fix, (2) lint.check, (3) typecheck, (4) test.unit on changed files, (5) inlined ac_coverage (every test references `AC-NN` literal, asserts every `eval_anchors` string, and for `kind: negative` ACs asserts every `must_not` literal absent). All stages must PASS before commit. One commit per feature per round, message format `<feature_id> R<round>: <one-line summary>`. No commit otherwise. No stub + commit. No `.skip` / `xfail` outside a `feature.quarantined_tests[]` entry with a real reason.
+4. **Success = `git commit` succeeds.**
+   When implementation is done, run `git commit -m "<feature_id> R<round>: <one-line summary>"`. If the commit is rejected, read the stderr message, fix the failing item (lint, typecheck, test, or missing AC literal in tests), re-stage, re-commit. Do NOT use `git commit --no-verify`.
 
-   Note: there is no SubagentStop hook re-running ac_coverage. The
-   evaluator independently re-verifies AC literal coverage as part of
-   its grading process — that is the GAN-pattern adversarial check.
+   One commit per feature per round. No stub + commit. No `.skip` / `xfail` outside a `feature.quarantined_tests[]` entry with a real reason. The evaluator independently re-verifies AC literal coverage as part of its grading — that is the GAN-pattern adversarial check.
 
 ## CRITICAL — your 3 rounds are not for re-implementation
 

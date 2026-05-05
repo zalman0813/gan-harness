@@ -4,34 +4,49 @@
 # Substitute the commands for your stack, validate, and ship at
 # .claude/skills/<stack>/sensors.ini.
 #
+# Performance budget targets per stage (advisory, not enforced by code):
+#   lint.fix    <2s    test.unit  <30s (MUST be scoped via {scope}, not whole suite)
+#   lint.check  <5s    typecheck  <30s (use incremental cache where available)
+#
+# {scope} substitution:
+#   - For tools accepting scoped paths (ruff, eslint, mypy, vitest): pass {scope}
+#   - For tools with no per-file mode (e.g., tsc): the command runs the whole
+#     project — configure incremental cache (e.g., tsc --incremental +
+#     tsBuildInfoFile in tsconfig.json) and add an explicit comment in this
+#     file noting "whole-project (no per-file mode)"
+#   - NEVER hard-code paths like "__tests__" in place of {scope} — that
+#     ignores the "changed files only" contract and runs the whole suite
+#     every commit
+#
 # Placeholder the harness substitutes at invocation time:
-#   {scope}  gate_gen_precommit: changed files; gate_eval_postcommit: feature.module_path / l2_path / l5_smoke_path
+#   {scope}  pre-commit hook: changed files; gate_eval_postcommit: feature.module_path / l2_path / l5_smoke_path
 
 
 [lint]
-# Stage 1 of gate_gen_precommit (<1s budget). Auto-fix in place; the
+# Stage 1 of the pre-commit hook (<1s budget). Auto-fix in place; the
 # generator commits the fixed files. gate_eval_postcommit does NOT run this
 # (no in-place mutation during evaluation).
 fix = ruff check --fix --silent {scope}
 
-# Stage 2 of gate_gen_precommit AND L1 of gate_eval_postcommit (<5s budget).
+# Stage 2 of the pre-commit hook AND L1 of gate_eval_postcommit (<5s budget).
 # Read-only; fail loud. No --fix.
 check = ruff check {scope}
 
 
 [typecheck]
-# Stage 2 of gate_gen_precommit AND L1 of gate_eval_postcommit. Strict mode is the
-# project default per generator-handbook conservative-defaults; loosen
-# only with cause.
+# Stage 2 of the pre-commit hook AND L1 of gate_eval_postcommit. Strict mode
+# is the project default per generator-handbook conservative-defaults;
+# loosen only with cause.
 command = mypy --strict {scope}
 
 
 [test]
-# Unit / component runner. {scope} = changed files (gate_gen_precommit)
+# Unit / component runner. {scope} = changed files (pre-commit hook)
 # or l2_path (gate_eval_postcommit).
 unit = pytest -x --tb=short {scope}
 
 # Optional smoke runner. gate_eval_postcommit uses this only when
 # feature.test_contract.l5_smoke_path is non-null. Leave EMPTY to skip
-# entirely (gate_eval_postcommit logs SKIPPED, does not error).
+# entirely (gate_eval_postcommit logs SKIPPED, does not error). The
+# pre-commit hook does NOT invoke smoke — that is post-commit only.
 smoke = pytest --no-header {scope}

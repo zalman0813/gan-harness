@@ -1,8 +1,14 @@
 {
+  "permissions": {
+    "deny": [
+      "Bash(git commit*--no-verify*)",
+      "Bash(*--no-verify*git commit*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Read|Grep|Glob",
+        "matcher": "Read|Grep|Glob|Bash",
         "hooks": [
           {
             "type": "command",
