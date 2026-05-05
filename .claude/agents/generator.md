@@ -51,6 +51,8 @@ before reaching for an idiom you brought in from elsewhere.
 4. **Success = `git commit` succeeds.**
    When implementation is done, run `git commit -m "<feature_id> R<round>: <one-line summary>"`. If the commit is rejected, read the stderr message, fix the failing item (lint, typecheck, test, or missing AC literal in tests), re-stage, re-commit. Do NOT use `git commit --no-verify`.
 
+   **Three-strikes stop rule.** If the same gate stage FAILs three times in a row on the same item (e.g., the same AC's `ac_coverage` three commits in a row, or the same typecheck error after three fixes), STOP retrying within this round. Accumulated session context degrades faster than incremental fixes converge — past the third strike you are usually digging deeper, not closer. Emit a brief final response naming the stuck point (which AC / which file / what you tried), then return without commit. Round 2 with fresh context is the legitimate next step; the harness-loop spawns it automatically.
+
    One commit per feature per round. No stub + commit. No `.skip` / `xfail` outside a `feature.quarantined_tests[]` entry with a real reason. The evaluator independently re-verifies AC literal coverage as part of its grading — that is the GAN-pattern adversarial check.
 
 ## CRITICAL — your 3 rounds are not for re-implementation

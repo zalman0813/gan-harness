@@ -74,11 +74,21 @@ upstream cascades):
       {"feature": "F03", "round": 1}
       ```
       The hook reads this on subagent stop.
-   2. **Spawn generator.** `Agent(subagent_type="generator", prompt="Implement
-      feature F03 from specs/_batch/feature-list.json. This is round 1.")`.
-      Wait for return.
+   2. **Spawn generator.** Capture `git rev-parse HEAD` BEFORE spawn.
+      `Agent(subagent_type="generator", prompt="Implement feature F03 from
+      specs/_batch/feature-list.json. This is round 1.")`. Wait for return.
       - On generator error / timeout → mark feature `deferred`, break
         round loop, log to progress.tsv with note `"generator-error"`.
+   2.5. **Check HEAD advanced.** Compare `git rev-parse HEAD` against the
+        pre-spawn SHA. If unchanged (generator returned without producing
+        a new commit — typically because the pre-commit hook FAILed all
+        attempts), there is no diff for evaluator to grade. **Skip
+        evaluator entirely** and treat as FAIL on the round budget:
+        - round < 3 → continue round loop (round += 1).
+        - round == 3 → set `feature.status = "deferred"`; break.
+        Rationale: spawning evaluator on an empty diff wastes tokens for
+        a trivially FAILing verdict. Round 2 with fresh context is the
+        legitimate retry path.
    3. **Spawn evaluator.** `Agent(subagent_type="evaluator", prompt="Evaluate
       feature F03 round 1 implementation against specs/_batch/feature-list.json
       and the eval JSON contract.")`. Wait for return.
