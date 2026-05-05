@@ -136,10 +136,17 @@ file the generator might have written (in violation of doctrine).
    from one of the four categories — boundary values, concurrency,
    idempotency, orphan operations. See `evaluator-handbook/references/
    adversarial-probes.md` for category recipes. Capture each probe's output.
-6. **L5 smoke (only if `test_contract.l5_smoke_path` is non-null).** Drive
-   the path end-to-end. Tooling lives in the future `e2e-approach` skill
-   (T15) — for now, if the active stack skill provides an L5 command, run
-   it; otherwise note "L5 deferred to T15" and grade on L1+L2+probes.
+6. **L5 smoke (mandatory if `test_contract.l5_smoke_path` is non-null and
+   the active stack's `sensors.ini` has a non-empty `[test] smoke`).** Drive
+   the path end-to-end via the stack's e2e tool skill (e.g. `playwright-cli`
+   for Next.js). Read `evaluator-handbook/references/e2e-workflow.md` for
+   the methodology — what to assert, how to classify failures, where
+   evidence persists. **Never silently SKIP** — if L5 cannot run because
+   of a human-fixable env block (auth expired, service down, missing local
+   config), write a row to `specs/_batch/_escalations/F{NN}-eval-R{N}.json`
+   per `evaluator-handbook/references/escalation.md` and return without
+   verdict. Code-bug class L5 failures (selector mismatch, page crash) are
+   normal FAIL on the relevant AC.
 7. **Build the verdict.** PASS only if every AC's `passed: true`. FAIL if
    any AC fails or coverage is missing. DEFERRED only if an AC has an
    unresolved `open_question` (not "I'm not sure") that blocks evaluation

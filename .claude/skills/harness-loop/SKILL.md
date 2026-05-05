@@ -79,6 +79,24 @@ upstream cascades):
       specs/_batch/feature-list.json. This is round 1.")`. Wait for return.
       - On generator error / timeout → mark feature `deferred`, break
         round loop, log to progress.tsv with note `"generator-error"`.
+   2.4. **Check escalation (priority signal).** If
+        `specs/_batch/_escalations/F{NN}-gen-R{round}.json` exists, the
+        generator hit a human-fixable env block (auth, missing config,
+        external service). Read the file. Surface to operator via
+        `AskUserQuestion`:
+        ```
+        [<kind>] <what_blocked>
+        Action: <human_action>
+        Options: ["Done", "Skip this feature", "Abort batch"]
+        ```
+        - **Done** → delete the escalation file, RE-SPAWN generator at the
+          SAME round (round counter NOT incremented; env block is not a
+          logical FAIL). Resume from step 2.
+        - **Skip** → `feature.status = "deferred"` with note
+          `operator-skipped: <kind>`; break round loop.
+        - **Abort** → exit Phase 1 immediately.
+        Escalation overrides everything — do not check HEAD or spawn
+        evaluator while a generator escalation is unresolved.
    2.5. **Check HEAD advanced.** Compare `git rev-parse HEAD` against the
         pre-spawn SHA. If unchanged (generator returned without producing
         a new commit — typically because the pre-commit hook FAILed all
@@ -94,6 +112,13 @@ upstream cascades):
       and the eval JSON contract.")`. Wait for return.
       - On evaluator error / timeout → mark feature `deferred`, break,
         note `"evaluator-error"`.
+   3.4. **Check escalation (priority signal).** Same handler as step 2.4
+        but for the evaluator — file path is
+        `specs/_batch/_escalations/F{NN}-eval-R{round}.json`. On Done,
+        re-spawn evaluator at the same round (round counter NOT
+        incremented). Same Skip / Abort branches. Escalation overrides
+        verdict — do not read the eval JSON while an evaluator escalation
+        is unresolved.
    4. **Read verdict** from `specs/_batch/_evals/F03-R1.json` (the
       evaluator's eval JSON). Pull `verdict` field (PASS/FAIL/DEFERRED).
       AC literal coverage is part of the evaluator's grading process —

@@ -53,6 +53,8 @@ before reaching for an idiom you brought in from elsewhere.
 
    **Three-strikes stop rule.** If the same gate stage FAILs three times in a row on the same item (e.g., the same AC's `ac_coverage` three commits in a row, or the same typecheck error after three fixes), STOP retrying within this round. Accumulated session context degrades faster than incremental fixes converge — past the third strike you are usually digging deeper, not closer. Emit a brief final response naming the stuck point (which AC / which file / what you tried), then return without commit. Round 2 with fresh context is the legitimate next step; the harness-loop spawns it automatically.
 
+   **Environment escalation.** If you hit a failure that no code change can fix (missing local config, expired auth, external service down, port collision), DO NOT keep retrying. Write `specs/_batch/_escalations/F{NN}-gen-R{N}.json` per the schema in `evaluator-handbook/references/escalation.md` (same schema for gen and eval), then return without commit. The harness-loop will surface it to the operator and re-spawn you after they confirm — no round counter increment.
+
    One commit per feature per round. No stub + commit. No `.skip` / `xfail` outside a `feature.quarantined_tests[]` entry with a real reason. The evaluator independently re-verifies AC literal coverage as part of its grading — that is the GAN-pattern adversarial check.
 
 ## CRITICAL — your 3 rounds are not for re-implementation

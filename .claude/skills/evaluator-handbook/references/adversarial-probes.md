@@ -135,9 +135,12 @@ the happy-path test passed:
 
 ## What's not here
 
-- L5 / e2e probes via Playwright — those go in the future T15
-  e2e-approach skill. For now if `test_contract.l5_smoke_path` is set
-  and you can drive it via the active stack skill's tooling, run the
-  happy-path L5; defer the L5 adversarial probes to T15.
+- L5 / e2e workflow — methodology lives in
+  [`e2e-workflow.md`](e2e-workflow.md); stack-specific commands (browser
+  driver flags, screenshot syntax, selector idioms) live in the stack's
+  e2e tool skill (e.g. `playwright-cli`, `flutter-driver`). The four
+  adversarial probe categories above (boundary / concurrency /
+  idempotency / orphan) DO apply at L5 — pick one per AC's L5 path
+  and execute via the e2e tool.
 - Stack-specific probe libraries (hypothesis for Python, fast-check for
   TypeScript) — those live in stack skills.
