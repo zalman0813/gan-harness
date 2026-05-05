@@ -98,15 +98,23 @@ upstream cascades):
         Escalation overrides everything — do not check HEAD or spawn
         evaluator while a generator escalation is unresolved.
    2.5. **Check HEAD advanced.** Compare `git rev-parse HEAD` against the
-        pre-spawn SHA. If unchanged (generator returned without producing
-        a new commit — typically because the pre-commit hook FAILed all
-        attempts), there is no diff for evaluator to grade. **Skip
-        evaluator entirely** and treat as FAIL on the round budget:
-        - round < 3 → continue round loop (round += 1).
-        - round == 3 → set `feature.status = "deferred"`; break.
-        Rationale: spawning evaluator on an empty diff wastes tokens for
-        a trivially FAILing verdict. Round 2 with fresh context is the
-        legitimate retry path.
+        pre-spawn SHA. If unchanged, run
+        `git diff <base_commit>..HEAD -- <feature.module_path>` to detect
+        existing committed work in the feature's scope.
+        - **Regrade scenario** (scoped diff non-empty): the feature
+          already has committed code from a prior batch run (status was
+          reset from terminal to `todo` without rollback). Generator may
+          legitimately no-op when there is nothing to add. **Proceed to
+          step 3** — evaluator will grade the existing committed work
+          against current criteria. Common when the user re-runs
+          /execution-loop after tightening evaluator doctrine
+          (e.g. enabling L5).
+        - **Empty scope** (scoped diff empty): generator attempted but
+          couldn't commit; nothing to evaluate. **Skip evaluator** and
+          treat as FAIL on the round budget:
+          - round < 3 → continue round loop (round += 1).
+          - round == 3 → set `feature.status = "deferred"`; break.
+          Round 2 with fresh context is the legitimate retry path.
    3. **Spawn evaluator.** `Agent(subagent_type="evaluator", prompt="Evaluate
       feature F03 round 1 implementation against specs/_batch/feature-list.json
       and the eval JSON contract.")`. Wait for return.
