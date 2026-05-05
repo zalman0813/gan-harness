@@ -86,18 +86,72 @@ These are FAIL signals visible to a human reviewer. No pixel-perfect
 parity check unless the feature spec explicitly references a design
 artefact — admin / data-display features rarely do.
 
-## Evidence
+## Evidence — how to capture, where it goes, what to list
 
-Screenshots from steps 3–5 persist at:
+Per-feature, per-round evidence directory:
 
 ```
-specs/_batch/_traces/F{NN}-eval-R{N}-screenshots/<step-name>.png
+specs/_batch/_traces/F{NN}-eval-R{N}-screenshots/
 ```
 
-Not `/tmp/`, not `node_modules/.playwright/test-results/`. The
-per-feature, per-round directory means a later round's generator (or a
-future maintainer audit) can look back. List every captured path under
-the eval JSON's `evidence[]` field.
+Not `/tmp/`, not the runner's default cache (`node_modules/.playwright/test-results/`,
+`.flutter_tool/screenshots/`, Cypress's `cypress/screenshots/`, etc.).
+The per-feature dir means the next round's generator and a future
+maintainer audit can find the artefacts without hunting the runner's
+transient location.
+
+### Capture: redirect the runner's output
+
+The smoke command in `sensors.ini` is intentionally minimal — most
+runners default their output to a project-relative cache dir, not
+your evidence dir. **Wrap the smoke command** with the runner's
+output-redirect flag so artefacts land where doctrine says.
+
+For Playwright (the typical Next.js / web stack):
+
+```
+mkdir -p specs/_batch/_traces/F{NN}-eval-R{N}-screenshots
+pnpm --filter <pkg> exec playwright test \
+     --output=specs/_batch/_traces/F{NN}-eval-R{N}-screenshots \
+     {scope}
+```
+
+Equivalent flags exist for most stacks (Cypress `--config screenshotsFolder=...`,
+Flutter `--reporter=...` + integration_test config). If the runner
+has no redirect flag, do the run, then `cp -r` / `rsync` the default
+output dir into evidence-dir before listing.
+
+### What ends up in evidence-dir
+
+After a Playwright run with `--output`:
+- `trace.zip` per failing test — DOM snapshot, console, network log
+- `video.webm` per failing test (if `video: 'on-failure'` in playwright.config)
+- `*.png` for assertion-failure auto-screenshots and any explicit
+  `await page.screenshot({...})` calls in the spec
+- Per-test subdirs named after the spec + AC
+
+A clean PASS with **no explicit `page.screenshot()` in the spec**
+produces an essentially empty evidence dir. That is itself a signal —
+visual smoke grading happened via test-suite execution only, not
+per-step screen capture. Note this explicitly in the eval JSON; do
+not leave the field misleading.
+
+### List in eval JSON
+
+The eval JSON's top-level `evidence[]` field MUST be non-empty when L5
+ran:
+
+- If artefacts were captured → list every file by repo-relative path:
+  `["specs/_batch/_traces/F03-eval-R1-screenshots/trace.zip",
+    "specs/_batch/_traces/F03-eval-R1-screenshots/health-overview-AC-12-chromium/video.webm"]`
+- If the run produced no artefacts (clean PASS, no explicit screenshots
+  in spec) → emit a single-element note string:
+  `["L5 PASS via test-suite execution; no per-step screenshots captured by spec"]`
+
+**Empty `evidence[]` when L5 ran is a doctrine violation** — either
+the artefacts went somewhere (find them, list them) or the run
+produced none (note it). Silence is the failure mode that motivated
+this section.
 
 ## Domain boundary
 
