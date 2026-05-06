@@ -8,18 +8,25 @@ run the three plan-workflow check scripts:
     2. lift_capabilities.py  — duplicate ids, decision_refs resolve, ...
     3. plan_lint.py          — phase-name reject, UI feature must have l5_smoke_path
 
-If any of them exits non-zero, this hook collects every script's
-stdout / stderr into one combined error message, writes it to stderr,
-and exits 2. The planner subagent sees the error as a tool failure
-and can edit the file to fix, which re-fires the hook. On all-pass,
-the hook exits 0 silently.
+If any of them exits non-zero, this hook prints a JSON object to stdout
+with `decision: "block"` and a `reason` containing every failed
+script's stdout + stderr aggregated. The planner subagent sees that as
+a tool failure with the full reason and can edit the file to fix, which
+re-fires the hook. On all-pass, the hook exits 0 silently.
 
-All other tool calls / other file paths exit 0 silently.
+Output discipline (per docs.claude.com/en/docs/claude-code/hooks):
+- stdout: JSON ONLY. Anything else (debug print, traceback) breaks the parser.
+- exit code: ALWAYS 0. Claude Code ignores JSON when exit code != 0.
+  Failure is signalled via decision:block in the JSON, not via exit 2.
+- reason field is capped at ~10k chars by Claude Code; we cap at 9800.
+
+All other tool calls / other file paths exit 0 silently with no JSON
+(no `decision` field → no block, default behaviour).
 
 Input:  Claude Code PostToolUse JSON on stdin
         (tool_name, tool_input.file_path, cwd, ...)
-Output: stderr message listing every failed script's output, exit 2;
-        silent exit 0 otherwise.
+Output: stdout JSON `{"decision":"block","reason":"..."}` on FAIL;
+        silent exit 0 (no stdout) on PASS or no-op.
 """
 from __future__ import annotations
 
@@ -95,15 +102,15 @@ def main() -> int:
     if not failures:
         return 0
 
-    msg_lines = [
-        "⛔ feature-list.json failed plan-workflow validation.",
-        f"  ({len(failures)} of {len(CHECK_SCRIPTS)} check scripts reported FAIL)",
+    reason_lines = [
+        f"feature-list.json failed plan-workflow validation: "
+        f"{len(failures)} of {len(CHECK_SCRIPTS)} check scripts reported FAIL.",
         "Fix the issues below and re-write specs/_batch/feature-list.json.",
         "This hook re-fires on every Write / Edit / MultiEdit to that file.",
         "",
     ]
     for name, out, err in failures:
-        msg_lines.extend([
+        reason_lines.extend([
             f"━━━ {name} ━━━",
             "stdout:",
             (out or "").rstrip() or "(empty)",
@@ -111,8 +118,17 @@ def main() -> int:
             (err or "").rstrip() or "(empty)",
             "",
         ])
-    sys.stderr.write("\n".join(msg_lines))
-    return 2
+    reason = "\n".join(reason_lines)
+
+    # Claude Code caps injected hook output at 10,000 chars. Leave headroom.
+    if len(reason) > 9800:
+        reason = reason[:9800] + "\n…(truncated; full validator output exceeded 10k char cap)"
+
+    # JSON to stdout, exit 0. Per docs.claude.com/en/docs/claude-code/hooks:
+    # "Claude Code only processes JSON on exit 0. If you exit 2, any JSON is
+    # ignored." So we MUST use 0 here even on failure.
+    print(json.dumps({"decision": "block", "reason": reason}))
+    return 0
 
 
 if __name__ == "__main__":
