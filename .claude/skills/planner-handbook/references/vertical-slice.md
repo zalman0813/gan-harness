@@ -29,9 +29,9 @@ Each feature is end-to-end runnable on its own. Bugs surface within one feature,
 
 ## Layer-spanning rule
 
-Each feature's `module_path` must touch every layer the feature description implies. The active stack skill defines what "layer" means in its idioms (UI / API / service / DB for full-stack apps; single-process for libraries; etc.).
+Each feature's `spec.module_design[*].module_path` (the array of per-module entries; the previous singleton `feature.module_path` is gone) must touch every layer the feature description implies. The active stack skill defines what "layer" means in its idioms (UI / API / service / DB for full-stack apps; single-process for libraries; etc.). A vertical slice typically has one entry per layer (e.g. `app/(monitor)/page.tsx`, `app/api/foo/route.ts`, `lib/foo.ts`) — not one entry that lumps them.
 
-Concrete signal: a feature whose description involves user interaction but whose `module_path` only touches a backend directory is suspect — either the description is wrong or the feature is a horizontal slice.
+Concrete signal: a feature whose description involves user interaction but whose `module_design` entries only cover backend directories is suspect — either the description is wrong or the feature is a horizontal slice.
 
 ## Build order within a slice
 
@@ -52,9 +52,9 @@ Each step has a checkpoint where the harness can run a partial test. The active 
 L10 flags any of these patterns:
 
 - **Phase-named features** — `phase-1-database`, `migration-only`, `api-skeleton`, `db-setup`, `ui-only`. Reject.
-- **Single-layer touches** — feature has a UI-implying user_story but `module_path` only matches a backend pattern (or vice versa)
+- **Single-layer touches** — feature has a UI-implying user_story but every `module_design[*].module_path` only matches a backend pattern (or vice versa)
 - **Sequential horizontal chain** — `depends_on` describes a chain like `F01 (db) → F02 (api) → F03 (ui)` where each F covers exactly one layer
-- **Missing l5_smoke_path on UI features** — if `module_path` matches a UI pattern (per stack skill), `l5_smoke_path` MUST be non-null
+- **Missing l5_smoke_path on UI features** — if any `module_design[*].module_path` matches a UI pattern (per stack skill), `l5_smoke_path` MUST be non-null
 
 The stack skill provides the regex/glob patterns for "UI", "API", "service", "DB" in its idioms; harness core does the matching.
 
@@ -74,7 +74,7 @@ In Phase 2, for each candidate feature:
 
 1. Read the user_story
 2. Determine which layers it implies (per stack skill conventions)
-3. Verify `module_path` covers all implied layers
+3. Verify the `module_design` array's union of `module_path` entries covers all implied layers
 4. Verify the build order in the feature's spec describes a vertical sequence (mock → wire → real)
 5. Set `l5_smoke_path` if UI is implied
 6. Reject any phase-named features; rewrite as vertical decomposition

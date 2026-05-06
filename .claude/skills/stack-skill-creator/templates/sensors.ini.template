@@ -19,7 +19,8 @@
 #     every commit
 #
 # Placeholder the harness substitutes at invocation time:
-#   {scope}  pre-commit hook: changed files; gate_eval_postcommit: feature.module_path / l2_path / l5_smoke_path
+#   {scope}  pre-commit hook: changed files; gate_eval_postcommit:
+#            space-joined union of spec.module_design[*].module_path / l2_path / l5_smoke_path
 
 
 [lint]

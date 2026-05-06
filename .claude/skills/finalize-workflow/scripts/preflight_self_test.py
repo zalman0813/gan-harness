@@ -53,9 +53,19 @@ def run_schema_tests() -> list[str]:
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     base_feat = {
         "id": "F01", "name": "selftest", "status": "passed", "priority": "P1",
-        "depends_on": [], "module_path": "src",
+        "depends_on": [],
         "spec": {
             "user_story": "As a user I want to test so that quarantine works.",
+            "module_design": [{
+                "name": "src",
+                "module_path": "src",
+                "hides_decision": "Hides selftest helper internals from quarantine fixture callers",
+                "bounded_context": "selftest",
+                "public_interface": ["main()"],
+                "boundary_type": "internal",
+                "applicability": "one-shot",
+                "strategy_seam": {"present": False},
+            }],
             "ac": [{"id": "AC-01", "title": "happy path", "kind": "positive",
                     "priority": "P1", "given": "input here", "when": "submit it",
                     "then": "see Saved", "eval_anchors": ["Saved"], "must_not": []}]
@@ -126,9 +136,19 @@ def make_feature_list(slug: str, status: str, quarantine: list[dict]) -> dict:
         "base_commit": "PLACEHOLDER",
         "features": [{
             "id": "F01", "name": "selftest", "status": status, "priority": "P1",
-            "depends_on": [], "module_path": "src",
+            "depends_on": [],
             "spec": {
                 "user_story": "As a user I want quarantine so that finalize is honest.",
+                "module_design": [{
+                    "name": "src",
+                    "module_path": "src",
+                    "hides_decision": "Hides selftest helper internals from quarantine fixture callers",
+                    "bounded_context": "selftest",
+                    "public_interface": ["main()"],
+                    "boundary_type": "internal",
+                    "applicability": "one-shot",
+                    "strategy_seam": {"present": False},
+                }],
                 "ac": [{"id": "AC-01", "title": "happy path", "kind": "positive",
                         "priority": "P1", "given": "input here",
                         "when": "submit it", "then": "see Saved",

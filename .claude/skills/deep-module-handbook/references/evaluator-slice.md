@@ -13,69 +13,78 @@ independence from generator's reasoning, AC-as-contract,
 eval_anchors discipline) lives in the future `evaluator-handbook`
 skill (T8).
 
-## §1 When the evaluator consults this slice — every grading round
+## §1 When the evaluator consults this slice — every grading round, per module
 
-`spec.module_design` is a required schema field (see
-`planner-slice.md` §5 and `.claude/schemas/feature-list.schema.json`
-`$defs/module_design`). Every feature carries one. Therefore:
+`spec.module_design` is a required schema field shaped as an
+**array of per-module entries** (see `planner-slice.md` §5 and
+`.claude/schemas/feature-list.schema.json` `$defs/module_design`).
+Every feature carries one or more entries. A vertical slice
+typically has 2-4 entries (UI page + API route + shared lib);
+each entry takes its own deep-module verdict because each can
+honestly have a different `applicability` (a lib is
+business-logic; a Next.js page is framework-shaped).
 
-**The evaluator engages this slice every round, for every feature.**
+**The evaluator engages this slice every round, for every entry.**
 The previous on-demand behavior was a doctrine loophole — planners
 under-declared, evaluators didn't trigger, deep-module review never
-happened. Schema closes that loop, but deliberately by mandating
-*structural anchors*, not by enumerating per-flag booleans (see
-planner-slice §5 "Why the schema is structural, not a checklist").
+happened. Schema closes that loop with structural anchors per
+entry; the cognition lives in narrative prose (see planner-slice
+§5 "Why the schema is structural, not a checklist").
 
-What the evaluator MUST do: write a `module_design_review`
-narrative paragraph (see §7 for the eval JSON shape) plus three
-falsifiability cross-checks. The five-axis material in §2-§5 below
+What the evaluator MUST do, **once per entry**: run three
+falsifiability cross-checks and write a `design_review` narrative
+paragraph for that module. See §7 for the eval JSON shape (an
+array, mirroring the spec). The five-axis material in §2-§5 below
 is **vocabulary**, not a mandatory walk — cite an axis or red-flag
 name when it actually informs the verdict; do not enumerate all
-five for every feature.
+five for every module.
 
-### The three cross-checks
+### The three cross-checks (per entry)
 
-1. **Hides-decision falsifiability.** Read the planner's
+1. **Hides-decision falsifiability.** Read the entry's
    `hides_decision` sentence. Try to falsify it within 1 minute by
-   reading the impl: is the sentence non-trivially true? A
-   plausible-sounding but unfalsifiable sentence (e.g. "this
-   module handles user data") is a discipline failure — the planner
-   wrote ceremony, not a design claim. Emit
+   reading the impl at `module_path`: is the sentence non-trivially
+   true? A plausible-sounding but unfalsifiable sentence (e.g.
+   "this module handles user data") is a discipline failure — the
+   planner wrote ceremony, not a design claim. Emit
    `hides_decision_falsifiable_within_one_minute: true → FAIL` (the
-   sentence was bunk); `false → PASS` (the claim survives a
-   1-minute attempt to disprove).
-2. **Applicability honesty.** If `applicability` is one of the
-   opt-out rows (`dto`, `framework-shaped`, `hot-path`,
-   `one-shot`), verify the module's actual nature matches. A module
-   labelled `dto` that contains genuine business rules is a planner
-   lie. Emit `applicability_honest: false → FAIL`. Genuine DTOs and
-   true Next.js page renders pass.
+   sentence was bunk); `false → PASS` (the claim survives a 1-minute
+   attempt to disprove).
+2. **Applicability honesty.** Verify the module's actual nature
+   matches its declared `applicability`. The opt-out rows (`dto`,
+   `framework-shaped`, `hot-path`, `one-shot`) exist for genuine
+   cases; a lib labelled `dto` that contains genuine business rules
+   is a planner lie. Likewise a `framework-shaped` claim on what is
+   actually a state-machine library. Emit
+   `applicability_honest: false → FAIL`. Per entry — a feature with
+   honest framework-shaped page entries can still have a dishonest
+   lib entry.
 3. **Boundary-type honesty.** If `boundary_type: acl-needed`, an
-   ACL must exist in the impl at the named boundary. If
-   `internal`, no cross-BC translation should be necessary. Emit
-   `boundary_type_honest`.
+   ACL must exist in the impl at the named boundary. If `internal`,
+   no cross-BC translation should be necessary. Emit
+   `boundary_type_honest` per entry.
 
-### The narrative review
+### The narrative review (per entry)
 
-Write a paragraph (`design_review` in eval JSON §7) reasoning
-about depth, leak, and any red flags that fire. Cite flag names
-from foundation.md §5 (fake-deep-pass-through,
+Write a paragraph (`design_review` in each eval JSON entry, §7)
+reasoning about THIS module's depth, leak, and any red flags that
+fire. Cite flag names from foundation.md §5 (fake-deep-pass-through,
 fake-deep-decorator-stack, config-leak, exception-leak,
 temporal-coupling, wrapper-around-stdlib) only when they fired or
-came close — do not enumerate all six; that produces equally
-confident-looking evidence for flags you actually analysed and
-flags you pattern-matched on (false symmetry).
+came close in this specific module. Do not enumerate all six; that
+produces equally confident-looking evidence for flags you actually
+analysed and flags you pattern-matched on (false symmetry).
 
 ### What used to be here
 
-An earlier draft required a per-flag JSON output (`red_flags{}`
-with 6 keys, each `{planner_declared, evaluator_finds, verdict,
-evidence}`). It was rolled back — research convergence (canon,
-industry, hostile critique) judged it bureaucratic theatre.
-Boilerplate-in / boilerplate-out is the dominant failure mode for
-two LLMs reading a structured checklist. The narrative `design_review`
-puts the cognition where it actually lives: prose informed by
-named vocabulary.
+An earlier draft was a singleton object plus a per-flag JSON output
+(`red_flags{}` with 6 keys, each `{planner_declared, evaluator_finds,
+verdict, evidence}`). It was rolled back — research convergence
+(canon, industry, hostile critique) judged it bureaucratic theatre.
+A second iteration was singleton-shape per feature; that misrepresented
+vertical slices (a UI page and an HMAC lib were forced into one
+applicability and one hides_decision). The current array shape lets
+honest cognition land per module.
 
 ## §2 Five-axis review checklist
 
@@ -174,64 +183,87 @@ violated by the implementation → FAIL (the contract was decided;
 the implementation drifted). Evaluator references the original
 open_question id in the violation list.
 
-## §7 Eval JSON output — `module_design_verification` block
+## §7 Eval JSON output — `module_design_verification` array
 
 The evaluator's eval JSON (`specs/_batch/_evals/F{NN}-R{N}.json`)
-MUST include a top-level `module_design_verification` field. Empty
-or missing block is a doctrine violation in the same severity class
-as silent-skip L5 — it means you didn't engage. The block is
-deliberately small: 3 booleans + 1 narrative + 1 list. Larger
-structures (per-flag JSON, per-axis JSON) were rolled back as
-bureaucratic theatre — see §1 "What used to be here".
+MUST include a top-level `module_design_verification` field shaped
+as an **array** with one entry per `spec.module_design` entry, in
+the same order. Empty / missing array is a doctrine violation in
+the same severity class as silent-skip L5 — it means you didn't
+engage. Each entry is deliberately small: 3 booleans + 1 narrative
++ 1 list. Larger structures (per-flag JSON, per-axis JSON) were
+rolled back as bureaucratic theatre — see §1 "What used to be here".
 
 ```json
-"module_design_verification": {
-  "hides_decision_falsifiable_within_one_minute": false,
-  "applicability_honest": true,
-  "boundary_type_honest": true,
-  "design_review": "Module is genuinely deep at the panel layer: KpiStrip's public surface is { filter, onSelect } and hides DynamoDB partition layout, bucket math, and Server-Component fetch keying — confirmed by deletion test (removing this concentrates aggregation into 5 panel components, foundation.md §5.5 PASS). One concern under foundation.md §5 wrapper-around-stdlib: lib/dynamodb-client.ts wraps DynamoDBClient with a single retry policy and no other added semantics; close to firing but the retry encodes a project-specific backoff schedule (200ms / 1s / 5s) so it earns its existence. No fake-deep-pass-through, no exception-leak (errors caught at api/route.ts boundary and re-raised as DomainError with cause chain), no temporal-coupling (no init/start ordering on public surface).",
-  "drift_from_spec": []
-}
+"module_design_verification": [
+  {
+    "module_name": "lib/cursor.ts",
+    "hides_decision_falsifiable_within_one_minute": false,
+    "applicability_honest": true,
+    "boundary_type_honest": true,
+    "design_review": "Genuinely deep: signCursor / verifyCursor surface hides HMAC keying, scope-binding (s='failed' vs s='blocked'), and rotation index. Deletion test PASS — without this lib, every cursor consumer would re-derive HMAC inline. No red flag from foundation.md §5 fires.",
+    "drift_from_spec": []
+  },
+  {
+    "module_name": "GET /api/monitor/failed",
+    "hides_decision_falsifiable_within_one_minute": false,
+    "applicability_honest": true,
+    "boundary_type_honest": true,
+    "design_review": "Framework-shaped Next.js route handler, honestly labelled. Hides whether failed-row retrieval rides GSI 5 with stage filter or per-stage parallel query — confirmed: the implementation uses GSI 5 single-query, callers see a flat result. No leak of partition-key vocabulary into the response shape.",
+    "drift_from_spec": []
+  },
+  {
+    "module_name": "failed page",
+    "hides_decision_falsifiable_within_one_minute": false,
+    "applicability_honest": true,
+    "boundary_type_honest": true,
+    "design_review": "Server-component composer; framework-shaped applicability is honest. No business logic embedded; data fetching delegated to the API route, rendering delegated to <FailedTable>. Pass-through smell does not fire because the page composes 4 distinct concerns (filter parsing, fetch, table, retry-confirm modal) — earns its existence per foundation.md §5.5 deletion test.",
+    "drift_from_spec": []
+  }
+]
 ```
 
-Field meanings:
+Field meanings (per entry):
 
-- **`hides_decision_falsifiable_within_one_minute`** — boolean. The
-  §1 cross-check. `true` means you DID falsify the planner's
-  one-sentence claim within 1 minute reading the impl (the claim
-  was bunk); contributes FAIL. `false` means the sentence survived
-  the falsification attempt; contributes PASS.
-- **`applicability_honest`** — boolean. Did the module's actual
+- **`module_name`** — must match `spec.module_design[i].name`
+  exactly so /finalize aggregation across batches can group entries
+  by module identity.
+- **`hides_decision_falsifiable_within_one_minute`** — boolean.
+  The §1 cross-check for THIS module. `true` = you DID falsify the
+  planner's one-sentence claim by reading the impl (bunk claim);
+  contributes FAIL. `false` = sentence survived falsification;
+  contributes PASS.
+- **`applicability_honest`** — boolean. Did THIS module's actual
   nature match the declared `applicability` enum? `false` → FAIL.
 - **`boundary_type_honest`** — boolean. ACL exists where
-  `boundary_type: acl-needed` claimed; no cross-BC translation
-  smuggled into `internal`. `false` → FAIL.
-- **`design_review`** — narrative paragraph. Cite flag names from
-  foundation.md §5 only when relevant. Cite five-axis names from
-  §2 only when relevant. Do NOT enumerate all six flags or all
-  five axes — false symmetry. The cognition lives in the prose;
-  schema enforces only that the prose exists.
-- **`drift_from_spec`** — list of one-line strings, one per
-  declared `module_design` field that the impl violated. Empty list
-  is fine.
+  `boundary_type: acl-needed`; no cross-BC translation smuggled
+  into `internal`. `false` → FAIL.
+- **`design_review`** — narrative paragraph for THIS module. Cite
+  flag names from foundation.md §5 / five-axis names from §2 only
+  when actually relevant to this module's verdict. Do NOT
+  enumerate all six flags or five axes per entry — false symmetry.
+- **`drift_from_spec`** — list of one-line strings naming each
+  `module_design[i].*` field this module's impl violated. Empty
+  list is fine.
 
-Aggregation: any of the 3 booleans `false` (or
-`hides_decision_falsifiable_within_one_minute: true`) → feature
-verdict FAIL with rationale in `drift_from_spec[]` and explanation
-in `design_review`. All booleans clean + drift empty → this slice
-contributes PASS to feature verdict (other AC + L5 checks still
-apply independently).
+Aggregation: ANY entry with any of the 3 booleans signalling FAIL
+(or `hides_decision_falsifiable_within_one_minute: true`) →
+feature verdict FAIL with the failing entries' rationales surfaced
+in their `drift_from_spec[]` and `design_review`. All entries
+clean + all drift empty → this slice contributes PASS to feature
+verdict (other AC + L5 checks still apply independently).
 
 ### Rot detection
 
-The previous design extracted "flags considered but not fired"
-counts from per-flag JSON — that path is gone. Rot detection
-shifts to /finalize: it greps `design_review` strings across the
-batch's eval JSONs, counts how often each foundation.md §5 flag
-name appears, and flags candidates for retirement per the
-retirement criteria there. Less precise than the per-flag boolean
-approach, but the precision was illusory anyway (boilerplate
-booleans don't measure rot).
+The previous singleton design extracted "flags considered but not
+fired" counts from per-flag JSON — that path is gone. Rot
+detection shifts to /finalize: it greps `design_review` strings
+across the batch's eval JSONs (now per-module), counts how often
+each foundation.md §5 flag name appears in which `module_name`
+contexts, and flags candidates for retirement per the retirement
+criteria there. Less precise than the per-flag boolean approach,
+but the precision was illusory anyway (boilerplate booleans don't
+measure rot).
 
 ## §8 Common Rationalizations (deep-module specific)
 

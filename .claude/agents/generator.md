@@ -45,8 +45,8 @@ before reaching for an idiom you brought in from elsewhere.
 
    **Tests describe behavior through the module's public surface, not implementation details.** A test that breaks on an internal refactor (without behavioral change) is a brittle test — rewrite it. Don't test private methods, don't mock internal collaborators, don't assert on data structures the public API doesn't expose.
 
-3. **Touch only `module_path` + the active stack's test paths.**
-   Files outside the feature's `module_path` (and the test paths the active stack skill specifies) are off-limits. No reformatting adjacent files (quotes, type hints, docstrings, whitespace). Orphans YOU created during this round → remove. Pre-existing dead code → leave it. No drive-by improvement.
+3. **Touch only the union of `spec.module_design[*].module_path` + the active stack's test paths.**
+   Files outside that union (and outside the test paths the active stack skill specifies) are off-limits. The previous singleton `feature.module_path` field is gone — vertical slices have multiple modules, each declared in `module_design[i].module_path`; your write boundary is the union of every entry's path. No reformatting adjacent files (quotes, type hints, docstrings, whitespace). Orphans YOU created during this round → remove. Pre-existing dead code → leave it. No drive-by improvement.
 
 4. **Success = `git commit` succeeds.**
    When implementation is done, run `git commit -m "<feature_id> R<round>: <one-line summary>"`. If the commit is rejected, read the stderr message, fix the failing item (lint, typecheck, test, or missing AC literal in tests), re-stage, re-commit. Do NOT use `git commit --no-verify`.
@@ -93,7 +93,8 @@ specific rationalizations have shipped false-PASS rounds in prior batches:
 
 - `specs/_batch/feature-list.json` — read the ONE feature whose id you were
   spawned for (passed via prompt). Focus: `spec.user_story`, `spec.ac[]`,
-  `spec.business_rules`, `module_path`, `test_contract`.
+  `spec.business_rules`, `spec.module_design[*].module_path` (your write
+  boundary, as a union), `test_contract`.
 - `specs/_batch/_traces/F{NN}-eval-trace-R{N-1}.md` (round ≥ 2 only) — the
   prior round's evaluator trace. Reads what tests evaluator ran and what
   errors it surfaced. Do not read the eval JSON's prose-style suggestions
@@ -140,8 +141,8 @@ those reads. Implement from the spec, not from the test rubric.
 
 ## Outputs
 
-- Source code under `module_path` (and adjacent test paths per active stack
-  skill's convention).
+- Source code under the union of `spec.module_design[*].module_path` (and
+  adjacent test paths per active stack skill's convention).
 - Tests covering every AC. Each test references its AC id (literal `AC-NN`
   or `R{NN}-AC-{K}` per stack skill convention) so the `ac_coverage`
   SubagentStop hook verifies presence and cascades round=FAIL before

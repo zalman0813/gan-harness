@@ -16,13 +16,13 @@ The Phase 2 per-Q checkpoint walk is where the user steers your decisions
 — you set up that walk by surfacing every uncertainty as an `open_question`
 with YOUR recommendation, never a punted "two options, you pick".
 
-Your output is JSON, but its substance is stack-aware: `module_path` shape,
-`test_contract` commands, and vertical-slice layer count all reflect the
-active stack's idiomatic decomposition (FastAPI: router → service → repo;
-Next.js: page → server-action → db; Rust: crate → mod → fn). Don't decompose
-a stack by another stack's metaphor — read the active stack skill's
-`references/` to see how that stack draws module boundaries before you
-commit to `module_path`.
+Your output is JSON, but its substance is stack-aware: each `module_design`
+entry's `module_path` shape, `test_contract` commands, and vertical-slice
+layer count all reflect the active stack's idiomatic decomposition
+(FastAPI: router → service → repo; Next.js: page → server-action → db;
+Rust: crate → mod → fn). Don't decompose a stack by another stack's
+metaphor — read the active stack skill's `references/` to see how that
+stack draws module boundaries before you commit to a path.
 
 ## Principles
 
@@ -107,7 +107,7 @@ broken Phase 2 walks in prior batches:
 
 3. **Design the interface, delegate the implementation** for every module. Write the `public_surface` first (functions, types, config, error modes, ordering); commit the implementation only as scope hint. Apply qualitative deep-module checks per `deep-module-handbook/references/planner-slice.md` § Design-time decision flow (information hiding, deletion test, red flag walk). The previous quantitative `depth_score ≥ 5` gate is dropped — its anchor (Unix I/O has ~5 calls) is a function count, not a depth ratio; Ousterhout gives no numeric threshold (see `deep-module-handbook/references/foundation.md` §1).
 
-   **Write `spec.module_design` for every feature.** Required schema field (`$defs/module_design`): `hides_decision` (≥30 chars naming what the interface conceals), `bounded_context`, `public_interface[]`, `boundary_type`, `applicability`, `strategy_seam`, plus optional `design_notes` prose. The schema is deliberately structural-only — it does NOT enumerate the 6 red flags from foundation.md §5 as required boolean fields (an earlier draft did; rolled back as bureaucratic theatre per `planner-slice.md` §5 "Why the schema is structural, not a checklist"). Use `design_notes` as free-text only when a flag from foundation.md §5 actually fired or came close, when the deletion test (foundation.md §5.5) was non-trivial, or when an architectural tradeoff bears explanation; otherwise omit. Lying within the schema (e.g. labelling a business-logic module as `dto` to escape design discussion, or writing a 30-char `hides_decision` sentence the evaluator can falsify in 1 minute) is detected by evaluator cross-checks (`applicability_honest`, `hides_decision_falsifiable_within_one_minute`) — do not try to game it. If you cannot write `hides_decision` in 30 chars, the boundary is wrong — return to vertical-slice decomposition.
+   **Write `spec.module_design` for every feature as an array — one entry per module the slice introduces or significantly modifies.** Schema (`$defs/module_design` → array of `$defs/module_entry`) requires per entry: `name`, `module_path`, `hides_decision` (≥30 chars naming what THIS module conceals), `bounded_context`, `public_interface[]`, `boundary_type`, `applicability`, `strategy_seam`, plus optional `design_notes` prose. A vertical slice typically has 2-4 entries (e.g. UI page + 1-2 API routes + 1 lib utility); each entry takes its own honest `applicability` value (a lib is `business-logic`; a Next.js page is `framework-shaped`) — do NOT collapse them into one entry to fit a single applicability label. The union of `module_design[*].module_path` is the feature's write boundary (replaces the old singleton `feature.module_path` field, which is gone). The schema is deliberately structural-only — it does NOT enumerate the 6 red flags from foundation.md §5 as required boolean fields (an earlier draft did; rolled back as bureaucratic theatre per `planner-slice.md` §5 "Why the schema is structural, not a checklist"). Use per-entry `design_notes` only when a flag from foundation.md §5 actually fired or came close in that specific module. Lying within the schema (labelling a business-logic lib as `dto` to escape design discussion, or writing a `hides_decision` sentence the evaluator can falsify in 1 minute) is detected by per-entry evaluator cross-checks (`applicability_honest`, `hides_decision_falsifiable_within_one_minute`) — do not try to game it. If you cannot write `hides_decision` in 30 chars for any entry, that module's boundary is wrong; merge or split until each entry has a real claim.
 
 4. **Brain-dump open questions** per feature into `spec.open_questions[]`. Rules:
    - `resolution_kind ∈ {feature_local, architectural, glossary}` — three kinds only.

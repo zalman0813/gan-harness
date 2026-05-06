@@ -7,7 +7,8 @@ script when forming a verdict, and subprocess-invokes it.
 Differences from the project's git pre-commit hook:
 
     - NO autofix (no in-place mutation during evaluation)
-    - L1 scope = feature.module_path (whole module, not changed files)
+    - L1 scope = space-joined union of feature.spec.module_design[*].module_path
+                 (the previous singleton feature.module_path is gone)
     - L2 scope = feature.test_contract.l2_path (whole test dir)
     - L5 scope = feature.test_contract.l5_smoke_path (only if non-null)
     - Does NOT run ac_coverage — the evaluator process is itself the
@@ -18,7 +19,7 @@ Differences from the project's git pre-commit hook:
       gate; the evaluator independently re-verifies via its own grading.
 
 Stages:
-    L1: lint.check + typecheck over module_path
+    L1: lint.check + typecheck over union of spec.module_design[*].module_path
     L2: test.unit over l2_path
     L5: test.smoke over l5_smoke_path (only if l5_smoke_path is non-null
         AND sensors.ini test.smoke is non-empty)
@@ -85,7 +86,11 @@ def find_stack(project_dir: Path) -> Path | None:
 
 
 def feature_scope(feature_list: Path, fid: str) -> tuple[str, str, str] | None:
-    """Return (module_path, l2_path, l5_smoke_path) or None if feature not found."""
+    """Return (module_paths_joined, l2_path, l5_smoke_path) or None if feature
+    not found. module_paths_joined is the space-joined union of every
+    spec.module_design[*].module_path — the previous singleton
+    feature.module_path field is gone; vertical slices have multiple modules
+    and the L1 lint scope is the union."""
     try:
         data = json.loads(feature_list.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
@@ -93,8 +98,14 @@ def feature_scope(feature_list: Path, fid: str) -> tuple[str, str, str] | None:
     for feat in data.get("features", []):
         if feat.get("id") == fid:
             tc = feat.get("test_contract", {}) or {}
+            md_entries = feat.get("spec", {}).get("module_design", []) or []
+            paths = [
+                e.get("module_path", "")
+                for e in md_entries
+                if e.get("module_path")
+            ]
             return (
-                feat.get("module_path", "") or "",
+                " ".join(paths),
                 tc.get("l2_path", "") or "",
                 tc.get("l5_smoke_path") or "",
             )
@@ -152,21 +163,22 @@ def main() -> int:
     print(_BAR)
     print(f"gate_eval_postcommit: feature={feature} round={round_} stack={stack.name}")
     print(
-        f"  module_path={module_path}  l2={l2_path}  l5={l5_path or '<none>'}"
+        f"  module_paths={module_path}  l2={l2_path}  l5={l5_path or '<none>'}"
     )
     print(_BAR)
 
     overall = 0
 
     # --- L1 ---
+    # scope = space-joined union of spec.module_design[*].module_path
     if run_stage(
-        "L1 / lint.check (scope=module_path)",
+        "L1 / lint.check (scope=module_design paths)",
         render_sensor(read_sensor(stack, "lint", "check"), scope=module_path),
         project_dir,
     ) != 0:
         overall = 1
     if run_stage(
-        "L1 / typecheck (scope=module_path)",
+        "L1 / typecheck (scope=module_design paths)",
         render_sensor(read_sensor(stack, "typecheck", "command"), scope=module_path),
         project_dir,
     ) != 0:

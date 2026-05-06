@@ -13,10 +13,11 @@ The harness components that consume `sensors.ini`:
   → lint.check → typecheck → test.unit → AC literal coverage. AC literal
   coverage is inlined; there is no separate sensor script.
 - `.claude/skills/evaluator-handbook/scripts/gate_eval_postcommit.py` —
-  evaluator's L1+L2 wrapper (full `module_path` scope + optional L5
-  smoke). The evaluator's grading process verifies AC literal coverage
-  independently as the GAN-pattern adversarial check (per
-  `evaluator.md` Principle #4); this gate handles only L1/L2/L5.
+  evaluator's L1+L2 wrapper (L1 scope = space-joined union of
+  `spec.module_design[*].module_path`; L5 smoke optional). The evaluator's
+  grading process verifies AC literal coverage independently as the
+  adversarial check (per `evaluator.md` Principle #4); this gate handles
+  only L1/L2/L5.
 
 ## Required sections and keys
 
@@ -35,7 +36,7 @@ The harness substitutes this in any command string before execution:
 
 | Placeholder | Substituted by | Value |
 |---|---|---|
-| `{scope}` | git pre-commit hook / `gate_eval_postcommit.py` | pre-commit: changed files (`git diff --name-only`); eval: `feature.module_path` (L1), `feature.test_contract.l2_path` (L2), or `feature.test_contract.l5_smoke_path` (L5) |
+| `{scope}` | git pre-commit hook / `gate_eval_postcommit.py` | pre-commit: changed files (`git diff --name-only`); eval: space-joined union of `spec.module_design[*].module_path` (L1), `feature.test_contract.l2_path` (L2), or `feature.test_contract.l5_smoke_path` (L5) |
 
 ALWAYS quote `{scope}` in the command string if your tool is
 whitespace-sensitive (most modern lints handle multiple paths).

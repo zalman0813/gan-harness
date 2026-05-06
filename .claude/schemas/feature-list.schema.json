@@ -30,7 +30,7 @@
       "type": "object",
       "required": [
         "id", "name", "status", "priority",
-        "depends_on", "module_path", "spec", "test_contract"
+        "depends_on", "spec", "test_contract"
       ],
       "additionalProperties": false,
       "properties": {
@@ -42,7 +42,7 @@
         "name": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
-          "description": "Human-readable kebab-case slug. Last segment of module_path under the stack's case rules."
+          "description": "Human-readable kebab-case slug used in commit messages and trace filenames. e.g. 'app-shell', 'failed-records'."
         },
         "status": {
           "enum": ["todo", "passed", "deferred", "blocked-by-ancestor"],
@@ -65,11 +65,6 @@
           "uniqueItems": true,
           "default": [],
           "description": "Paths to existing ADRs (docs/adr/NNNN-*.md) this feature relies on. Reference only; new ADRs come from the planner's proposed-ADR set."
-        },
-        "module_path": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Repo-relative directory the feature owns. Generator creates files here; evaluator architectural_reflection.py verifies it exists."
         },
         "spec":          { "$ref": "#/$defs/spec" },
         "test_contract": { "$ref": "#/$defs/test_contract" },
@@ -152,15 +147,32 @@
     },
 
     "module_design": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Array of per-module design entries — one per distinct module the feature introduces or significantly modifies. A vertical slice typically contains MULTIPLE modules (UI page + API route + lib utility); each gets its own deep-module evaluation. Forcing a single object misrepresented vertical slices: a UI page (framework-shaped) and an HMAC-signing lib (business-logic) cannot share one applicability or one hides_decision honestly. The union of `module_design[*].module_path` defines the feature's write boundary (replaces the previous singleton `feature.module_path`). Evaluator runs the per-module cross-checks once per entry (see deep-module-handbook/references/evaluator-slice.md §1).",
+      "items": { "$ref": "#/$defs/module_entry" }
+    },
+
+    "module_entry": {
       "type": "object",
-      "required": ["hides_decision", "bounded_context", "public_interface", "boundary_type", "applicability", "strategy_seam"],
+      "required": ["name", "module_path", "hides_decision", "bounded_context", "public_interface", "boundary_type", "applicability", "strategy_seam"],
       "additionalProperties": false,
-      "description": "Deep-module design intent (deep-module-handbook/references/planner-slice.md §5). Required for every feature. Schema enforces presence of structural anchors that force the planner into a one-sentence act of thinking (hides_decision, applicability, boundary_type) — the parts that ARE objectively checkable. Schema does NOT enumerate red flags as boolean fields: the canonical literature (Parnas/Ousterhout/Bloch/Seemann) treats deep-module review as judgement, not a binary checklist; mandatory per-flag walks invite boilerplate compliance. Red flags from foundation.md §5 are vocabulary the planner uses in optional `design_notes` prose when a flag actually fired or came close. Evaluator's narrative `design_review` (per evaluator-slice.md §7) is where the judgement lives.",
+      "description": "One module's design intent within a vertical-slice feature. The schema enforces structural anchors that force a one-sentence act of thinking (hides_decision, applicability, boundary_type) — the parts that ARE objectively checkable. The schema does NOT enumerate red flags as boolean fields: the canonical literature (Parnas/Ousterhout/Bloch/Seemann) treats deep-module review as judgement, not a binary checklist; mandatory per-flag walks invite boilerplate compliance. Red flags from foundation.md §5 are vocabulary the planner uses in optional `design_notes` prose when a flag actually fired or came close. Evaluator's narrative `design_review` (evaluator-slice.md §7) is where judgement lives.",
       "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short label evaluator uses to refer to this module in design_review prose. Pick something greppable — a path tail (`lib/cursor.ts`), a route line (`GET /api/monitor/failed`), a component name (`<KpiStrip>`)."
+        },
+        "module_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path to this module — a single file (`orchestration_web/lib/cursor.ts`) or a directory (`orchestration_web/app/(monitor)/monitor/failed/`). Generator's write boundary is the union of every module_path across module_design; touching anything outside the union is forbidden by generator.md."
+        },
         "hides_decision": {
           "type": "string",
           "minLength": 30,
-          "description": "One sentence: the design decision this module hides from callers (planner-slice §2 Q3). minLength:30 forces a real sentence — '10 chars' (the previous floor) was filtered nothing ('no leak here' = 12 chars). If you cannot write 30+ chars naming what is hidden, the boundary is wrong; return to Q1. Evaluator's `hides_decision_falsifiable_within_one_minute` cross-check verifies the sentence is non-trivially true; lazy filler will be FAILed."
+          "description": "One sentence: the design decision this module hides from callers (planner-slice §2 Q3). minLength:30 forces a real sentence — '10 chars' (the earlier floor) filtered nothing ('no leak here' = 12 chars). If you cannot write 30+ chars naming what is hidden, the boundary is wrong; return to Q1. Evaluator's `hides_decision_falsifiable_within_one_minute` cross-check verifies the sentence is non-trivially true; lazy filler will be FAILed."
         },
         "bounded_context": {
           "type": "string",
@@ -171,7 +183,7 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
-          "description": "Public signatures only — no implementation hints. e.g. 'POST /api/monitor/retry/{id} → { ok, retry_count }', '<KpiStrip filter: TrendFilter />', 'fn parse_cursor(s: &str) -> Result<Cursor, CursorError>'."
+          "description": "THIS module's public signatures only — no implementation hints, no signatures from sibling modules. e.g. for `lib/cursor.ts`: ['signCursor(payload, scope, gsi) → token', 'verifyCursor(token, scope) → payload | throws CursorError']. Per-module list, not a feature-wide catalogue."
         },
         "boundary_type": {
           "enum": ["internal", "acl-needed", "framework-conformant"],
@@ -179,7 +191,7 @@
         },
         "applicability": {
           "enum": ["business-logic", "cross-system-integration", "dto", "framework-shaped", "hot-path", "one-shot"],
-          "description": "Per foundation.md §3. business-logic + cross-system-integration apply deep-module reasoning fully. dto / framework-shaped / hot-path / one-shot opt out — planner still writes hides_decision + interface but design_notes typically omits red-flag discussion. Evaluator's `applicability_honest` cross-check verifies the claim — labelling a business-logic module as `dto` to escape review is detected and FAILed."
+          "description": "Per foundation.md §3. business-logic + cross-system-integration apply deep-module reasoning fully. dto / framework-shaped / hot-path / one-shot opt out — module still has hides_decision + interface but red-flag discussion is typically N/A. Evaluator's `applicability_honest` cross-check verifies the claim per-module — labelling a business-logic lib as `dto` (or sweeping a complex domain calculation under `framework-shaped`) is detected and FAILed."
         },
         "strategy_seam": {
           "type": "object",
@@ -194,7 +206,7 @@
         },
         "design_notes": {
           "type": "string",
-          "description": "OPTIONAL free-text prose where the planner notes design tradeoffs and red flags from foundation.md §5 when relevant. The vocabulary (fake-deep-pass-through, fake-deep-decorator-stack, config-leak, exception-leak, temporal-coupling, wrapper-around-stdlib) is the source-of-truth for naming smells; cite a flag name only when it actually fired or came close to firing. Mandatory enumeration of all 6 flags per module is explicitly NOT required — that creates false symmetry between heterogeneous concerns and invites boilerplate. If no flag is worth noting, omit this field. Evaluator reads the prose as one input to its `design_review` narrative; it is not a contract evaluator mechanically checks."
+          "description": "OPTIONAL free-text prose where the planner notes this module's design tradeoffs and red flags from foundation.md §5 when relevant. The vocabulary (fake-deep-pass-through, fake-deep-decorator-stack, config-leak, exception-leak, temporal-coupling, wrapper-around-stdlib) is the source-of-truth for naming smells; cite a flag name only when it actually fired or came close to firing in THIS module. Mandatory enumeration of all 6 flags is explicitly NOT required. If no flag is worth noting, omit this field."
         }
       }
     },

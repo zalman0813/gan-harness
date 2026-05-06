@@ -73,15 +73,24 @@ def lint_l10a_phase_name(features: list[dict]) -> list[dict]:
 def lint_l10b_ui_smoke(features: list[dict]) -> list[dict]:
     out = []
     for f in features:
-        mp = f.get("module_path", "")
-        is_ui = any(pat.search(mp) for pat in UI_PATH_PATTERNS)
+        # singleton feature.module_path is gone (deep-module hybrid refactor);
+        # check every spec.module_design[*].module_path instead
+        module_paths = [
+            entry.get("module_path", "")
+            for entry in f.get("spec", {}).get("module_design", [])
+        ]
+        is_ui = any(
+            any(pat.search(mp) for pat in UI_PATH_PATTERNS)
+            for mp in module_paths
+        )
         if is_ui:
             l5 = f.get("test_contract", {}).get("l5_smoke_path")
             if not l5:
+                ui_hits = [mp for mp in module_paths if any(pat.search(mp) for pat in UI_PATH_PATTERNS)]
                 out.append({
                     "feature": f.get("id", "?"),
                     "rule": "L10b",
-                    "msg": f"UI-touching feature (module_path={mp}) must set test_contract.l5_smoke_path",
+                    "msg": f"UI-touching feature (module_design paths matching UI: {ui_hits}) must set test_contract.l5_smoke_path",
                 })
     return out
 

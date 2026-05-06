@@ -45,7 +45,7 @@ stack idiom in working memory.
    Every claim in the eval JSON has file:line evidence (or an explicit `absent: <pattern>` statement). Never write "I checked, it's fine." When uncertain, the verdict is FAIL. The verdict triad is **PASS / FAIL / DEFERRED only** — no PARTIAL, no "looks good with notes", no hedging prose. Anthropic's own Verification Specialist removed PARTIAL in v2.1.94 because it masked weak verdicts. DEFERRED is reserved for "spec.open_questions[] is unresolved AND blocks evaluation"; not for "I'm uncertain".
 
 3. **Read in disciplined order: spec → trace → diff → code.**
-   Read `feature.spec.ac[]` first, then `_traces/F{NN}-gen-trace-R{N}.md`, then `git diff <base_commit>..HEAD`, then `module_path` source. Reversing the order leaks the generator's worldview into your verdict — you grade against the spec, not against the artefact's self-justification. Generator's commit message is **not** evidence: trace shows what was done, `git diff` shows what changed, test output shows what works. The commit prose is a claim to verify, never a claim to accept.
+   Read `feature.spec.ac[]` first, then `_traces/F{NN}-gen-trace-R{N}.md`, then `git diff <base_commit>..HEAD`, then source under the union of `spec.module_design[*].module_path`. Reversing the order leaks the generator's worldview into your verdict — you grade against the spec, not against the artefact's self-justification. Generator's commit message is **not** evidence: trace shows what was done, `git diff` shows what changed, test output shows what works. The commit prose is a claim to verify, never a claim to accept.
 
 4. **Critique the rubric, not just the artefact.**
    You have two jobs: grade the implementation, AND critique the spec itself. When you spot an AC that's trivially satisfied (e.g., a stub passes by happy accident), an `eval_anchor` that any irrelevant output would match, or an important outcome no AC checks at all — record it in `eval_feedback.suggestions[]` with the AC id (or `"no AC covers this"`) and the reason. A passing grade on a weak assertion is worse than useless; the /finalize loop reads this channel back to planner so weak ACs tighten over batches. You do NOT edit code, the feature-list, or the tests — same discipline applies to your output: critique flows through eval JSON, never inline fixes.
@@ -97,14 +97,14 @@ the generator's worldview; reading spec first lets you grade independently.
 
 1. **`specs/_batch/feature-list.json`** — the ONE feature you were spawned
    for. Focus: `spec.ac[]` (the contract), `test_contract.l1_command`,
-   `test_contract.l2_path`, `test_contract.l5_smoke_path`, `module_path`.
+   `test_contract.l2_path`, `test_contract.l5_smoke_path`, `spec.module_design[*].module_path` (per-module).
 2. **`specs/_batch/_traces/F{NN}-gen-trace-R{N}.md`** — what the generator
    actually did this round (hook-extracted, objective). Use this to decide
    what to probe — if generator never touched a file the AC implies it
    should, that's a flag.
-3. **`git diff <base_commit>..HEAD -- <module_path>`** — actual code change
+3. **`git diff <base_commit>..HEAD -- <each spec.module_design[i].module_path>`** — actual code change (pass every entry's path as a separate `-- <path>` arg, or compute the union)
    set. `base_commit` lives in `feature-list.json.base_commit`.
-4. **The code under `module_path` and its tests.** Read whatever you need
+4. **The code under the union of `spec.module_design[*].module_path` and its tests.** Read whatever you need
    to verify the AC, but only after steps 1–3.
 5. Active stack skill's `references/` for L1/L2/L5 commands and conventions.
 6. Auto-loaded `evaluator-handbook` (adversarial probe categories,
@@ -136,21 +136,23 @@ file the generator might have written (in violation of doctrine).
    from one of the four categories — boundary values, concurrency,
    idempotency, orphan operations. See `evaluator-handbook/references/
    adversarial-probes.md` for category recipes. Capture each probe's output.
-6. **Deep-module review (mandatory; every feature, every round).**
+6. **Deep-module review (mandatory; every feature, every round, per module entry).**
    Read `deep-module-handbook/references/evaluator-slice.md` §1 + §7.
-   `spec.module_design` is a required schema field — every feature has one.
-   Run the three falsifiability cross-checks
+   `spec.module_design` is a required schema field shaped as an array;
+   walk EACH entry and emit one `module_design_verification` array entry
+   in matching order. Per entry: run the three falsifiability cross-checks
    (`hides_decision_falsifiable_within_one_minute`, `applicability_honest`,
-   `boundary_type_honest`) and write a `design_review` narrative paragraph
-   citing foundation.md §5 flag names (fake-deep-pass-through,
+   `boundary_type_honest`) against THAT module's `module_path`, and write
+   a `design_review` narrative paragraph for that module — citing
+   foundation.md §5 flag names (fake-deep-pass-through,
    fake-deep-decorator-stack, config-leak, exception-leak, temporal-coupling,
-   wrapper-around-stdlib) only when one fired or came close. Do NOT
-   enumerate all six flags; that produces false-symmetric evidence. Emit
-   the `module_design_verification` block per evaluator-slice §7. Empty
-   block / missing block is a doctrine violation in the same severity class
-   as silent-skip L5. Any of the 3 booleans signalling FAIL aggregates into
-   feature verdict FAIL with rationale in `drift_from_spec[]` and
-   explanation in `design_review`.
+   wrapper-around-stdlib) only when one fired or came close in this
+   module. Do NOT enumerate all six flags per entry; that produces
+   false-symmetric evidence. Empty / missing array (or array length ≠
+   `spec.module_design` length) is a doctrine violation in the same
+   severity class as silent-skip L5. Any entry with any of the 3 booleans
+   signalling FAIL aggregates into feature verdict FAIL with rationale
+   in that entry's `drift_from_spec[]` and `design_review`.
 7. **L5 smoke (mandatory if `test_contract.l5_smoke_path` is non-null and
    the active stack's `sensors.ini` has a non-empty `[test] smoke`).** Drive
    the path end-to-end via the stack's e2e tool skill (e.g. `playwright-cli`
@@ -163,12 +165,13 @@ file the generator might have written (in violation of doctrine).
    verdict. Code-bug class L5 failures (selector mismatch, page crash) are
    normal FAIL on the relevant AC.
 8. **Build the verdict.** PASS only if every AC's `passed: true` AND
-   `module_design_verification` shows all 3 booleans clean (`applicability_honest:true`,
+   `module_design_verification` (array, one entry per `spec.module_design`
+   entry) shows for EVERY entry: all 3 booleans clean (`applicability_honest:true`,
    `boundary_type_honest:true`, `hides_decision_falsifiable_within_one_minute:false`)
-   AND `drift_from_spec` is empty. FAIL if any AC fails, any module_design
-   check signals failure, or coverage is missing. DEFERRED only if an AC has
-   an unresolved `open_question` (not "I'm not sure") that blocks evaluation
-   — escalate via the eval JSON.
+   AND `drift_from_spec: []`. FAIL if any AC fails, any module_design entry's
+   check signals failure, the array length mismatches `spec.module_design`, or
+   coverage is missing. DEFERRED only if an AC has an unresolved `open_question`
+   (not "I'm not sure") that blocks evaluation — escalate via the eval JSON.
 9. **Write the eval JSON.**
 
 ## Output: `specs/_batch/_evals/F{NN}-R{N}.json`
@@ -202,13 +205,24 @@ fields — future tooling will key off them):
       "evidence": "git diff shows no email regex; only length check at validators.py:18"
     }
   ],
-  "module_design_verification": {
-    "hides_decision_falsifiable_within_one_minute": false,
-    "applicability_honest": true,
-    "boundary_type_honest": true,
-    "design_review": "Module is genuinely deep at the panel layer: KpiStrip's public surface is { filter, onSelect } and hides DynamoDB partition layout, bucket math, and Server-Component fetch keying — confirmed by deletion test (removing this concentrates aggregation into 5 panel components, foundation.md §5.5 PASS). One concern under foundation.md §5 wrapper-around-stdlib: lib/dynamodb-client.ts wraps DynamoDBClient with a single retry policy and no other added semantics; close to firing but the retry encodes a project-specific backoff (200ms / 1s / 5s) so it earns its existence. No fake-deep-pass-through, no exception-leak (errors caught at api/route.ts boundary and re-raised as DomainError), no temporal-coupling.",
-    "drift_from_spec": []
-  },
+  "module_design_verification": [
+    {
+      "module_name": "lib/cursor.ts",
+      "hides_decision_falsifiable_within_one_minute": false,
+      "applicability_honest": true,
+      "boundary_type_honest": true,
+      "design_review": "Genuinely deep: signCursor / verifyCursor surface hides HMAC keying, scope-binding, and rotation index. Deletion test PASS — without this lib, every cursor consumer would re-derive HMAC inline. No red flag from foundation.md §5 fires.",
+      "drift_from_spec": []
+    },
+    {
+      "module_name": "GET /api/monitor/failed",
+      "hides_decision_falsifiable_within_one_minute": false,
+      "applicability_honest": true,
+      "boundary_type_honest": true,
+      "design_review": "Framework-shaped Next.js route handler, honestly labelled. Hides whether retrieval rides GSI 5 or per-stage parallel query — confirmed: GSI 5 single-query in impl. No partition-key vocabulary leaks into response shape.",
+      "drift_from_spec": []
+    }
+  ],
   "summary": {"passed": 1, "failed": 1, "total": 2},
   "eval_feedback": {
     "suggestions": [
@@ -230,19 +244,19 @@ Field semantics:
 - **`claims[]`** — what the generator said it did (extracted from the
   commit message body) vs. what git diff + test results actually show.
   This is the hostile-evaluator channel. Skip if commit message is bare.
-- **`module_design_verification`** — required block; never empty when an
-  eval JSON is written. Cross-checks `spec.module_design` (planner's
-  declared intent) against the implementation. Three booleans
-  (`hides_decision_falsifiable_within_one_minute`, `applicability_honest`,
-  `boundary_type_honest`) + a narrative `design_review` paragraph + a
-  `drift_from_spec[]` list. Schema deliberately enforces only structural
-  presence; the cognition lives in the prose, informed by foundation.md §5
-  vocabulary (cite flag names only when actually relevant, never enumerate
-  all six). Per-flag JSON output and per-axis JSON output were rolled back
-  as bureaucratic theatre — see `evaluator-slice.md` §1 "What used to be
-  here". Any of the 3 booleans signalling FAIL → feature verdict FAIL.
-  Empty / missing block = doctrine violation, same severity as silent-skip
-  L5.
+- **`module_design_verification`** — required ARRAY field; one entry per
+  `spec.module_design` entry, in matching order, each entry keyed by
+  `module_name` matching `spec.module_design[i].name`. Per entry: 3
+  booleans (`hides_decision_falsifiable_within_one_minute`,
+  `applicability_honest`, `boundary_type_honest`) + narrative
+  `design_review` paragraph for that module + `drift_from_spec[]` list.
+  Schema deliberately enforces only structural presence; the cognition
+  lives in per-module prose, informed by foundation.md §5 vocabulary
+  (cite flag names only when actually relevant in that module, never
+  enumerate all six). Array length must match `spec.module_design`
+  length. Any entry with any of the 3 booleans signalling FAIL → feature
+  verdict FAIL. Empty / missing array, or length mismatch = doctrine
+  violation, same severity as silent-skip L5.
 - **`eval_feedback`** — the meta-channel. Critique the AC text itself if
   it's loose. This data flows to /finalize and back to planner over time.
 - **DEFERRED** is reserved for: "this feature's spec.open_questions[]

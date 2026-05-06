@@ -116,23 +116,46 @@ Apply the standard three-test gate
 (`planner-handbook/references/adr-lifecycle.md`) on top of the BC
 trigger. All four tests must pass to write an ADR.
 
-## §5 Module spec — schema field, with deliberate hybrid shape
+## §5 Module spec — array, one entry per module in the slice
 
-Every feature carries a `spec.module_design` object validated by
-`.claude/schemas/feature-list.schema.json` (`$defs/module_design`).
+Every feature carries `spec.module_design` as an **array of per-module
+entries**, validated by `.claude/schemas/feature-list.schema.json`
+(`$defs/module_design` → array of `$defs/module_entry`). A vertical
+slice typically contains multiple modules (UI page + API route + lib
+utility); each gets its own deep-module evaluation, since they
+genuinely have different applicability classes (a lib is
+business-logic; a Next.js page is framework-shaped) and lying about
+that to fit a single block is what motivated this array shape.
+
+The union of `module_design[*].module_path` is the feature's write
+boundary — the previous singleton `feature.module_path` field is
+gone. Generator's "touch only" rule reads the union (see
+generator.md principle 3).
 
 ```json
-"module_design": {
-  "hides_decision": "<sentence ≥30 chars naming what the interface conceals>",
-  "bounded_context": "<ctx-name from CONTEXT.md>",
-  "public_interface": ["<signature 1>", "<signature 2>", ...],
-  "boundary_type": "internal | acl-needed | framework-conformant",
-  "applicability": "business-logic | cross-system-integration | dto | framework-shaped | hot-path | one-shot",
-  "strategy_seam": { "present": false } |
-                   { "present": true, "interface_name": "...", "second_impl": "..." },
-  "design_notes": "<OPTIONAL prose — name red flags from foundation.md §5 only when one fired or came close>"
-}
+"module_design": [
+  {
+    "name": "<short label, e.g. 'lib/cursor.ts' or 'GET /api/monitor/failed'>",
+    "module_path": "<file or dir, e.g. 'orchestration_web/lib/cursor.ts'>",
+    "hides_decision": "<sentence ≥30 chars naming what THIS module conceals>",
+    "bounded_context": "<ctx-name from CONTEXT.md>",
+    "public_interface": ["<this module's signature 1>", "<signature 2>", ...],
+    "boundary_type": "internal | acl-needed | framework-conformant",
+    "applicability": "business-logic | cross-system-integration | dto | framework-shaped | hot-path | one-shot",
+    "strategy_seam": { "present": false }
+                   | { "present": true, "interface_name": "...", "second_impl": "..." },
+    "design_notes": "<OPTIONAL prose — name red flags from foundation.md §5 only when one fired or came close in THIS module>"
+  },
+  { "name": "...", ... }
+]
 ```
+
+Granularity rule of thumb: split into one entry whenever two modules
+would honestly take different `applicability` or different
+`hides_decision`. A page + its API route + a shared lib is typically
+3 entries. Two near-identical sibling routes that share a lib is
+typically 1 entry for the lib + 1 for the routes (collapsed when
+their interface and applicability are identical).
 
 ### Why the schema is structural, not a checklist
 
@@ -170,27 +193,35 @@ on the fields where the cognition is mechanical: a 30-char
 a structural `strategy_seam` (with named second impl). Those are
 worth schema enforcement. Per-flag judgement isn't.
 
-### Rules the planner respects
+### Rules the planner respects (per entry)
 
 - **`hides_decision` ≥ 30 chars.** Schema rejects shorter. Names a
-  *decision likely to change* — not "this module handles X."
-  Evaluator falsifies the sentence within 1 minute (cross-check in
-  evaluator-slice §1); a sentence the evaluator can falsify means
-  the boundary is wrong.
+  *decision likely to change* in THIS module — not "this module
+  handles X." Evaluator falsifies the sentence within 1 minute
+  (cross-check in evaluator-slice §1); a sentence the evaluator can
+  falsify means the boundary is wrong.
 - **Strategy seam YAGNI fence.** `present:true` requires both
   `interface_name` and `second_impl`. "In case we later need X" is
   not a valid `second_impl` — the second impl must be real or
   imminent. Planner self-verify rejects bare hypotheticals.
-- **Applicability is audited.** Labelling a module `dto` or
-  `framework-shaped` to escape design discussion is detected by
-  evaluator's `applicability_honest` cross-check (evaluator-slice
-  §1). The opt-out exists for genuine cases (true DTOs, Next.js
-  pages); abuse is FAILed.
+- **Applicability is audited per entry.** Labelling a lib `dto` or
+  a business-logic module `framework-shaped` to escape design
+  discussion is detected by evaluator's `applicability_honest`
+  cross-check (evaluator-slice §1) — checked once per entry, so you
+  cannot hide a deep lib inside a feature whose other entries are
+  legitimately framework-shaped.
+- **`public_interface[]` is per-module.** Don't catalogue the whole
+  vertical slice into one entry. If `lib/cursor.ts` and
+  `GET /api/monitor/failed` are both in the slice, they are TWO
+  entries with TWO disjoint `public_interface[]` lists.
+- **`module_path` is per-module.** A specific file or directory; the
+  union across all entries defines the generator's write boundary
+  (replaces the previous singleton `feature.module_path`).
 - **`design_notes` is genuinely optional.** Use it when a flag from
-  foundation.md §5 fired or came close, when the deletion test
-  (foundation.md §5.5) was non-trivial, or when an architectural
-  tradeoff bears explanation. If none of those apply, omit. Empty
-  prose is better than ceremonial prose.
+  foundation.md §5 fired or came close in THIS module, when the
+  deletion test (foundation.md §5.5) was non-trivial, or when an
+  architectural tradeoff bears explanation. If none of those apply,
+  omit. Empty prose is better than ceremonial prose.
 
 When a red flag DOES fire and the planner cannot avoid it without
 violating an AC, route to `open_questions[]` per §3 above — flagged

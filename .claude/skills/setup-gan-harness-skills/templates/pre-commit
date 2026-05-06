@@ -361,11 +361,14 @@ def _stage_ac_coverage(feature: dict, project_dir: Path) -> int:
         v = tc.get(key)
         if v:
             roots.append((project_dir / v).resolve())
-    mp = feature.get("module_path")
-    if mp:
-        roots.append((project_dir / mp).resolve())
+    # singleton feature.module_path is gone (deep-module hybrid refactor);
+    # walk every spec.module_design[*].module_path entry instead
+    for entry in feature.get("spec", {}).get("module_design", []) or []:
+        mp = entry.get("module_path")
+        if mp:
+            roots.append((project_dir / mp).resolve())
     if not roots:
-        print("  ✗ FAIL: feature has no l2_path / l5_smoke_path / module_path")
+        print("  ✗ FAIL: feature has no l2_path / l5_smoke_path / module_design[*].module_path")
         return 1
     test_files = _find_test_files(roots)
     if not test_files:

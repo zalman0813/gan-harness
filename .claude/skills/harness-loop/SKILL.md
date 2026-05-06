@@ -99,8 +99,11 @@ upstream cascades):
         evaluator while a generator escalation is unresolved.
    2.5. **Check HEAD advanced.** Compare `git rev-parse HEAD` against the
         pre-spawn SHA. If unchanged, run
-        `git diff <base_commit>..HEAD -- <feature.module_path>` to detect
-        existing committed work in the feature's scope.
+        `git diff <base_commit>..HEAD -- <p1> <p2> ...` where the paths are
+        every entry in `feature.spec.module_design[*].module_path` (the
+        feature's write-boundary union; the previous singleton
+        `feature.module_path` field is gone) to detect existing committed
+        work in the feature's scope.
         - **Regrade scenario** (scoped diff non-empty): the feature
           already has committed code from a prior batch run (status was
           reset from terminal to `todo` without rollback). Generator may
