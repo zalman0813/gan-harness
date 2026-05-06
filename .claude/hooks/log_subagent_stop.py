@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """log_subagent_stop.py — Claude SubagentStop hook: write audit trail.
 
-Pure logging hook (no validation). On every generator or evaluator
-subagent stop, parse the JSONL transcript and write three audit files:
+Pure logging hook (no validation). On every generator, evaluator, or
+planner subagent stop, parse the JSONL transcript and write audit files:
 
     1. specs/_batch/_traces/{F}-{prefix}-trace-R{N}.md   structured trace
+       (planner has no feature/round, so its trace lands at
+        specs/_batch/_traces/planner-{ts}.md instead — see fallback below)
     2. specs/_batch/_traces/{F}-{prefix}-usage-R{N}.json token usage / cost
+       (only for generator and evaluator — planner has no usage_json)
     3. specs/_batch/progress.tsv                          one append-only row
+       (only for generator and evaluator — planner is not part of the
+        feature execution loop, so it does not appear in progress.tsv)
 
-Other agent_types (planner, codebase-fact-finder) exit silently.
+Other agent_types (codebase-fact-finder) exit silently.
 
 Feature/round context comes from specs/_batch/_traces/current-context.json,
-written by harness-loop before spawning each subagent. If absent (manual
-spawn outside /execution-loop), the trace lands at
-specs/_batch/_traces/<agent>-<ts>.md with no progress.tsv row.
+written by harness-loop before spawning each generator/evaluator subagent.
+Planner runs once before the loop and does not write current-context.json,
+so its trace ALWAYS uses the timestamp-fallback path
+specs/_batch/_traces/planner-{ts}.md with no progress.tsv row and no
+usage_json — by design.
 
 This hook does NO validation — it just records. AC literal coverage is
 verified by:
@@ -400,7 +407,7 @@ def _render_usage_section(metrics: dict, agent_type: str) -> str:
 # main
 # ---------------------------------------------------------------------------
 
-_PREFIX = {"generator": "gen", "evaluator": "eval"}
+_PREFIX = {"generator": "gen", "evaluator": "eval", "planner": "plan"}
 
 
 def main() -> int:
