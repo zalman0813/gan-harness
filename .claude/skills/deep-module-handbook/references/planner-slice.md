@@ -116,27 +116,85 @@ Apply the standard three-test gate
 (`planner-handbook/references/adr-lifecycle.md`) on top of the BC
 trigger. All four tests must pass to write an ADR.
 
-## §5 Module spec inline format
+## §5 Module spec — schema field, with deliberate hybrid shape
 
-When writing a feature's `business_rules` for a module, use the
-inline format below (free-text inside `business_rules` — schema is
-not extended):
+Every feature carries a `spec.module_design` object validated by
+`.claude/schemas/feature-list.schema.json` (`$defs/module_design`).
 
+```json
+"module_design": {
+  "hides_decision": "<sentence ≥30 chars naming what the interface conceals>",
+  "bounded_context": "<ctx-name from CONTEXT.md>",
+  "public_interface": ["<signature 1>", "<signature 2>", ...],
+  "boundary_type": "internal | acl-needed | framework-conformant",
+  "applicability": "business-logic | cross-system-integration | dto | framework-shaped | hot-path | one-shot",
+  "strategy_seam": { "present": false } |
+                   { "present": true, "interface_name": "...", "second_impl": "..." },
+  "design_notes": "<OPTIONAL prose — name red flags from foundation.md §5 only when one fired or came close>"
+}
 ```
-**Module: <name>**
-- Hides decision: <one sentence>
-- Bounded context: <ctx-name from CONTEXT.md, or open_question if unnamed>
-- Public interface (signatures only): <list>
-- Boundary type: internal | acl-needed | framework-conformant
-- Applicability: <one of foundation.md §3 rows>
-- Strategy seam: none | <interface-name> (reason: <named second impl>)
-- Red flags considered, none fired: yes | no (if no, list which fired and reference open_question id)
-```
 
-The "red flags considered, none fired" line forces the planner to
-walk the foundation.md §5 list once per module — the equivalent of
-the evaluator's "Flags considered but not fired" log (see
-`evaluator-slice.md`).
+### Why the schema is structural, not a checklist
+
+An earlier draft of this slice required `red_flags_considered` as a
+6-key object — one boolean + rationale per flag from foundation.md
+§5. We rolled it back. Three converging research signals (canon,
+industry, internal critique) all said the same thing:
+
+- **The canon is principle-based.** Parnas 1972 polemicizes against
+  mechanical decomposition. Ousterhout's red flags are explicitly
+  "signals to investigate, not pass/fail gates." Bloch on exception
+  translation: "should not be overused." Seemann calls temporal
+  coupling a *smell* (Fowler tradition: investigative cue, not
+  defect). No primary author endorses binary scoring.
+- **Industry doesn't enforce it via schema.** Microsoft Research's
+  code-review corpus shows reviewers under structured prompts drift
+  to cheap-to-verify fields (style/format) and away from
+  architecture. Google eng-practices is principle-based. Pocock's
+  `improve-codebase-architecture` skill uses vocabulary +
+  heuristics, not required JSON keys. SonarQube has no
+  shallow-module rule because module depth is semantically
+  invisible to static analysis.
+- **The 6-flag walk would have been theatre.** Six flags with wildly
+  different mechanical-detectability (wrapper-around-stdlib is
+  greppable; fake-deep-pass-through requires a counterfactual) would
+  bake false symmetry into the artefact. Both planner and evaluator
+  are LLMs; boilerplate-in / boilerplate-out is the dominant failure
+  mode. A 10-char `minLength` filters nothing. The applicability
+  opt-out is itself a loophole that recreates on-demand triggering
+  with extra ceremony.
+
+What schema CAN do reliably is force a one-sentence act of thinking
+on the fields where the cognition is mechanical: a 30-char
+`hides_decision`, an enum `applicability`, an enum `boundary_type`,
+a structural `strategy_seam` (with named second impl). Those are
+worth schema enforcement. Per-flag judgement isn't.
+
+### Rules the planner respects
+
+- **`hides_decision` ≥ 30 chars.** Schema rejects shorter. Names a
+  *decision likely to change* — not "this module handles X."
+  Evaluator falsifies the sentence within 1 minute (cross-check in
+  evaluator-slice §1); a sentence the evaluator can falsify means
+  the boundary is wrong.
+- **Strategy seam YAGNI fence.** `present:true` requires both
+  `interface_name` and `second_impl`. "In case we later need X" is
+  not a valid `second_impl` — the second impl must be real or
+  imminent. Planner self-verify rejects bare hypotheticals.
+- **Applicability is audited.** Labelling a module `dto` or
+  `framework-shaped` to escape design discussion is detected by
+  evaluator's `applicability_honest` cross-check (evaluator-slice
+  §1). The opt-out exists for genuine cases (true DTOs, Next.js
+  pages); abuse is FAILed.
+- **`design_notes` is genuinely optional.** Use it when a flag from
+  foundation.md §5 fired or came close, when the deletion test
+  (foundation.md §5.5) was non-trivial, or when an architectural
+  tradeoff bears explanation. If none of those apply, omit. Empty
+  prose is better than ceremonial prose.
+
+When a red flag DOES fire and the planner cannot avoid it without
+violating an AC, route to `open_questions[]` per §3 above — flagged
+designs are not auto-FAIL, they are user-visible at /plan Phase 2.
 
 ## §6 Common Rationalizations (deep-module specific)
 

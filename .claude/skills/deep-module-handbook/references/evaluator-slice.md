@@ -13,15 +13,69 @@ independence from generator's reasoning, AC-as-contract,
 eval_anchors discipline) lives in the future `evaluator-handbook`
 skill (T8).
 
-## §1 When the evaluator consults this slice
+## §1 When the evaluator consults this slice — every grading round
 
-- Reviewing a module that the planner spec marked as deep
-  (per `planner-slice.md` §5 inline format)
-- Reviewing the boundary between two modules in different
-  bounded contexts (ACL inspection)
-- When the spec's `Module: <name>` block lists "red flags considered";
-  evaluator must verify the listed flags actually didn't fire in the
-  implementation
+`spec.module_design` is a required schema field (see
+`planner-slice.md` §5 and `.claude/schemas/feature-list.schema.json`
+`$defs/module_design`). Every feature carries one. Therefore:
+
+**The evaluator engages this slice every round, for every feature.**
+The previous on-demand behavior was a doctrine loophole — planners
+under-declared, evaluators didn't trigger, deep-module review never
+happened. Schema closes that loop, but deliberately by mandating
+*structural anchors*, not by enumerating per-flag booleans (see
+planner-slice §5 "Why the schema is structural, not a checklist").
+
+What the evaluator MUST do: write a `module_design_review`
+narrative paragraph (see §7 for the eval JSON shape) plus three
+falsifiability cross-checks. The five-axis material in §2-§5 below
+is **vocabulary**, not a mandatory walk — cite an axis or red-flag
+name when it actually informs the verdict; do not enumerate all
+five for every feature.
+
+### The three cross-checks
+
+1. **Hides-decision falsifiability.** Read the planner's
+   `hides_decision` sentence. Try to falsify it within 1 minute by
+   reading the impl: is the sentence non-trivially true? A
+   plausible-sounding but unfalsifiable sentence (e.g. "this
+   module handles user data") is a discipline failure — the planner
+   wrote ceremony, not a design claim. Emit
+   `hides_decision_falsifiable_within_one_minute: true → FAIL` (the
+   sentence was bunk); `false → PASS` (the claim survives a
+   1-minute attempt to disprove).
+2. **Applicability honesty.** If `applicability` is one of the
+   opt-out rows (`dto`, `framework-shaped`, `hot-path`,
+   `one-shot`), verify the module's actual nature matches. A module
+   labelled `dto` that contains genuine business rules is a planner
+   lie. Emit `applicability_honest: false → FAIL`. Genuine DTOs and
+   true Next.js page renders pass.
+3. **Boundary-type honesty.** If `boundary_type: acl-needed`, an
+   ACL must exist in the impl at the named boundary. If
+   `internal`, no cross-BC translation should be necessary. Emit
+   `boundary_type_honest`.
+
+### The narrative review
+
+Write a paragraph (`design_review` in eval JSON §7) reasoning
+about depth, leak, and any red flags that fire. Cite flag names
+from foundation.md §5 (fake-deep-pass-through,
+fake-deep-decorator-stack, config-leak, exception-leak,
+temporal-coupling, wrapper-around-stdlib) only when they fired or
+came close — do not enumerate all six; that produces equally
+confident-looking evidence for flags you actually analysed and
+flags you pattern-matched on (false symmetry).
+
+### What used to be here
+
+An earlier draft required a per-flag JSON output (`red_flags{}`
+with 6 keys, each `{planner_declared, evaluator_finds, verdict,
+evidence}`). It was rolled back — research convergence (canon,
+industry, hostile critique) judged it bureaucratic theatre.
+Boilerplate-in / boilerplate-out is the dominant failure mode for
+two LLMs reading a structured checklist. The narrative `design_review`
+puts the cognition where it actually lives: prose informed by
+named vocabulary.
 
 ## §2 Five-axis review checklist
 
@@ -120,29 +174,64 @@ violated by the implementation → FAIL (the contract was decided;
 the implementation drifted). Evaluator references the original
 open_question id in the violation list.
 
-## §7 "Flags considered but not fired" log
+## §7 Eval JSON output — `module_design_verification` block
 
-For each module reviewed, the evaluator's output includes:
+The evaluator's eval JSON (`specs/_batch/_evals/F{NN}-R{N}.json`)
+MUST include a top-level `module_design_verification` field. Empty
+or missing block is a doctrine violation in the same severity class
+as silent-skip L5 — it means you didn't engage. The block is
+deliberately small: 3 booleans + 1 narrative + 1 list. Larger
+structures (per-flag JSON, per-axis JSON) were rolled back as
+bureaucratic theatre — see §1 "What used to be here".
 
+```json
+"module_design_verification": {
+  "hides_decision_falsifiable_within_one_minute": false,
+  "applicability_honest": true,
+  "boundary_type_honest": true,
+  "design_review": "Module is genuinely deep at the panel layer: KpiStrip's public surface is { filter, onSelect } and hides DynamoDB partition layout, bucket math, and Server-Component fetch keying — confirmed by deletion test (removing this concentrates aggregation into 5 panel components, foundation.md §5.5 PASS). One concern under foundation.md §5 wrapper-around-stdlib: lib/dynamodb-client.ts wraps DynamoDBClient with a single retry policy and no other added semantics; close to firing but the retry encodes a project-specific backoff schedule (200ms / 1s / 5s) so it earns its existence. No fake-deep-pass-through, no exception-leak (errors caught at api/route.ts boundary and re-raised as DomainError with cause chain), no temporal-coupling (no init/start ordering on public surface).",
+  "drift_from_spec": []
+}
 ```
-Module: <name>
-Verdict: PASS | FAIL | DEFERRED
-Flags fired:
-  - 🚩 <flag-id> (recommendation: <one-line>)
-Flags considered but not fired:
-  - 🚩 <flag-id>
-  - 🚩 <flag-id>
-  - ...
-Compliance: matches planner spec | drift: <diff>
-```
 
-The "Flags considered but not fired" line is the rot-detection
-substrate. /finalize aggregates these per batch into a flag-fire
-log (location TBD in T9); flags that never fire across many batches
-become retirement candidates per foundation.md §5 retirement criteria.
+Field meanings:
 
-This log is not yet automated — currently human-curated. T9
-/finalize work decides whether to automate.
+- **`hides_decision_falsifiable_within_one_minute`** — boolean. The
+  §1 cross-check. `true` means you DID falsify the planner's
+  one-sentence claim within 1 minute reading the impl (the claim
+  was bunk); contributes FAIL. `false` means the sentence survived
+  the falsification attempt; contributes PASS.
+- **`applicability_honest`** — boolean. Did the module's actual
+  nature match the declared `applicability` enum? `false` → FAIL.
+- **`boundary_type_honest`** — boolean. ACL exists where
+  `boundary_type: acl-needed` claimed; no cross-BC translation
+  smuggled into `internal`. `false` → FAIL.
+- **`design_review`** — narrative paragraph. Cite flag names from
+  foundation.md §5 only when relevant. Cite five-axis names from
+  §2 only when relevant. Do NOT enumerate all six flags or all
+  five axes — false symmetry. The cognition lives in the prose;
+  schema enforces only that the prose exists.
+- **`drift_from_spec`** — list of one-line strings, one per
+  declared `module_design` field that the impl violated. Empty list
+  is fine.
+
+Aggregation: any of the 3 booleans `false` (or
+`hides_decision_falsifiable_within_one_minute: true`) → feature
+verdict FAIL with rationale in `drift_from_spec[]` and explanation
+in `design_review`. All booleans clean + drift empty → this slice
+contributes PASS to feature verdict (other AC + L5 checks still
+apply independently).
+
+### Rot detection
+
+The previous design extracted "flags considered but not fired"
+counts from per-flag JSON — that path is gone. Rot detection
+shifts to /finalize: it greps `design_review` strings across the
+batch's eval JSONs, counts how often each foundation.md §5 flag
+name appears, and flags candidates for retirement per the
+retirement criteria there. Less precise than the per-flag boolean
+approach, but the precision was illusory anyway (boilerplate
+booleans don't measure rot).
 
 ## §8 Common Rationalizations (deep-module specific)
 
