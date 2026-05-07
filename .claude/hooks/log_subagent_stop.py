@@ -224,6 +224,197 @@ def _read_evaluator_verdict(project_dir: str, feature: str, round_num: int) -> t
     return verdict, note
 
 
+# ---------------------------------------------------------------------------
+# Audit pass: cross-check evaluator's claimed verdict against transcript +
+# filesystem behavior. Source of truth is what Claude Code's runtime wrote
+# (transcript JSONL, escalation files), not what the evaluator self-narrated.
+# ---------------------------------------------------------------------------
+
+# Substrings (case-insensitive) signalling env-class L5 failure that should
+# have triggered an escalation. Conservative list: only AWS / auth-class
+# strings whose presence in any tool_result strongly implies env block.
+# Kept in one place so it's easy to extend per-stack without touching audit
+# logic itself.
+_ENV_SIGNAL_KEYWORDS = (
+    "STS expired",
+    "expired token",
+    "ExpiredToken",
+    "Unable to locate credentials",
+    "CredentialsError",
+    "InvalidClientTokenId",
+    "saml2aws",
+)
+
+
+def _scan_transcript(transcript_path: str) -> dict:
+    """Stream the JSONL once and extract the audit-relevant facts:
+
+    - env_signal: first matched env-class keyword in any tool_result content,
+      or "" if none. Searching the raw transcript catches output that
+      _parse_transcript truncated to the 150-char error_snippet.
+    - playwright_test_invoked: True iff any Bash tool_use's full `input.command`
+      contains the substring "playwright test" (case-insensitive). Reading
+      from `input.command` (full command) avoids the 150-char `summary`
+      truncation that strips trailing tokens like `... && pnpm exec
+      playwright test ...`.
+
+    One-pass scan to keep hook latency bounded.
+    """
+    env_signal = ""
+    playwright_test_invoked = False
+    env_kw_lower = [(kw, kw.lower()) for kw in _ENV_SIGNAL_KEYWORDS]
+    try:
+        with open(transcript_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                content = obj.get("message", {}).get("content", "")
+                if not isinstance(content, list):
+                    continue
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type")
+                    if btype == "tool_use" and not playwright_test_invoked:
+                        if block.get("name") == "Bash":
+                            cmd = str(block.get("input", {}).get("command", ""))
+                            if "playwright test" in cmd.lower():
+                                playwright_test_invoked = True
+                    elif btype == "tool_result" and not env_signal:
+                        raw = block.get("content", "")
+                        text = raw if isinstance(raw, str) else json.dumps(raw)
+                        text_lower = text.lower()
+                        for kw, kw_low in env_kw_lower:
+                            if kw_low in text_lower:
+                                env_signal = kw
+                                break
+                if env_signal and playwright_test_invoked:
+                    return {
+                        "env_signal": env_signal,
+                        "playwright_test_invoked": playwright_test_invoked,
+                    }
+    except OSError:
+        pass
+    return {
+        "env_signal": env_signal,
+        "playwright_test_invoked": playwright_test_invoked,
+    }
+
+
+def _load_feature_data(project_dir: Path, feature: str) -> dict | None:
+    """Read specs/_batch/feature-list.json and return the matching feature
+    dict, or None if not found / unreadable."""
+    fl_path = project_dir / "specs" / "_batch" / "feature-list.json"
+    if not fl_path.is_file():
+        return None
+    try:
+        data = json.loads(fl_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    for f in data.get("features", []):
+        if f.get("id") == feature:
+            return f
+    return None
+
+
+def _audit_evaluator_verdict(project_dir: Path, feature: str, round_num: int,
+                             steps: list, transcript_path: str) -> list:
+    """Cross-check evaluator's PASS claim against transcript + filesystem
+    facts. Returns a list of audit-discrepancy strings. Empty list = no
+    mismatch (or claim is FAIL/DEFERRED, which we leave alone).
+
+    Only PASS claims are audited. FAIL and DEFERRED are already conservative
+    — false-FAIL costs an R2 round; false-PASS costs the harness's whole
+    contract.
+    """
+    claimed_verdict, _ = _read_evaluator_verdict(str(project_dir), feature, round_num)
+    if claimed_verdict != "PASS":
+        return []
+
+    feature_data = _load_feature_data(project_dir, feature)
+    if not feature_data:
+        return []  # no spec found → cannot audit; don't fabricate findings
+
+    has_l5_path = bool(
+        feature_data.get("test_contract", {}).get("l5_smoke_path")
+    )
+
+    # One-pass transcript scan for the two behavior facts. Reads from the
+    # raw JSONL (full input.command + full tool_result content), bypassing
+    # the 150-char summary / 150-char error_snippet truncation that lives
+    # in `steps`.
+    facts = _scan_transcript(transcript_path)
+    playwright_invoked = facts["playwright_test_invoked"]
+    env_signal = facts["env_signal"]
+    _ = steps  # currently only used as a redundant fallback signal
+
+    # Filesystem fact: did evaluator write the escalation file?
+    escalation_path = (
+        project_dir / "specs" / "_batch" / "_escalations"
+        / f"{feature}-eval-R{round_num}.json"
+    )
+    has_escalation = escalation_path.is_file()
+
+    findings: list = []
+    if has_l5_path and not playwright_invoked:
+        findings.append(
+            f"PASS claimed but `playwright` Bash command never invoked in "
+            f"trace; L5 mandatory per feature.test_contract.l5_smoke_path"
+        )
+    if env_signal and not has_escalation:
+        findings.append(
+            f"trace contains env-class signal '{env_signal}' but no "
+            f"escalation file at "
+            f"{escalation_path.relative_to(project_dir)}; PASS not allowed "
+            f"when env blocks verification — write the escalation file or "
+            f"FAIL the affected ACs"
+        )
+    return findings
+
+
+def _apply_audit_to_eval_json(project_dir: Path, feature: str, round_num: int,
+                              findings: list) -> None:
+    """Mutate the eval JSON to reflect audit: downgrade verdict to FAIL,
+    record discrepancies under eval_feedback.audit_discrepancies, and prepend
+    an AUDIT marker to overall. Silent no-op on read/write failure — the
+    progress.tsv row will fall back to the original (unaudited) verdict
+    rather than crash the hook."""
+    eval_path = (
+        project_dir / "specs" / "_batch" / "_evals"
+        / f"{feature}-R{round_num}.json"
+    )
+    if not eval_path.is_file():
+        return
+    try:
+        d = json.loads(eval_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+
+    d["verdict"] = "FAIL"
+    feedback = d.setdefault("eval_feedback", {})
+    feedback["audit_discrepancies"] = list(findings)
+    plural = "y" if len(findings) == 1 else "ies"
+    audit_marker = (
+        f"AUDIT (log_subagent_stop hook): verdict downgraded PASS→FAIL — "
+        f"{len(findings)} discrepanc{plural} between claim and observed "
+        f"behavior. See eval_feedback.audit_discrepancies."
+    )
+    feedback["overall"] = (audit_marker + " " + (feedback.get("overall") or "")).strip()
+
+    try:
+        eval_path.write_text(
+            json.dumps(d, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
 def _git_head_short(project_dir: str) -> str:
     try:
         out = subprocess.run(
@@ -455,6 +646,21 @@ def main() -> int:
         _render_trace_markdown(agent_type, feature or "PENDING", round_int, trace, stats),
         encoding="utf-8",
     )
+
+    # Evaluator-only verdict audit. Runs BEFORE progress.tsv so the row
+    # captures the audited verdict (potentially downgraded). Source of truth:
+    # transcript JSONL behavior + escalation filesystem state — not the
+    # evaluator's self-narrated `verdict` field. Silent on any error so the
+    # hook never blocks a subagent stop because of audit infrastructure.
+    if agent_type == "evaluator" and feature:
+        try:
+            findings = _audit_evaluator_verdict(
+                project_dir, feature, round_int, trace["steps"], transcript
+            )
+            if findings:
+                _apply_audit_to_eval_json(project_dir, feature, round_int, findings)
+        except Exception:
+            pass
 
     if progress_tsv is not None:
         try:

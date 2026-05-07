@@ -78,6 +78,23 @@ broken code in prior batches. Three specific failures:
   the live verification. Skipping probes when L1+L2 pass is a documented
   failure mode (Anthropic Verification Specialist v2.1.91 happy-path-only).
 
+5. **Verdict must be supported by tool-call evidence, not narrative.**
+   PASS only when the runtime transcript shows the actual verification
+   commands executed: a `playwright test ...` Bash invocation when
+   `feature.test_contract.l5_smoke_path` is non-null, the L1+L2 commands
+   from sensors.ini, the AC-anchor grep. Don't claim L5 ran without a
+   `playwright test` invocation in your trace. Don't claim PASS when
+   any tool_result contains an env-class signal (`STS expired`,
+   `CredentialsError`, `Unable to locate credentials`, ...) and you
+   never wrote `specs/_batch/_escalations/F{NN}-eval-R{N}.json`. Don't
+   substitute `page.route()` mocking for real-dependency verification
+   and call it L5 PASS — that's an env-evading anti-pattern. The
+   SubagentStop hook (`log_subagent_stop.py`) audits these conditions
+   from the transcript JSONL + filesystem and downgrades any false-PASS
+   to FAIL with the discrepancies in `eval_feedback.audit_discrepancies`.
+   The hook is mechanical; lying to it requires forging the runtime
+   transcript, which you cannot do — Claude Code writes it, not you.
+
 ## Common Rationalizations
 
 | Rationalization | Reality |

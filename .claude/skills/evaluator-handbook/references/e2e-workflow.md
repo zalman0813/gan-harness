@@ -121,37 +121,60 @@ Flutter `--reporter=...` + integration_test config). If the runner
 has no redirect flag, do the run, then `cp -r` / `rsync` the default
 output dir into evidence-dir before listing.
 
-### What ends up in evidence-dir
+### What ends up in evidence-dir (real Playwright behaviour)
 
-After a Playwright run with `--output`:
-- `trace.zip` per failing test — DOM snapshot, console, network log
-- `video.webm` per failing test (if `video: 'on-failure'` in playwright.config)
-- `*.png` for assertion-failure auto-screenshots and any explicit
-  `await page.screenshot({...})` calls in the spec
-- Per-test subdirs named after the spec + AC
+After a Playwright run with `--output`, the artefacts depend on the
+project's `playwright.config.ts` AND whether tests passed. Don't
+expect anything that the config doesn't enable — the original draft
+of this doctrine listed `trace.zip` / `video.webm` / `*.png` as if
+they were defaults, but Playwright produces NONE of those by default.
 
-A clean PASS with **no explicit `page.screenshot()` in the spec**
-produces an essentially empty evidence dir. That is itself a signal —
-visual smoke grading happened via test-suite execution only, not
-per-step screen capture. Note this explicitly in the eval JSON; do
-not leave the field misleading.
+Always written:
+- `.last-run.json` — small metadata file, e.g.
+  `{"status": "passed", "failedTests": []}`. Useful as proof the run
+  happened even when nothing else lands.
+
+Per failing test (Playwright 1.5x+):
+- `error-context.md` — structured DOM snapshot + network log + console.
+  Replaces the old default of bare `*.png`. Lives in a subdir named
+  after the spec + AC.
+
+Only when the project's `playwright.config.ts` opts in:
+- `trace.zip` — only if `trace: 'on'` or `'retain-on-failure'`, OR the
+  command was run with `--trace=on`
+- `video.webm` — only if `video: 'on'` or `'retain-on-failure'`
+- `*.png` — only if `screenshot: 'on'` / `'only-on-failure'`, OR the
+  spec contains explicit `await page.screenshot({...})` calls
+
+A clean all-PASS run with default config produces just `.last-run.json`
+(no per-test subdir). That's correct, not a defect — note it in the
+eval JSON instead of pretending visual artefacts are there.
+
+If you want explicit visual smoke (a snapshot proving "this screen
+rendered without crash"), the e2e spec must call
+`await page.screenshot({path: ...})` itself; doctrine does NOT mandate
+the project's config enable any specific artefact.
 
 ### List in eval JSON
 
-The eval JSON's top-level `evidence[]` field MUST be non-empty when L5
-ran:
+The eval JSON's top-level `evidence[]` field MUST reflect what
+actually landed on disk after the L5 run:
 
-- If artefacts were captured → list every file by repo-relative path:
-  `["specs/_batch/_traces/F03-eval-R1-screenshots/trace.zip",
-    "specs/_batch/_traces/F03-eval-R1-screenshots/health-overview-AC-12-chromium/video.webm"]`
-- If the run produced no artefacts (clean PASS, no explicit screenshots
-  in spec) → emit a single-element note string:
-  `["L5 PASS via test-suite execution; no per-step screenshots captured by spec"]`
+- Artefacts captured (any of: error-context.md, trace.zip, video.webm,
+  .png) → list every file by repo-relative path:
+  `["specs/_batch/_traces/F03-eval-R1-screenshots/.last-run.json",
+    "specs/_batch/_traces/F03-eval-R1-screenshots/health-overview-AC-12-chromium/error-context.md"]`
+- Run produced ONLY `.last-run.json` (clean PASS, default config) →
+  emit a single-element note string AND list the metadata file:
+  `[".last-run.json status=passed; no per-test artefacts (default
+  playwright.config). L5 grading via test-suite exit code only."]`
+- L5 was env-blocked → write the escalation file (see escalation.md);
+  return without verdict, do NOT emit `evidence[]` claiming verification
 
-**Empty `evidence[]` when L5 ran is a doctrine violation** — either
-the artefacts went somewhere (find them, list them) or the run
-produced none (note it). Silence is the failure mode that motivated
-this section.
+**Empty `evidence[]` when L5 ran is a doctrine violation.** Either the
+artefacts exist (find them, list them) or the run produced only
+metadata (note it). Silence is the failure mode that motivated this
+section.
 
 ## Domain boundary
 
