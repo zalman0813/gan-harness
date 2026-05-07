@@ -10,8 +10,7 @@ red flags, and DDD calibration.
 **Scope reminder:** this slice covers only the deep-module-specific
 evaluator behaviors. The evaluator's general behavior (QA
 independence from generator's reasoning, AC-as-contract,
-eval_anchors discipline) lives in the future `evaluator-handbook`
-skill (T8).
+eval_anchors discipline) lives inline in `.claude/agents/evaluator.md`.
 
 ## §1 When the evaluator consults this slice — every grading round, per module
 
@@ -280,11 +279,10 @@ measure rot).
 
 - General evaluator discipline (QA independence from generator's
   reasoning; AC-as-contract; eval_anchors / test_contract handling)
-  → future `evaluator-handbook` skill (T8). For now embedded in
-  `.claude/agents/evaluator.md` body when that agent is created.
+  → inline in `.claude/agents/evaluator.md`.
 - Stack-specific test runner / lint commands → active stack skill's
   `references/`.
 - Layer 1-5 testing methodology (compile / unit / smoke etc.) →
-  evaluator-handbook + spec's `test_contract`.
+  `.claude/agents/evaluator.md` + spec's `test_contract`.
 - Generator implementation rules → `generator-slice.md`.
 - Planner ADR triggers → `planner-slice.md`.

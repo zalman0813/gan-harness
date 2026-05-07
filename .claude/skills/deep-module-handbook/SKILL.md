@@ -46,8 +46,8 @@ into your context.
 
 ## What this skill is NOT
 
-- Each agent's full handbook (those are agent handbooks: `planner-handbook`,
-  future `generator-handbook`, future `evaluator-handbook`)
+- Each agent's full operating prompt (the `.claude/agents/<agent>.md` files
+  themselves; this skill is a peer they load via frontmatter `skills:`)
 - Stack-specific module conventions (those are stack skills)
 - Workflow orchestration (this skill does not drive any slash command)
 - A lint enforcement target. Deep-module heuristics are design-time

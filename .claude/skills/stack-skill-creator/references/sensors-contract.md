@@ -5,19 +5,18 @@ Every stack skill under `.claude/skills/<stack>/` MUST provide a
 `references/`). It declares the lint/typecheck/test commands the
 harness gates invoke for this stack.
 
-The harness components that consume `sensors.ini`:
+The harness component that consumes `sensors.ini`:
 
 - The project's git pre-commit hook at `.git/hooks/pre-commit` —
   installed by setup-gan-harness-skills. Stripe-style two stages
   (<1s autofix → <5s read-only check). Internal stages cover lint.fix
   → lint.check → typecheck → test.unit → AC literal coverage. AC literal
   coverage is inlined; there is no separate sensor script.
-- `.claude/skills/evaluator-handbook/scripts/gate_eval_postcommit.py` —
-  evaluator's L1+L2 wrapper (L1 scope = space-joined union of
-  `spec.module_design[*].module_path`; L5 smoke optional). The evaluator's
-  grading process verifies AC literal coverage independently as the
-  adversarial check (per `evaluator.md` Principle #4); this gate handles
-  only L1/L2/L5.
+
+The evaluator runs the same `[lint]`, `[typecheck]`, `[test]` commands
+directly via Bash per its prompt (`evaluator.md` Process steps 2-3). It
+does not invoke a separate wrapper script — the commands are the contract
+both for the gate and for evaluator's L1/L2 verification.
 
 ## Required sections and keys
 

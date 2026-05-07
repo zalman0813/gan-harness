@@ -5,13 +5,9 @@ read this first before reading your role's slice.
 
 ## §1 Definitions
 
-All terms below are qualitative. The previous repo file
-(`planner-handbook/references/deep-module.md` before migration) used a
-quantitative `depth_score = impl_LOC / public_surface ≥ 5` heuristic
-"anchored to Unix I/O has ~5 calls". This anchor was reviewed and found
-to conflate the count of public functions with a depth ratio; Ousterhout
-gives no numeric threshold in *A Philosophy of Software Design*. The
-quantitative gate is dropped; all checks below are qualitative.
+All terms below are qualitative. Ousterhout gives no numeric threshold
+in *A Philosophy of Software Design*. There is no `depth_score`
+arithmetic gate; all checks below are qualitative.
 
 | Term | Definition | Qualitative check |
 |---|---|---|

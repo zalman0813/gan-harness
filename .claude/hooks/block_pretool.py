@@ -2,19 +2,17 @@
 """block_pretool.py — Claude PreToolUse hook: enforce adversarial separation.
 
 Each agent grades the ARTIFACT against the RUBRIC it owns. Reading the
-private prompt/handbook/output of agents on the other side of the gate
-produces "teach to the test" (generator side) or "preference leakage"
-(evaluator side). Shared skills (deep-module-handbook, planner-handbook,
-stack skills) are NOT blocked — they are project ground truth.
+private prompt of agents on the other side of the gate produces "teach to
+the test" (generator side) or "preference leakage" (evaluator side).
+Shared skills (deep-module-handbook, escalation, stack skills) are NOT
+blocked — they are project ground truth.
 
 Active agent matrix:
     codebase-fact-finder -> blindfolded from specs/_batch/prd.md and
                             specs/_batch/_research-queue.md / _research-findings
     planner              -> no denials (single-agent self-verify)
-    generator            -> forbidden from .claude/agents/evaluator.md and
-                            .claude/skills/evaluator-handbook/
-    evaluator            -> forbidden from .claude/agents/generator.md and
-                            .claude/skills/generator-handbook/
+    generator            -> forbidden from .claude/agents/evaluator.md
+    evaluator            -> forbidden from .claude/agents/generator.md
 
 Input:  Claude Code PreToolUse JSON on stdin
 Output: permissionDecision=deny JSON when blocking; silent exit 0 otherwise.
@@ -40,26 +38,24 @@ RULES: dict[str, tuple[str, str] | None] = {
     "planner": None,
     "generator": (
         r"\.claude/agents/evaluator\.md"
-        r'|\.claude/skills/evaluator-handbook(/|"|$)'
         r"|\.git/hooks/",
         "Generator is forbidden from reading evaluator-private paths "
-        "(.claude/agents/evaluator.md, .claude/skills/evaluator-handbook/) "
-        "and the project's git hooks (.git/hooks/). The pre-commit hook is "
-        "the single enforcement point and must remain opaque — fix from "
-        "commit stderr (the failing tool's own output), not by reading the "
-        "gate source. Shared skills (deep-module-handbook, planner-handbook, "
-        "stack skills) are allowed.",
+        "(.claude/agents/evaluator.md) and the project's git hooks "
+        "(.git/hooks/). The pre-commit hook is the single enforcement "
+        "point and must remain opaque — fix from commit stderr (the "
+        "failing tool's own output), not by reading the gate source. "
+        "Shared skills (deep-module-handbook, escalation, stack skills) "
+        "are allowed.",
     ),
     "evaluator": (
         r"\.claude/agents/generator\.md"
-        r'|\.claude/skills/generator-handbook(/|"|$)'
         r"|\.git/hooks/",
         "Evaluator is forbidden from reading generator-private paths "
-        "(.claude/agents/generator.md, .claude/skills/generator-handbook/) "
-        "and the project's git hooks (.git/hooks/). Grade the artefact "
-        "(feature spec + generator trace + git diff + your own probes) "
-        "independently — do not anchor on the generator's worldview or the "
-        "gate's internal logic. Shared skills are allowed.",
+        "(.claude/agents/generator.md) and the project's git hooks "
+        "(.git/hooks/). Grade the artefact (feature spec + generator "
+        "trace + git diff + your own probes) independently — do not "
+        "anchor on the generator's worldview or the gate's internal "
+        "logic. Shared skills are allowed.",
     ),
 }
 

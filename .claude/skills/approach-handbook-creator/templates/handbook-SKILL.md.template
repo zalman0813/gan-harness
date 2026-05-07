@@ -31,7 +31,7 @@ Always read `foundation.md` first — it establishes definitions, scope, applica
 
 ## What this skill is NOT
 
-- <is-not-item-1 — e.g. "Each agent's full handbook (those are agent handbooks: planner-handbook, generator-handbook, evaluator-handbook)">
+- <is-not-item-1 — e.g. "Each agent's full operating prompt (the agents' own .claude/agents/<agent>.md files)">
 - <is-not-item-2 — e.g. "Stack-specific conventions (those are stack skills)">
 - <is-not-item-3 — e.g. "Workflow orchestration (this skill does not drive any slash command)">
 - <is-not-item-4 — e.g. "A lint enforcement target (heuristics are design-time doctrine, not runtime gates)">

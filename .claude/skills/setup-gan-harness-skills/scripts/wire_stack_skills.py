@@ -11,7 +11,7 @@ Usage:
   wire_stack_skills.py --agents-dir <path> <stack-name>...
 
 Frontmatter format expected (must be present, single-line flow list):
-  skills: [planner-handbook, deep-module-handbook]
+  skills: [deep-module-handbook, adr-lifecycle]
 
 Exit:
   0 OK

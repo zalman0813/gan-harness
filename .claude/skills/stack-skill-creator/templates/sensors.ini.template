@@ -35,19 +35,20 @@ check = ruff check {scope}
 
 
 [typecheck]
-# Stage 2 of the pre-commit hook AND L1 of gate_eval_postcommit. Strict mode
-# is the project default per generator-handbook conservative-defaults;
-# loosen only with cause.
+# Stage 2 of the pre-commit hook AND L1 the evaluator runs directly via
+# Bash. Strict mode is the project default per generator's conservative-
+# defaults principle (in `evaluator.md` and `generator.md`); loosen only
+# with cause.
 command = mypy --strict {scope}
 
 
 [test]
 # Unit / component runner. {scope} = changed files (pre-commit hook)
-# or l2_path (gate_eval_postcommit).
+# or l2_path (when evaluator runs L2 directly).
 unit = pytest -x --tb=short {scope}
 
-# Optional smoke runner. gate_eval_postcommit uses this only when
+# Optional smoke runner. Evaluator invokes this when
 # feature.test_contract.l5_smoke_path is non-null. Leave EMPTY to skip
-# entirely (gate_eval_postcommit logs SKIPPED, does not error). The
+# entirely (evaluator notes the SKIPPED condition in eval JSON). The
 # pre-commit hook does NOT invoke smoke — that is post-commit only.
 smoke = pytest --no-header {scope}

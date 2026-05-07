@@ -9,7 +9,7 @@ red flags, and DDD calibration.
 **Scope reminder:** this slice covers only the deep-module-specific
 generator behaviors. The generator's general behavior (e.g.,
 conservative-default for ambiguity, surfacing open_questions when
-spec is silent) lives in the future `generator-handbook` skill (T8).
+spec is silent) lives inline in `.claude/agents/generator.md`.
 
 ## §1 When the generator consults this slice
 
@@ -106,8 +106,8 @@ silently keep or silently delete.
 
 ## §6 Common Rationalizations (deep-module specific)
 
-Supplements the generator agent's general rationalizations table and
-the `generator-handbook` skill content.
+Supplements the generator agent's general rationalizations table inline
+in `.claude/agents/generator.md`.
 
 | Rationalization | Reality |
 |---|---|
@@ -121,9 +121,7 @@ the `generator-handbook` skill content.
 
 - Generator's general ambiguity-handling discipline
   (conservative-default decision table, when to surface as
-  open_question, when to BLOCK) → future `generator-handbook` skill
-  (T8). For now embedded in `.claude/agents/generator.md` body when
-  that agent is created.
+  open_question, when to BLOCK) → inline in `.claude/agents/generator.md`.
 - Stack-specific test runner / barrel / module conventions → active
   stack skill's `references/`.
 - AC interpretation (what to implement) → spec's

@@ -112,9 +112,8 @@ go to `open_questions` instead.
 | Strategy seam adopted | No | `open_question`; the second implementation is the trade-off |
 | Deep vs shallow choice for a module | No | `open_question` if grey-zone; otherwise §3 applicability table answers it |
 
-Apply the standard three-test gate
-(`planner-handbook/references/adr-lifecycle.md`) on top of the BC
-trigger. All four tests must pass to write an ADR.
+Apply the standard three-test gate (see the `adr-lifecycle` skill) on
+top of the BC trigger. All four tests must pass to write an ADR.
 
 ## §5 Module spec — array, one entry per module in the slice
 
@@ -244,9 +243,8 @@ Supplements the planner's general rationalization table in
 ## §7 What's NOT here
 
 - General planner discipline (vertical-slice rule, three-script
-  self-verify, ADR three-test gate) → `planner-handbook/`
-- ADR file format and lifecycle →
-  `planner-handbook/references/adr-lifecycle.md`
+  self-verify, ADR three-test gate) → `.claude/agents/planner.md`
+- ADR file format and lifecycle → the `adr-lifecycle` skill
 - Ousterhout/Parnas/Evans definitions → `foundation.md`
 - Generator implementation rules → `generator-slice.md`
 - Evaluator review checklist → `evaluator-slice.md`

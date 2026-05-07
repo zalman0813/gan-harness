@@ -12,8 +12,8 @@ Out of scope here:
   * Structural shape  → plan_validator.py (JSON Schema + DAG)
   * Semantic checks   → lift_capabilities.py (refs resolve, no dupes,
                         open_question resolution required)
-  * Deep-module depth → doctrine in planner-handbook/references/deep-module.md;
-                        the planner applies it during design
+  * Deep-module depth → doctrine in the deep-module-handbook skill; the
+                        planner applies it during design
   * Docstring promise → generator + active stack skill responsibility
   * Forbidden fields  → JSON Schema's `additionalProperties: false` at
                         validator level

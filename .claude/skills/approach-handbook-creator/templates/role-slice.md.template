@@ -43,4 +43,4 @@ for evaluator: eval JSON verdict shape>
 - <explicit non-coverage 2 — e.g. "Whether the feature itself is a vertical slice — that is planner's call, raised in foundation §Applicability if it fires">
 - <explicit non-coverage 3>
 
-If a decision arises that is not in the table above and not in foundation, this slice does not bind your behaviour for that decision. Use your role's main handbook (planner-handbook / generator-handbook / evaluator-handbook) and the active stack skill instead. When in doubt, open an open_question rather than guess.
+If a decision arises that is not in the table above and not in foundation, this slice does not bind your behaviour for that decision. Use your role's main agent prompt (`.claude/agents/<role>.md`) and the active stack skill instead. When in doubt, open an open_question rather than guess.

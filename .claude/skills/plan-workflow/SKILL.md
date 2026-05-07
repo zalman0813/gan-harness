@@ -55,7 +55,7 @@ MAIN verifies `specs/_batch/prd.md` and `specs/_batch/research.md` exist and are
 
 MAIN spawns the `planner` agent (single agent, opus model). The planner reads inputs above, designs vertical-slice features with deep-module interfaces, drafts new ADRs as `docs/adr/NNNN-*.md` (status:proposed), and writes `specs/_batch/feature-list.json`.
 
-Before declaring done, the planner runs the **three-script trio** (see [planner-handbook/references/self-verify-loop.md](../planner-handbook/references/self-verify-loop.md)):
+Before declaring done, the planner runs the **three-script trio** (see `planner.md` § Self-verify loop):
 
 ```
 scripts/plan_validator.py    specs/_batch/feature-list.json
@@ -154,7 +154,7 @@ If any Escalate fired during the walk, MAIN aborts immediately — no point cont
 
 ## Where the heavy thinking lives
 
-This skill describes the orchestration. The actual design doctrine the planner agent uses is in [planner-handbook](../planner-handbook/SKILL.md), which the planner subagent auto-loads at startup via its `skills:` frontmatter. Stack-specific idioms (barrel patterns, test commands) live in the active stack skill's `references/` (see [stack-skill-creator](../stack-skill-creator/SKILL.md) to bootstrap one).
+This skill describes the orchestration. The actual design doctrine is inline in the planner agent's prompt (`.claude/agents/planner.md`). Auto-loaded peer skills via planner's `skills:` frontmatter: `deep-module-handbook` (always) and `adr-lifecycle` (on-demand when an architectural decision surfaces). Stack-specific idioms (barrel patterns, test commands) live in the active stack skill's `references/` (see [stack-skill-creator](../stack-skill-creator/SKILL.md) to bootstrap one).
 
 ## Anti-patterns
 
