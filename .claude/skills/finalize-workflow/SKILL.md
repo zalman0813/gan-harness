@@ -1,376 +1,164 @@
 ---
 name: finalize-workflow
-description: Drive Stage 4 of the gan-harness — close out a /execution-loop batch. Branches on feature.status. Archive path (all passed) promotes proposed ADRs, merges Domain terms into CONTEXT.md, regenerates CODEMAP.md, and archives specs/_batch/ → specs/completed/{slug}/. Retro path (any deferred / blocked-by-ancestor) walks each deferred feature's open_questions via AskUserQuestion, hands fixes to the planner agent, and resets affected features to status:todo so the user can re-run /execution-loop. Make sure to use this skill whenever /finalize runs, when the user asks to close a batch, or when handoff from /execution-loop needs ADR/glossary/codemap promotion.
+description: Drive Stage 3 of the gan-harness v3.8 — close out a /loop epic. Archive-only path (v3.8 removed retro path along with escalate). Verifies all sprints completed, promotes proposed ADRs to accepted (with retroactive supersedes), merges new domain terms into CONTEXT.md, regenerates CODEMAP.md, archives specs/_epic/ → specs/epics/<slug>/. Single git commit. Make sure to use this skill whenever /finalize runs, when the user asks to close an epic, or when handoff from /loop has produced a fully-completed contracts.jsonl.
+disable-model-invocation: false
 ---
 
-# Finalize Workflow
+# finalize-workflow
 
-Stage 4 of the harness. One command (`/finalize`), one workflow skill, one
-single human checkpoint, two internal branches:
+Stage 3 of v3.8. Closes out a `/loop` epic by promoting keep-alive docs
+and archiving the in-flight directory.
 
-- **Archive path** — every feature is `status: passed`. Promote proposed
-  ADRs, merge Domain terms into `CONTEXT.md`, regen `CODEMAP.md`, archive
-  the batch to `specs/completed/{slug}/`, single commit.
-- **Retro path** — any feature is `status: deferred` or
-  `status: blocked-by-ancestor`. Walk each deferred feature's
-  `open_questions` via `AskUserQuestion`, route the answers to the planner
-  agent, reset affected features to `status: todo`. The batch stays alive;
-  user manually re-runs `/execution-loop` after retro completes.
+**Single path: archive.** v3.8 removed the v1 retro path because v3.8
+removed the escalate mechanism. There is no `status: deferred` in v3.8.
+A loop either completes (all sprints `phase: completed` in
+`contracts.jsonl`) or it doesn't (operator stopped before completion);
+in the latter case, /finalize refuses to run.
 
 ## Mandatory before starting
 
 ASSUMPTIONS I'M MAKING:
-1. <e.g., "specs/_batch/feature-list.json was produced by /plan and walked through /execution-loop">
-2. <e.g., "the active stack skill is unchanged since /plan ran">
-3. ...
-→ Correct me now or I'll proceed with these.
+1. `specs/_epic/contracts.jsonl` exists and every sprint in
+   `specs/_epic/spec.md`'s sprint plan has a `phase: completed` entry.
+2. `specs/_epic/_pending/` is empty or contains only stale drafts.
+3. The user understands archiving is one-way: spec.md becomes
+   `specs/epics/<slug>/spec.md` and is no longer mutable.
 
-If `specs/_batch/feature-list.json` is missing or any feature.status is
-non-terminal (`todo`), ABORT. /execution-loop must run first.
+## Pre-flight refusal cases
 
-## Common Rationalizations
+`finalize` refuses to run when:
 
-| Rationalization | Reality |
-|---|---|
-| "User didn't choose, sane default is fine" | For load-bearing decisions (stack, layout), ask. For purely cosmetic, default may be fine but say which you picked. |
-| "This file might be needed later, I'll create a stub now" | Lazy creation. No empty stubs. Producer creates on first real content. |
-| "User's edits to the project's master docs (`README.md`, `CONTEXT.md`) look wrong" | Not your call to revise. They own per-project decisions once setup hands off. |
-| "Some features deferred — I'll archive anyway, retro can wait" | No. Archive only when every feature is `passed`. Otherwise the alive `specs/_batch/` is the truth and retro is the next move. |
-| "Retro is small, skip the planner agent and edit feature-list.json directly" | No. Planner owns feature-list.json invariants (schema + trio). Direct edits skip lint and risk drift; reuse the planner agent. |
-| "Single commit feels too coarse — split into multiple" | No. /finalize lands as one `chore(finalize): close batch <slug>` commit so the archival is atomic and reviewable. |
-| "Some terms had naming history (X used to be called Y); I'll add a `## Flagged ambiguities` section to CONTEXT.md to record it" | NO. CONTEXT.md has exactly two sections: `## Language` and `## Relationships`. Resolved naming lives in the term's `_Avoid_` line; do not duplicate into a separate section. Naming history (commit-log evidence, "we used to call this X") belongs in commit messages, ADR rationale, or code comments — not in vocabulary. The `merge_domain_terms.py` script writes only under `## Language`; do not hand-edit any other section into existence. |
+- Any sprint has `phase: agreed` but not `phase: completed` (loop
+  unfinished).
+- Any sprint has zero entries in contracts.jsonl (loop never started).
+- `specs/_epic/spec.md` doesn't exist (no epic to archive).
 
-## When to use
-
-- All features in `specs/_batch/feature-list.json` are at terminal status
-  (`passed` / `deferred` / `blocked-by-ancestor`)
-- Either: archive a clean batch, OR: walk the retro fixes for a batch
-  with deferred features
-- A previous /finalize aborted partway and needs resuming (the active
-  `specs/_batch/` indicates work to finish)
-
-## When NOT to use
-
-- Any feature still `todo` — finish /execution-loop first
-- `specs/_batch/feature-list.json` does not exist — /plan must run first
-- An archive already exists at `specs/completed/{slug}/` — /finalize is
-  idempotent-by-refusal: it will not overwrite a prior archive
+In all these cases, output a clear "/loop must complete first" message.
 
 ## Inputs
 
-- `specs/_batch/feature-list.json` — the batch contract (planner-locked)
-- `specs/_batch/prd.md` — Domain terms source for archive path
-- `specs/_batch/_evals/F{NN}-R{N}.json` — evaluator verdicts (verdict +
-  eval_feedback) consumed by `summarize_batch.py` and the retro walk
-- `specs/_batch/_traces/F{NN}-{gen|eval}-trace-R{N}.md` — per-round agent
-  traces (preserved by archive; not parsed)
-- `specs/_batch/progress.tsv` — execution log (preserved by archive; not parsed)
-- `docs/adr/*.md` — proposed ADRs awaiting promotion
-- `CONTEXT.md` (lazy — created if missing)
-- `CODEMAP.md` (lazy — created on first regen)
+- `specs/_epic/spec.md` (immutable, will be archived).
+- `specs/_epic/contracts.jsonl` (append-only, will be archived).
+- `specs/_epic/_evals/`, `_traces/`, `progress.tsv` (will be archived).
+- `docs/adr/*.md` with `status: proposed` (will be considered for
+  promotion).
+- `CONTEXT.md` (will be appended to with new domain terms).
+- `CODEMAP.md` (will be regenerated from barrel docstrings).
 
-## Outputs
-
-### Archive path
-- `docs/adr/NNNN-*.md` — `status: proposed → accepted` (in place); `index.md` regenerated
-- `CONTEXT.md` — new Domain terms appended under `## Language`
-- `CODEMAP.md` — regenerated from current barrel docstrings
-- `specs/completed/{slug}/` — full archive of the batch (everything that
-  was under `specs/_batch/` plus a generated `BATCH_SUMMARY.md`)
-- `specs/_batch/` — empty (just `.gitkeep`)
-- One git commit: `chore(finalize): close batch <slug>`
-
-### Retro path
-- `specs/_batch/feature-list.json` — affected features' `status` reset
-  from `deferred`/`blocked-by-ancestor` → `todo`; `open_questions[].resolution`
-  updated with user-approved answers
-- Possibly new/updated `docs/adr/NNNN-*.md` if the retro produces an
-  architectural answer (planner emits as `status: proposed`; promotion
-  waits for the next /finalize archive run)
-- No commit by /finalize (the next /execution-loop pass is the real
-  follow-on); user manually re-runs `/execution-loop`
-
-## Phases
+## Process
 
 ### Phase 0 — Pre-flight
 
-```
-python3 .claude/skills/finalize-workflow/scripts/preflight.py
-```
+1. Run `python .claude/skills/harness-loop/scripts/epic_status.py
+   --is-done`. Exit 0 = epic done; non-zero = refuse with message.
+2. Extract `epic_slug` from `specs/_epic/spec.md`'s H1 line.
+3. Verify `specs/epics/<epic_slug>/` does not yet exist (archive
+   collision).
 
-Outputs `SLUG`, `BASE_COMMIT`, `BRANCH=archive|retro`, plus per-status
-feature id lists. Any non-zero exit → STOP, surface diagnostic.
+### Phase 1 — Promote ADRs
 
-### Phase 1 — Branch on `BRANCH`
+For each `docs/adr/NNNN-*.md` with `status: proposed`:
+- Change `status: proposed` → `status: accepted`. Add `accepted_date:
+  <today>`.
+- If the ADR has `supersedes: [old_id]`, retroactively backfill the
+  superseded ADR's frontmatter with `superseded_by: <new_id>`.
+- Regenerate `docs/adr/index.md` from the now-accepted set.
 
-If `BRANCH=retro` → § Retro path below.
-If `BRANCH=archive` → § Archive path below.
+(The actual ADR file edits use the `adr-lifecycle` skill's helpers if
+present; otherwise direct frontmatter edits.)
 
----
+### Phase 2 — Merge domain terms into CONTEXT.md
 
-## Retro path
+Run `merge_domain_terms.py` (TODO Phase D, lives in finalize-workflow/
+scripts/):
+- Parse `specs/_epic/spec.md` for domain terms (proper nouns in
+  `## Features`, `## Cross-cutting constraints`).
+- Compare against existing `CONTEXT.md` `## Language` entries.
+- For each NEW term, append a stub entry to CONTEXT.md (lazy-create
+  CONTEXT.md if missing).
+- Idempotent: re-running on the same epic does nothing.
 
-The batch stays alive. Goal: turn each `deferred` feature's open
-questions into approved resolutions, hand the corrections to planner,
-return the affected features to `status: todo` so /execution-loop can
-re-run them.
+### Phase 3 — Regenerate CODEMAP.md
 
-### R1 — Walk each deferred feature
+Run `regen_codemap.py` (TODO Phase D, lives in finalize-workflow/
+scripts/):
+- Walk barrel files (`__init__.py`, `index.ts`, `mod.rs`, etc. per
+  active stack skill) and extract docstrings.
+- Render to `CODEMAP.md` (lazy-create if missing). Format: one section
+  per top-level module, with sub-modules nested.
 
-For every feature with `status: deferred`:
+### Phase 4 — Archive
 
-1. Read its `spec.open_questions[]` from feature-list.json. Read the
-   final-round eval JSON `specs/_batch/_evals/{fid}-R{N}.json` (max
-   round) — the `verdict_reason` / `eval_feedback.overall` fields are
-   the evaluator's signal for *why* it deferred, which you surface to
-   the user alongside each question.
-2. For each open_question, ask the user via `AskUserQuestion` (one
-   question per call):
-   - **Approve** — keep planner's existing `resolution` text
-   - **Edit** — user provides corrected resolution text; record it
-   - **Escalate** — user cannot answer; abort the entire retro back to
-     /prd for re-scope of this batch (no point grinding when scope is
-     wrong)
-3. `blocked-by-ancestor` features have no own questions — they cascade
-   automatically when their ancestor returns to `todo`. Do not walk
-   them individually.
+Run `archive_batch.sh` (TODO Phase D, lives in finalize-workflow/
+scripts/) or equivalent:
+- `mkdir -p specs/epics/<epic_slug>/`
+- `mv specs/_epic/* specs/epics/<epic_slug>/`
+- `rmdir specs/_epic/`
 
-The walk is conversation, not a gate, so it does not violate the
-"single human checkpoint per stage" invariant — same logic as /plan
-Phase 2.
+### Phase 5 — Single commit
 
-### R2 — Hand fixes to the planner agent
+```bash
+git add docs/adr/ CONTEXT.md CODEMAP.md specs/epics/<epic_slug>/
+git commit -m "epic: <epic_slug> finalized
 
-Spawn a single `planner` subagent with a scoped task. Prompt template:
-
-```
-You are amending an existing batch's feature-list.json after retro
-review. Do NOT redesign features — you are only updating
-open_question resolutions and resetting feature.status.
-
-For each (feature_id, question_id, new_resolution) below, update
-specs/_batch/feature-list.json:
-  1. Set spec.open_questions[<question_id>].resolution = <new_resolution>
-  2. Set feature.status = "todo" for the affected feature
-  3. Cascade: every feature whose status is "blocked-by-ancestor"
-     AND whose depends_on chain includes the affected feature →
-     also set status: "todo"
-
-Updates to apply:
-  <list each (fid, qid, new_resolution)>
-
-If a resolution requires a new architectural decision (i.e. the answer
-introduces an interface, boundary, or trade-off that passes the
-three-test gate), write a new docs/adr/NNNN-*.md with status:proposed
-and add its path to the affected feature's decision_refs[]. The next
-/finalize archive run promotes it.
-
-After all updates: run the three-script trio
-  scripts/plan_validator.py
-  scripts/lift_capabilities.py
-  scripts/plan_lint.py
-on specs/_batch/feature-list.json. If any FAIL, fix and retry; if 3
-rounds elapse with FAILs, STOP and report.
+- Promoted N proposed ADRs to accepted
+- Added M new domain terms to CONTEXT.md
+- Regenerated CODEMAP.md from K barrel files
+- Archived specs/_epic/ -> specs/epics/<epic_slug>/
+"
 ```
 
-Wait for the planner to return.
+### Phase 6 — Summary
 
-### R3 — Report and stop
-
-Print a retro report:
-
+Output a brief summary:
 ```
-═══════════════════════════════════════════════════════════════
-/finalize retro complete — <slug>
-═══════════════════════════════════════════════════════════════
+finalize complete.
+  Epic: <epic_slug>
+  Sprints completed: N
+  ADRs promoted: M
+  CONTEXT.md terms added: K
+  Archive: specs/epics/<epic_slug>/
 
-Resolved questions:    <N>
-Reset to todo:         <list of feature ids>
-New proposed ADRs:     <count, paths>
-Trio:                  <PASS|FAIL>
-
-Next: /execution-loop
-═══════════════════════════════════════════════════════════════
+Next: start a new epic with /init.
 ```
 
-Do NOT commit. Do NOT proceed to archive. The batch is alive again.
+## Outputs
 
----
-
-## Archive path
-
-Every feature is `status: passed`. Goal: promote, merge, regen, archive,
-commit — single atomic transaction.
-
-### A0 — Single human checkpoint
-
-One `AskUserQuestion` BEFORE any mutation, with a preview of what's
-about to change:
-
-```
-Ready to close batch "<slug>". Will perform:
-
-  - Promote N proposed ADRs (docs/adr/*) → accepted; regen index.md
-  - Merge K Domain terms from prd.md → CONTEXT.md (lazy-create if missing)
-  - Regenerate CODEMAP.md from current barrel docstrings
-  - Move specs/_batch/* → specs/completed/<slug>/ + BATCH_SUMMARY.md
-  - Single commit: chore(finalize): close batch <slug>
-
-Approve / Edit slug / Abort
-```
-
-- **Approve** → continue with steps A1–A5
-- **Edit slug** → user provides corrected slug; update
-  `feature-list.json.batch_slug` first, re-run preflight, then loop back
-  to this checkpoint with the new slug
-- **Abort** → STOP, no mutations
-
-### A1 — Promote ADRs
-
-```
-python3 .claude/skills/plan-workflow/scripts/finalize_adr.py \
-    --decisions-dir docs/adr \
-    --batch <slug>
-```
-
-The script handles three passes:
-1. Promote `status: proposed` → `accepted` (only ADRs whose
-   frontmatter `batch:` matches `<slug>`)
-2. Retroactive supersedes backfill (predecessors get `superseded_by`)
-3. Regen `docs/adr/index.md`
-
-Lazy: if `docs/adr/` is missing entirely, the script reports zero ADRs
-and writes an empty index — that's fine (first batch with no ADRs).
-
-### A2 — Merge Domain terms
-
-```
-python3 .claude/skills/finalize-workflow/scripts/merge_domain_terms.py \
-    --prd specs/_batch/prd.md \
-    --context CONTEXT.md
-```
-
-The script extracts `### Domain terms (draft)` blocks from each R
-section of `prd.md`, dedupes across R, skips terms already present in
-`CONTEXT.md` (case-insensitive bold-name match), appends new terms
-under `## Language`. Lazy-creates `CONTEXT.md` with H1 + `## Language`
-stub if missing.
-
-Stdout is JSON: `{"appended": [...], "skipped_existing": [...],
-"skipped_duplicate_in_batch": [...]}`. Capture for the final report.
-
-### A3 — Regenerate CODEMAP.md
-
-```
-python3 .claude/skills/plan-workflow/scripts/regen_codemap.py \
-    --src-root . \
-    --out CODEMAP.md
-```
-
-Walks barrel files (`index.ts`/`__init__.py`/`mod.rs`/`doc.go`/dart
-`library;`), extracts module-level docstrings, writes a flat
-`CODEMAP.md`. Lazy-creates if missing. Deterministic, no LLM.
-
-### A4 — Generate summary + archive
-
-```
-python3 .claude/skills/finalize-workflow/scripts/summarize_batch.py \
-    --out specs/_batch/BATCH_SUMMARY.md
-bash   .claude/skills/finalize-workflow/scripts/archive_batch.sh \
-    <slug>
-```
-
-`summarize_batch.py` reads feature-list.json + `_evals/F*-R*.json` and
-writes `BATCH_SUMMARY.md` into `specs/_batch/` so the archive script
-sweeps it along with everything else.
-
-`archive_batch.sh` moves `specs/_batch/*` (everything except `.gitkeep`)
-into `specs/completed/<slug>/` atomically; refuses to overwrite an
-existing archive.
-
-### A5 — Commit
-
-```
-git add -A
-git commit -m "chore(finalize): close batch <slug>
-
-- ADRs promoted: <count>
-- Domain terms appended: <count>
-- CODEMAP entries: <count>
-- Archived to specs/completed/<slug>/"
-```
-
-Refuse to land an empty commit (would mean nothing changed — that's a
-bug, not a clean finalize).
-
-### A6 — Report
-
-```
-═══════════════════════════════════════════════════════════════
-/finalize archive complete — <slug>
-═══════════════════════════════════════════════════════════════
-
-ADRs promoted:    <N>
-Domain terms:     <K> appended (<S> already present, <D> dupes in batch)
-Codemap entries:  <M>
-Archive:          specs/completed/<slug>/
-Commit:           <short sha>
-
-Next: /prd  (for the next batch)
-═══════════════════════════════════════════════════════════════
-```
-
----
+- `docs/adr/NNNN-*.md` updated with `status: accepted`.
+- `docs/adr/index.md` regenerated.
+- `CONTEXT.md` lazy-created or appended.
+- `CODEMAP.md` regenerated.
+- `specs/epics/<epic_slug>/` — final archive directory.
+- One git commit.
 
 ## Anti-patterns
 
-- **Skipping the BRANCH check.** Archive on a batch with deferred
-  features destroys the retro signal. Always trust `preflight.py`'s
-  BRANCH output.
-- **Multiple commits in archive path.** /finalize lands one commit; if
-  you find yourself splitting, you're scope-creeping the ceremony.
-- **Editing feature-list.json by hand in retro.** The planner agent owns
-  its invariants (schema + trio). Hand-edits skip validation.
-- **Pre-creating `CONTEXT.md` / `CODEMAP.md` / `docs/adr/index.md` stubs
-  before they have content.** Lazy creation per locked decision; an
-  empty stub is a lie.
-- **Re-running /finalize against an archived batch.** The active
-  `specs/_batch/` will be empty, preflight aborts; do not "fix" preflight
-  to swallow this case.
-- **Recreating `gen-dreamer` / `eval-dreamer` / `doc-garden` /
-  `tech-debt-tracker.md`.** Explicitly removed; the zero-debt
-  invariant means every concern resolves upstream — at /plan or
-  /finalize retro — not into a debt log. (Future post-batch
-  proposal agents land via T17 design, not by resurrecting the old
-  shape.)
-- **Committing in the retro path.** Retro is mid-batch. The next
-  /execution-loop pass is the real continuation; no commit until
-  archive.
-- **Inflating CONTEXT.md beyond `## Language` + `## Relationships`.**
-  No `## Flagged ambiguities`, no `## Example dialogue` recreated by
-  agents, no `## Naming history`. Resolved naming lives in each term's
-  `_Avoid_` line; process anti-patterns live in the relevant agent's
-  handbook; implementation history lives in commit messages and ADR
-  rationale. CONTEXT.md is pure current-canonical vocabulary —
-  duplication and historical commentary make it harder to scan as it
-  grows.
+**Running /finalize on an unfinished /loop.** /finalize refuses; this is
+the right behaviour. The escape valve is the operator: stop the run,
+diagnose, restart /loop or abandon. There is no half-finish.
 
-## Done when
+**Forcing archive when epic_status.py says not done.** Don't override.
+The status reflects the contracts.jsonl state. If contracts.jsonl is
+wrong, fix it; if status is wrong (read bug), fix the script.
 
-### Archive path
-- [ ] Preflight passed and `BRANCH=archive`
-- [ ] User approved at A0 checkpoint
-- [ ] All proposed ADRs for this batch promoted; index.md regenerated
-- [ ] New Domain terms merged into `CONTEXT.md` (or none to merge)
-- [ ] `CODEMAP.md` regenerated
-- [ ] `specs/_batch/` empty; `specs/completed/<slug>/` populated
-- [ ] Single `chore(finalize):` commit landed
-- [ ] Report printed; `/prd` suggested
+**Editing accepted ADRs.** Accepted ADR bodies are immutable. To revise,
+write a new ADR with `supersedes: [old_id]`; /finalize backfills
+`superseded_by` on the predecessor.
 
-### Retro path
-- [ ] Preflight passed and `BRANCH=retro`
-- [ ] Every `deferred` feature's `open_questions` walked
-- [ ] Planner agent applied the user-approved resolutions and ran the
-      three-script trio (PASS)
-- [ ] Affected features reset to `status: todo`; cascade applied
-- [ ] No commit; report printed; `/execution-loop` suggested
+**Skipping CONTEXT.md merge.** Domain terms accumulate per epic. If you
+skip the merge, future epics' planner won't know existing vocabulary,
+and CONTEXT.md drifts from the actual domain language.
+
+**Multi-commit.** One commit for the entire finalize. Bisects are
+easier; the commit message lists everything that happened.
+
+## Scripts
+
+(Phase D will fill these in. Currently placeholders.)
+
+- `scripts/finalize_adr.py` — promote proposed → accepted, supersedes
+  backfill, index regen.
+- `scripts/merge_domain_terms.py` — extract terms, append to CONTEXT.md.
+- `scripts/regen_codemap.py` — barrel docstring → CODEMAP.md.
+- `scripts/archive_batch.sh` — mv specs/_epic/ → specs/epics/<slug>/.
+- `scripts/summarize_batch.py` — final summary.

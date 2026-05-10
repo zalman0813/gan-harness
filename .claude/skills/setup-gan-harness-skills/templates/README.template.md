@@ -5,26 +5,31 @@
 ## Built with gan-harness
 
 This project uses [gan-harness](https://github.com/anthropics/gan-harness)
-for AI-driven feature development. Four stages, locked artefact contract,
-human-as-negotiator at every decision boundary.
+for AI-driven feature development. Three stages, immutable spec, per-sprint
+contract negotiation between generator and evaluator, human-out-of-the-loop.
 
 ```
-/prd            → specs/_batch/prd.md + research.md
+/init     → specs/_epic/spec.md (immutable: vision + features + sprint plan + 4 criteria)
    ↓
-/plan           → specs/_batch/feature-list.json + docs/adr/*.md (proposed)
+/loop     → per sprint: negotiate contract → implement → evaluate
+            generator ↔ evaluator GAN loop until evaluator approves
+            (no max-round cap; operator monitors cost externally)
+            Outputs: specs/_epic/contracts.jsonl (append-only) + _evals/ + _traces/
    ↓
-/execution-loop → generator ↔ evaluator pairs, max 3 rounds per feature
-   ↓
-/finalize       → promote ADRs, merge Domain terms, regen codemap, archive
+/finalize → promote ADRs, merge Domain terms, regen codemap,
+            archive specs/_epic/ → specs/epics/<slug>/
 ```
 
 ## Where to start
 
-Run `/prd` to begin your first batch.
+Run `/init` to begin your first epic. The planner agent will grill you for
+intent, tech stack, scope boundaries, success criteria, and target archetype
+(frontend / backend / library / cli / data-pipeline / hybrid). Skip the grill
+with `--no-grill` if you've already written a complete intent.
 
 ## Project conventions
 
-See `CONTEXT.md` for domain language (created lazily after the first
-batch). See `docs/adr/` for accepted architectural decisions (also
-lazy). See `CODEMAP.md` for module navigation (regenerated each
-finalize).
+- `CONTEXT.md` — domain ubiquitous language (created lazily after the first epic).
+- `docs/adr/` — accepted architectural decisions (also lazy).
+- `CODEMAP.md` — module navigation (regenerated at each /finalize).
+- `specs/epics/<slug>/` — archived epics for historical reference.

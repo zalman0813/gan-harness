@@ -1,0 +1,55 @@
+{
+  "skill_name": "setup-gan-harness-skills",
+  "evals": [
+    {
+      "id": 1,
+      "name": "greenfield-cli",
+      "prompt": "I want to scaffold a new Python CLI project called 'kvstore' that will be a small kv-store inspector for local JSON config files. I'm starting from an empty directory. Use the gan-harness substrate at /Users/eason/person_project/gan-harness/ as the source. Walk me through setup.",
+      "expected_output": "Target directory has .claude/ tree (without setup-gan-harness-skills/), CLAUDE.md or AGENTS.md with ### Domain docs block, README.md from template referencing /init, specs/_epic/.gitkeep, specs/epics/.gitkeep. Stack skill for python (or python-stdlib) wired into .claude/agents/{planner,generator,evaluator}.md frontmatter skills: lists.",
+      "files": [],
+      "target_seed": {
+        "type": "empty_dir",
+        "git_initialized": true,
+        "files_pre_seeded": []
+      }
+    },
+    {
+      "id": 2,
+      "name": "brownfield-fastapi",
+      "prompt": "I have an existing FastAPI app at this path. I want to add gan-harness so I can use /init /loop /finalize to develop new features. The app is python-fastapi stack with pytest. Use /Users/eason/person_project/gan-harness/ as source.",
+      "expected_output": "Target directory gains .claude/ tree, CLAUDE.md ### Domain docs block injected (existing CLAUDE.md preserved otherwise), python-fastapi stack skill copied or scaffolded, agent frontmatter wired. specs/_epic/.gitkeep + specs/epics/.gitkeep created. Existing app source untouched.",
+      "files": [],
+      "target_seed": {
+        "type": "preseeded_dir",
+        "git_initialized": true,
+        "files_pre_seeded": [
+          "app/main.py",
+          "app/routes/__init__.py",
+          "tests/test_main.py",
+          "pyproject.toml",
+          "README.md",
+          "CLAUDE.md"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "name": "v1-to-v3.8-migration",
+      "prompt": "I have an existing project that was set up with v1 gan-harness (has specs/_batch/ and references to /prd, /plan in CLAUDE.md). I want to migrate it to v3.8. The current epic in _batch is fully archived already. Walk me through the migration.",
+      "expected_output": "specs/_batch/ renamed to specs/_epic/. specs/completed/ renamed to specs/epics/. CLAUDE.md ### Domain docs block updated (or v1 references removed if they exist outside the block). v1 commands (.claude/commands/{prd,plan,execution-loop}.md) deleted; v3.8 commands (init.md, loop.md, finalize.md) present. Old skills (prd-workflow, plan-workflow, escalation) removed; new skills (init-workflow, planner-handbook, etc.) present.",
+      "files": [],
+      "target_seed": {
+        "type": "v1_setup",
+        "git_initialized": true,
+        "files_pre_seeded": [
+          ".claude/agents/planner.md (v1)",
+          ".claude/commands/prd.md (v1)",
+          ".claude/commands/plan.md (v1)",
+          "specs/_batch/.gitkeep",
+          "specs/completed/.gitkeep",
+          "CLAUDE.md (with v1 ### Domain docs)"
+        ]
+      }
+    }
+  ]
+}

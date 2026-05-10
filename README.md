@@ -1,23 +1,37 @@
 # gan-harness
 
 A language-agnostic AI coding harness driven by a generator-evaluator
-adversarial loop. Four commands — `/prd` `/plan` `/execution-loop`
-`/finalize` — walk one batch from intent to merged code. The harness
-core stays language-free; framework adaptation lives in pluggable
-**stack skills** (Python, FastAPI, Next.js, AWS CDK, Flutter, etc.).
-gan-harness sits in the **outer-harness** slot of Böckeler's three-layer
-model — wrapped around the coding agent, not part of it.
+adversarial loop with per-sprint contract negotiation. Three commands —
+`/init` `/loop` `/finalize` — walk one epic from intent to merged code.
+The harness core stays language-free; framework adaptation lives in
+pluggable **stack skills** (Python, FastAPI, Next.js, AWS CDK, Flutter,
+etc.). gan-harness sits in the **outer-harness** slot of Böckeler's
+three-layer model — wrapped around the coding agent, not part of it.
+
+Following Anthropic's [v2 harness research](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+(April 2026): planner produces a high-level immutable spec; generator
+and evaluator negotiate per-sprint testable contracts; no escalate
+mechanism (operator monitors cost externally). See ADR-0001 for the
+full v3.8 design rationale.
 
 ## 1. Pipeline
 
 ```
-/prd            grill in MAIN session + blindfold codebase research
-  ↓             writes specs/_batch/prd.md + specs/_batch/research.md
-/plan           planner self-verify + per-question checkpoint walk
-  ↓             writes specs/_batch/feature-list.json + proposed ADRs
-/execution-loop generator ↔ evaluator round-based feature delivery
-  ↓             writes specs/_batch/progress.tsv + per-round eval JSONs
-/finalize       promote ADRs, lazy-create CONTEXT.md, regen codemap, archive batch
+/init     grill via AskUserQuestion (default; --no-grill bypasses) +
+  ↓       optional codebase-fact-finder for brownfield epics
+          writes specs/_epic/spec.md (immutable: vision + features +
+            sprint plan + 4 archetype evaluation criteria + cross-cutting +
+            overall success + references)
+/loop     walk sprint plan; per-sprint:
+  ↓       1. negotiate contract (generator ⇌ evaluator) →
+              specs/_epic/contracts.jsonl (append-only)
+          2. implement (generator) → SubagentStop hook captures transcript
+          3. evaluate (evaluator) → run verification_plan + matrix sensor →
+              specs/_epic/_evals/S{NN}-R{N}.json
+          PASS → next sprint; FAIL → next round (no max cap)
+/finalize promote proposed ADRs → accepted, merge new domain terms
+          into CONTEXT.md, regen CODEMAP.md, archive
+          specs/_epic/ → specs/epics/<slug>/
 ```
 
 ### `/prd` — intent → verifiable spec

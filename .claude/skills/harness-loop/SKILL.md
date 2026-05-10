@@ -1,207 +1,188 @@
 ---
 name: harness-loop
-description: Drive Stage 3 of the gan-harness — walk the depends_on DAG of specs/_batch/feature-list.json one feature at a time, spawn generator → evaluator pairs up to 3 rounds per feature, write per-feature status, and produce a batch summary pointing at /finalize. The contract is locked at /plan time; this stage only executes. Make sure to use this skill whenever /execution-loop runs, when the user asks to execute a batch's feature list, or when handoff from /plan to /finalize needs implementations + verdicts.
+description: Drive Stage 2 of the gan-harness v3.8 — walk the sprint plan in specs/_epic/spec.md, per sprint negotiate a contract (generator+evaluator), implement, evaluate against the contract's verification_plan + 4 archetype criteria. Append to contracts.jsonl. No max round budget; the loop runs until evaluator approves or operator stops based on cost. Make sure to use this skill whenever /loop runs, when the user asks to execute the spec, or when handoff from /init to /finalize needs the running app + verdicts.
+disable-model-invocation: false
 ---
 
-# Harness Loop
+# harness-loop
 
-The orchestration skill for `/execution-loop`. Walks `specs/_batch/feature-list.json`,
-drives generator ↔ evaluator pairs, writes terminal `feature.status`. Stops when
-all features are terminal (passed / deferred / blocked-by-ancestor).
+Stage 2 of v3.8. Walks `specs/_epic/spec.md`'s sprint plan. Per sprint:
+
+1. Negotiate contract (generator ↔ evaluator)
+2. Implement (generator)
+3. Evaluate (evaluator)
+4. PASS → next sprint; FAIL → another round (no cap)
+
+This is the v2 GAN loop from Anthropic's harness research: per-sprint
+negotiation followed by behavioral verification. There is **no escalate**
+mechanism — the loop runs until evaluator approves or the operator stops
+the run externally based on cost.
 
 ## Mandatory before starting
 
 ASSUMPTIONS I'M MAKING:
-1. <e.g., "specs/_batch/feature-list.json was produced by /plan and validates against the schema">
-2. <e.g., "the active stack skill provides L1/L2 commands compatible with feature.test_contract">
-3. ...
-→ Correct me now or I'll proceed with these.
+1. `specs/_epic/spec.md` exists, has been approved at `/init`, and passes
+   `spec_lint.py`.
+2. The active stack skill provides a running app and the test runner
+   commands the evaluator's `verification_plan` will reference.
+3. The user has not set a hard cost budget I should respect (if they
+   have, the operator will halt externally — I don't enforce it).
 
-If `specs/_batch/feature-list.json` is missing or fails schema validation,
-ABORT. /plan must run first.
+If `specs/_epic/spec.md` is missing or fails lint, ABORT. /init must run
+first.
 
-## Common Rationalizations
+## Common rationalisations
 
 | Rationalization | Reality |
 |---|---|
-| "Round 3 evaluator FAIL is close enough, mark as passed" | No. Three rounds is the budget; FAIL after R3 → status `deferred`. /finalize handles. |
-| "Generator hit an error, I'll re-spawn without counting the round" | No. Every spawn counts. Three rounds total. |
-| "Evaluator says DEFERRED but I disagree, I'll override" | No. Verdict is the evaluator's call. The harness records and moves on. |
-| "This feature's dependency is `deferred`, but I think it could still work, let me try" | No. `blocked-by-ancestor` cascades automatically. Override = ignoring the open question that caused the upstream defer. |
-| "I'll skip writing the row to progress.tsv since the trace already records this" | No. progress.tsv is the human-facing summary; trace is auditable detail. Both required. |
+| "Round 5 evaluator FAIL is close enough, mark as completed" | No. PASS is binary; the evaluator decides, not the loop driver. |
+| "Generator's been on this sprint a while, let me lower the threshold" | No. Thresholds were negotiated at contract time; lowering them is a contract amendment that requires evaluator approval. |
+| "I'll skip negotiation and let generator just implement against spec.md" | No. Per-sprint negotiation is load-bearing in v2; it's how high-level spec becomes testable contract. Skipping = generator is implementing against vague intent. |
+| "Sprint 3 has 30 findings, I'll pause and ask the user" | No. There is no escalate. Pass findings to generator; let them strategic-decide refine vs pivot. The user is opted out of per-round decisions. |
+| "Evaluator returned approve; I'll skip writing the contracts.jsonl entry" | No. contracts.jsonl is the source of truth for sprint state. Without the entry, epic_status.py thinks the sprint isn't done. |
 
 ## Inputs
 
-- `specs/_batch/feature-list.json` — the contract; planner-locked at /plan
-- `specs/_batch/_traces/current-context.json` — written by this skill before
-  each spawn so the SubagentStop hook knows which (feature, round) the
-  trace belongs to
-- Active stack skill (auto-discovered via `.claude/skills/<stack>/`) — for
-  L1/L2/L5 conventions when generator/evaluator delegate
-- `block_pretool.py` PreToolUse hook — blocks reads of the other agent's
-  private paths
-- `log_subagent_stop.py` SubagentStop hook — writes
-  `specs/_batch/_traces/F{NN}-{gen|eval}-trace-R{N}.md`, appends a row
-  to `specs/_batch/progress.tsv`, and writes per-round token-usage JSON
-  next to the trace
+- `specs/_epic/spec.md` — the immutable rubric (vision + features + sprint
+  plan + 4 criteria).
+- `specs/_epic/contracts.jsonl` — append-only log of negotiated contracts.
+  Driver reads to find current sprint state; generator/evaluator read for
+  context.
+- `python .claude/skills/harness-loop/scripts/epic_status.py` — derive
+  current state (active sprint, completion).
+- Active stack skill (auto-discovered via `.claude/skills/<stack>/`).
+- Hooks:
+  - `block_pretool.py` PreToolUse — enforces spec.md immutability,
+    contracts.jsonl append-only, agent-private path blindfolds.
+  - `log_subagent_stop.py` SubagentStop — captures `transcript_path` per
+    subagent stop, writes `_traces/S{NN}-{gen|eval}-R{N}.jsonl` with line
+    range markers, appends row to `progress.tsv`.
 
 ## Process
 
 ### Phase 0 — Pre-flight
 
-1. Verify `specs/_batch/feature-list.json` exists and parses as JSON.
-2. Validate against `.claude/schemas/feature-list.schema.json` (use
-   `jsonschema` if installed; else best-effort parse + structural check).
-3. Read all features. Build the DAG via `depends_on`. Detect cycles —
-   abort if any.
-4. Detect any feature already at terminal status from a prior run
-   (`passed` / `deferred` / `blocked-by-ancestor`). These are skipped.
-5. Ensure `specs/_batch/_traces/` and `specs/_batch/_evals/` exist.
+1. Verify `specs/_epic/spec.md` exists and passes `spec_lint.py`.
+2. Read `epic_status.py --json` to determine state.
+3. If `epic_done` is true, ABORT with: "epic already complete; run
+   /finalize".
+4. Note the `active_sprint` (call it S).
 
-### Phase 1 — Topological walk
+### Phase 1 — Negotiate (per sprint S)
 
-Repeat until no `todo` features remain (or the queue is exhausted by
-upstream cascades):
+For round R = 1, 2, 3, ... (no cap):
 
-1. **Pick next feature.** Find the lowest-id feature with `status: todo`
-   whose every `depends_on` entry has `status: passed`. If none:
-   - If any `todo` feature has any `deferred` / `blocked-by-ancestor`
-     dependency → mark THIS feature `blocked-by-ancestor`, continue.
-   - If no eligible feature exists at all → exit Phase 1.
-2. **Round loop** (rounds 1, 2, 3):
-   1. Write `specs/_batch/_traces/current-context.json`:
-      ```json
-      {"feature": "F03", "round": 1}
-      ```
-      The hook reads this on subagent stop.
-   2. **Spawn generator.** Capture `git rev-parse HEAD` BEFORE spawn.
-      `Agent(subagent_type="generator", prompt="Implement feature F03 from
-      specs/_batch/feature-list.json. This is round 1.")`. Wait for return.
-      - On generator error / timeout → mark feature `deferred`, break
-        round loop, log to progress.tsv with note `"generator-error"`.
-   2.4. **Check escalation (priority signal).** If
-        `specs/_batch/_escalations/F{NN}-gen-R{round}.json` exists, the
-        generator hit a human-fixable env block (auth, missing config,
-        external service). Read the file. Surface to operator via
-        `AskUserQuestion`:
-        ```
-        [<kind>] <what_blocked>
-        Action: <human_action>
-        Options: ["Done", "Skip this feature", "Abort batch"]
-        ```
-        - **Done** → delete the escalation file, RE-SPAWN generator at the
-          SAME round (round counter NOT incremented; env block is not a
-          logical FAIL). Resume from step 2.
-        - **Skip** → `feature.status = "deferred"` with note
-          `operator-skipped: <kind>`; break round loop.
-        - **Abort** → exit Phase 1 immediately.
-        Escalation overrides everything — do not check HEAD or spawn
-        evaluator while a generator escalation is unresolved.
-   2.5. **Check HEAD advanced.** Compare `git rev-parse HEAD` against the
-        pre-spawn SHA. If unchanged, run
-        `git diff <base_commit>..HEAD -- <p1> <p2> ...` where the paths are
-        every entry in `feature.spec.module_design[*].module_path` (the
-        feature's write-boundary union; the previous singleton
-        `feature.module_path` field is gone) to detect existing committed
-        work in the feature's scope.
-        - **Regrade scenario** (scoped diff non-empty): the feature
-          already has committed code from a prior batch run (status was
-          reset from terminal to `todo` without rollback). Generator may
-          legitimately no-op when there is nothing to add. **Proceed to
-          step 3** — evaluator will grade the existing committed work
-          against current criteria. Common when the user re-runs
-          /execution-loop after tightening evaluator doctrine
-          (e.g. enabling L5).
-        - **Empty scope** (scoped diff empty): generator attempted but
-          couldn't commit; nothing to evaluate. **Skip evaluator** and
-          treat as FAIL on the round budget:
-          - round < 3 → continue round loop (round += 1).
-          - round == 3 → set `feature.status = "deferred"`; break.
-          Round 2 with fresh context is the legitimate retry path.
-   3. **Spawn evaluator.** `Agent(subagent_type="evaluator", prompt="Evaluate
-      feature F03 round 1 implementation against specs/_batch/feature-list.json
-      and the eval JSON contract.")`. Wait for return.
-      - On evaluator error / timeout → mark feature `deferred`, break,
-        note `"evaluator-error"`.
-   3.4. **Check escalation (priority signal).** Same handler as step 2.4
-        but for the evaluator — file path is
-        `specs/_batch/_escalations/F{NN}-eval-R{round}.json`. On Done,
-        re-spawn evaluator at the same round (round counter NOT
-        incremented). Same Skip / Abort branches. Escalation overrides
-        verdict — do not read the eval JSON while an evaluator escalation
-        is unresolved.
-   4. **Read verdict** from `specs/_batch/_evals/F03-R1.json` (the
-      evaluator's eval JSON). Pull `verdict` field (PASS/FAIL/DEFERRED).
-      AC literal coverage is part of the evaluator's grading process —
-      a missing AC-NN literal in the test body produces an `expectations[]`
-      row with `passed: false`, contributing to FAIL.
-   5. **Branch on verdict:**
-      - `PASS` → set `feature.status = "passed"` in feature-list.json;
-        break round loop.
-      - `DEFERRED` → set `feature.status = "deferred"`; break round loop.
-      - `FAIL` and `round < 3` → continue round loop (round += 1).
-      - `FAIL` and `round == 3` → set `feature.status = "deferred"`
-        (treated same as DEFERRED for /finalize purposes); break.
+1. **Spawn generator** with prompt: "Propose contract for sprint S.
+   Read spec.md and recent contracts.jsonl. Use propose_contract tool to
+   write `_pending/S{NN}-draft-v{R}.yaml`."
+2. **Spawn evaluator** (separate fresh ctx) with prompt: "Review the
+   contract draft at `_pending/S{NN}-draft-v{R}.yaml`. Use review_contract
+   tool to write `_pending/S{NN}-review-v{R}.yaml` with verdict approve |
+   amend_request | reject."
+3. **Check verdict**:
+   - approve → MAIN merges draft into `contracts.jsonl` with timestamp
+     and `phase: agreed`. Proceed to Phase 2.
+   - amend_request → generator re-spawns with prompt: "Amend draft per
+     review at v{R}." Increment R, loop.
+   - reject → generator re-spawns with broader rethink: "Contract
+     rejected. Propose new contract from scratch." Increment R, loop.
+4. After 5 negotiation rounds without agreement, the evaluator should
+   `approve` the strongest available draft (negotiation cannot itself
+   loop forever). If not, surface this rare event in stdout for operator
+   visibility.
 
-   The previous "ac_coverage gate short-circuit before evaluator spawn"
-   step has been removed. AC literal coverage is enforced at commit time
-   by the project's git pre-commit hook (installed by setup) and
-   re-verified adversarially by the evaluator during grading. The
-   harness-loop SubagentStop hook no longer runs ac_coverage.
-3. **Cascade.** When a feature hits `deferred` or `blocked-by-ancestor`,
-   immediately mark every direct downstream feature (i.e. every feature
-   whose `depends_on` includes this id) as `blocked-by-ancestor`. The
-   cascade is transitive — re-run the cascade pass until no change.
+### Phase 2 — Implement (per sprint S, given agreed contract)
 
-### Phase 2 — Summary
+For implementation round IR = 1, 2, 3, ... (no cap):
 
-When Phase 1 exits, count features by status and emit:
+1. **Spawn generator** with prompt: "Implement sprint S per agreed
+   contract. Read spec.md, contracts.jsonl[latest agreed for S], and (if
+   IR ≥ 2) `_evals/S{NN}-R{IR-1}-feedback.md` and
+   `_traces/S{NN}-gen-R{IR-1}.jsonl`. Strategic-decide refine vs pivot
+   based on prior round."
+2. Generator writes code, runs inner gate, commits.
+3. SubagentStop hook captures transcript → `_traces/S{NN}-gen-R{IR}.jsonl`.
 
-```
-Batch <batch_slug> — execution summary
+### Phase 3 — Evaluate (per sprint S, after generator commit)
 
-passed: N
-deferred: M
-blocked-by-ancestor: K
+1. **Spawn evaluator** (fresh ctx) with prompt: "Verify sprint S round
+   IR. Read in locked order: spec.md → contracts.jsonl[latest agreed for
+   S] → `_traces/S{NN}-gen-R{IR}.jsonl[start:end]` → git diff. Run
+   verification_plan + matrix sensor. Emit `_evals/S{NN}-R{IR}.json`."
+2. Evaluator runs `gate_eval.py` (in evaluator-handbook scripts) which
+   actually executes the verification.
+3. Evaluator writes `_evals/S{NN}-R{IR}.json` with criteria + findings +
+   verdict.
+4. SubagentStop hook captures evaluator's transcript →
+   `_traces/S{NN}-eval-R{IR}.jsonl`.
 
-Next: /finalize  (handles archive vs retro path based on these statuses)
-```
+### Phase 4 — Decide
 
-If any features are `deferred` (or `blocked-by-ancestor`), the
-/finalize retro path will surface them per-Q via AskUserQuestion. The
-operator's expected next action: review `progress.tsv` + the deferred
-features' eval JSONs, then run `/finalize`.
+Read `_evals/S{NN}-R{IR}.json`:
+
+- **verdict: PASS** → MAIN appends `phase: completed` entry to
+  `contracts.jsonl` with `evidence_ref` pointing into the transcript
+  slice. Loop back to Phase 0 to find next active sprint (or done).
+- **verdict: FAIL** → MAIN deterministically merges findings into
+  `_evals/S{NN}-R{IR}-feedback.md` (≤5 blocking + ≤5 hint, root-cause
+  ordered: matrix → criterion-fail → bug-list). Increment IR, loop back
+  to Phase 2.
+
+### Termination
+
+Loop terminates when:
+- `epic_status.py --is-done` returns 0 (all sprints `phase: completed`)
+- OR operator interrupts externally (Ctrl+C) — there is no internal halt
+
+### Cost monitoring (operator-side, not enforced)
+
+The harness has no max-rounds cap. Operator monitors token spend
+externally. If a sprint is stuck on the same finding for 3+ rounds:
+- generator is supposed to pivot per anti-oscillation rule
+- if generator is genuinely stuck, operator decides whether to interrupt
+- the harness driver does NOT decide
 
 ## Outputs
 
-- `specs/_batch/feature-list.json` — every feature has terminal status
-- `specs/_batch/_traces/F{NN}-{gen|eval}-trace-R{N}.md` per round (hook-written)
-- `specs/_batch/_evals/F{NN}-R{N}.json` per evaluator run (evaluator-written)
-- `specs/_batch/progress.tsv` — append-only flat log; one row per agent stop (hook-written)
-- Final summary in MAIN session output (counts + next-step pointer)
+- `specs/_epic/contracts.jsonl` — append-only contract log.
+- `specs/_epic/_pending/S{NN}-{draft|review|amendment}-v{N}.yaml` —
+  ephemeral negotiation artefacts.
+- `specs/_epic/_evals/S{NN}-R{N}.json` — per-round evaluator verdict.
+- `specs/_epic/_evals/S{NN}-R{N}-feedback.md` — MAIN-merged feedback for
+  next-round generator.
+- `specs/_epic/_traces/S{NN}-{gen|eval}-R{N}.jsonl` — hook-captured
+  transcripts.
+- `specs/_epic/progress.tsv` — hook-appended metric rows.
 
 ## Anti-patterns
 
-**Spawning both agents in parallel.** Generator must finish committing
-before evaluator runs — evaluator reads `git diff <base>..HEAD`.
-Sequential, not parallel.
+**Skipping negotiation phase.** Per-sprint contract is load-bearing in
+v2. Without it, generator implements against vague spec; evaluator has
+no rubric to check against; both work blindfolded.
 
-**Re-running a round.** If evaluator returned, the round is over. No
-"that didn't seem right, let me re-spawn." If you disagree with the
-verdict, the next operator-facing action is /finalize's retro walk.
+**Letting MAIN edit contracts.jsonl in place.** Append-only. New entries
+go on new lines. Editing an existing entry is a hook violation.
 
-**Editing feature-list.json before round 3.** Only the harness-loop
-itself writes `feature.status`. Generator and evaluator must not touch
-feature-list.json. If they do, the schema's `additionalProperties:
-false` doesn't help — generator/evaluator must self-discipline.
+**Running QA against spec.md instead of the contract.** spec.md is
+high-level. Per-sprint contract is the rubric. QA reads contract.
 
-**Skipping the cascade pass.** When a feature hits `deferred`, every
-downstream must immediately become `blocked-by-ancestor` so the next
-loop iteration sees the cascade. Forgetting this causes the harness to
-pointlessly run rounds for downstream features that will fail anyway.
+**Operator-interrupted runs leaving state inconsistent.** When operator
+Ctrl+Cs mid-sprint, the next /loop invocation should resume from where
+it stopped. epic_status.py derives that — the latest `phase` per sprint.
 
-**Forgetting to write current-context.json.** The hook needs (feature,
-round) to name the trace file correctly. Skipping the context write
-results in trace files at `specs/_batch/_traces/<agent>-<ts>.md` (the
-fallback path), which breaks the harness-loop's per-(feature, round)
-lookup downstream. Always write it before each spawn.
+**Spawning generator without giving it the active sprint id.** Generator
+needs to know which sprint to work on. Use `epic_status.py
+--active-sprint` and pass into the spawn prompt.
+
+**Spawning generator and evaluator in the same fresh context.** They
+must be in separate fresh-context subagents (Anthropic v2 cognitive
+separation). Don't reuse one for both.
+
+## Scripts
+
+- `scripts/epic_status.py` — derive current state (active sprint, done,
+  rounds_seen). Used by the loop driver and by external operators
+  monitoring progress.
+- `scripts/gate_eval.py` (TODO Phase D+, evaluator-handbook owns the
+  actual implementation) — runs the verification_plan against running
+  app and emits `_evals/S{NN}-R{N}.json`.

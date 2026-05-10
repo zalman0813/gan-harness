@@ -7,7 +7,7 @@ disable-model-invocation: true
 # Setup gan-harness skills
 
 One-time bootstrap. Drop a fresh target repo into the state where
-`/prd → /plan → /execution-loop → /finalize` works out of the box.
+`/init → /loop → /finalize` works out of the box (v3.8).
 
 This skill is **user-invoked only** (`disable-model-invocation: true`)
 because it makes large, hard-to-undo writes (copies a `.claude/` tree
@@ -35,7 +35,7 @@ not to myself.
 | "Stack detection found nothing, I'll guess from filenames" | No. If detection is empty, surface that to the user and let them name the stack — or skip stack wiring entirely. Inventing a stack creates a wrong skill that drifts forever. |
 | "Section walk is tedious; I'll bulk-ask everything in one prompt" | No. One `AskUserQuestion` per section, with explainer first. The interactive cadence IS the contract; bulk-ask collapses it. |
 | "Agent frontmatter edit is mechanical; I'll inline the change without a script" | Use `wire_stack_skills.py`. Mechanical edits go through the script so behaviour is reproducible and testable. |
-| "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /prd /plan etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents auto-load their own handbooks; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
+| "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /init /loop etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents auto-load their own handbooks; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
 | "User asked me to add a principle to `## Principles` section; I'll write it however reads naturally" | NO. Use the Karpathy 5-element format (see § Principle format below). Ad-hoc principle structures rot — they accumulate inconsistencies that make the section unreadable as it grows. The 5 elements (numbered heading / tagline / paragraph / bullets / "The test:" sentence) are non-negotiable. |
 
 ## Principle format
@@ -62,7 +62,7 @@ When the user asks to add or edit a principle in any project's CLAUDE.md `## Pri
 
 - Target already has a populated `.claude/` from a prior gan-harness setup
   — manual edits, not a re-run, are the right path
-- Mid-batch (`specs/_batch/` non-empty) — finish or abort the batch first
+- Mid-epic (`specs/_epic/` non-empty) — finish or abort the batch first
 - The user is inside the gan-harness source repo itself
 
 ## Inputs
@@ -91,12 +91,12 @@ After successful run:
   `skills:` list extended with each new stack name
 - `target/.git/hooks/pre-commit` — the harness gate, the SOLE enforcement
   point for lint/typecheck/test/ac_coverage on every `git commit`
-- `target/specs/_batch/.gitkeep`, `target/specs/completed/.gitkeep`
+- `target/specs/_epic/.gitkeep`, `target/specs/epics/.gitkeep`
 
 NOT created (lazy by downstream stages):
 - `target/CONTEXT.md` (created at first /finalize archive merge)
 - `target/CODEMAP.md` (created at first /finalize regen)
-- `target/docs/adr/` (created at first /plan when planner writes an ADR)
+- `target/docs/adr/` (created at first /init when planner writes an ADR)
 
 ## Process
 
@@ -119,7 +119,7 @@ Outputs env-style key=value lines:
 - `BATCH_NON_EMPTY=true|false`  ← non-trivial collision
 
 If `BATCH_NON_EMPTY=true` → ABORT immediately with:
-"specs/_batch/ has live batch artefacts. Finish /finalize or remove
+"specs/_epic/ has live batch artefacts. Finish /finalize or remove
 the batch before re-running setup."
 
 If `HAS_DOT_CLAUDE=true` → ABORT:
@@ -207,7 +207,7 @@ Ready to write to <target>:
   .claude/            : copy from <source>/.claude/ (excluding setup-gan-harness-skills/)
   Stack skills        : <list of names from Section D>
   Wire stacks into    : agents/{planner,generator,evaluator}.md `skills:`
-  Empty containers    : specs/_batch/.gitkeep, specs/completed/.gitkeep
+  Empty containers    : specs/_epic/.gitkeep, specs/epics/.gitkeep
 
 Approve / Edit / Abort
 ```
@@ -275,7 +275,7 @@ Install the project's `.git/hooks/pre-commit` so every `git commit`
 automatically runs the gate (lint.fix → lint.check → typecheck →
 test.unit → ac_coverage) over the active stack's `sensors.ini`. The
 hook short-circuits to allow normal maintainer commits when no batch
-is in flight (`specs/_batch/_traces/current-context.json` absent).
+is in flight (`specs/_epic/_traces/current-context.json` absent).
 
 ```
 bash .claude/skills/setup-gan-harness-skills/scripts/install_pre_commit_hook.sh "$PWD"
@@ -291,8 +291,8 @@ the gate manually, and the prompt must not instruct them to.
 #### 4f. Empty container sentinels
 
 ```
-mkdir -p specs/_batch specs/completed
-touch specs/_batch/.gitkeep specs/completed/.gitkeep
+mkdir -p specs/_epic specs/epics
+touch specs/_epic/.gitkeep specs/epics/.gitkeep
 ```
 
 ### Phase 5 — Done
@@ -310,14 +310,14 @@ Updated <CLAUDE.md|AGENTS.md>         ✓ (### Domain docs block)
 Built stack skills                    <list or "none">
 Wired stacks into agent frontmatter   <✓ / skipped — no stacks>
 Installed git pre-commit hook         ✓ (.git/hooks/pre-commit)
-Sentinels                             specs/{_batch,completed}/.gitkeep
+Sentinels                             specs/{_epic,epics}/.gitkeep
 
 Lazy (will be created when first needed):
   CONTEXT.md      ← first /finalize archive merge
   CODEMAP.md      ← first /finalize regen
-  docs/adr/       ← first /plan ADR proposal
+  docs/adr/       ← first /init ADR proposal
 
-Next: /prd  (start your first batch)
+Next: /init  (start your first epic)
 ═══════════════════════════════════════════════════════════════
 ```
 
@@ -335,7 +335,7 @@ Next: /prd  (start your first batch)
   intentionally 3 bullets. Don't add Pipeline / Conventions / Stack
   subsections back in: subagents auto-load their own handbooks; slash
   commands self-document at invocation time; main-session Claude can
-  grep `.claude/commands/` if it needs to know what `/prd` etc. do.
+  grep `.claude/commands/` if it needs to know what `/init` etc. do.
   Pre-explaining is documentation, not actionable context.
 - **Using both CLAUDE.md AND AGENTS.md.** Pocock rule: pick one. Setup
   refuses to proceed if both exist (manual cleanup needed first).
@@ -354,5 +354,5 @@ Next: /prd  (start your first batch)
 - [ ] CLAUDE.md or AGENTS.md has `### Domain docs` block
 - [ ] Stack skills (if any) built + wired into agent frontmatter
 - [ ] `.git/hooks/pre-commit` installed + executable
-- [ ] `specs/_batch/.gitkeep` + `specs/completed/.gitkeep` present
-- [ ] Final report printed; `/prd` suggested
+- [ ] `specs/_epic/.gitkeep` + `specs/epics/.gitkeep` present
+- [ ] Final report printed; `/init` suggested

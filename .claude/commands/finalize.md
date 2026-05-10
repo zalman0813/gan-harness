@@ -1,26 +1,22 @@
 ---
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, TaskCreate, TaskUpdate, TaskList, Agent
-description: Stage 4 — close out a /execution-loop batch. Archive path (all passed) promotes ADRs, merges Domain terms, regens CODEMAP, archives to specs/completed/{slug}/, single commit. Retro path (any deferred) walks open_questions per AskUserQuestion, routes fixes to planner agent, resets features to todo for re-run.
-argument-hint: "(none — reads specs/_batch/feature-list.json)"
+description: Stage 3 of v3.8 — close out a /loop epic. Archive-only path (v3.8 removed retro path along with escalate). Verifies all sprints completed via epic_status.py --is-done; promotes proposed ADRs to accepted; merges new domain terms into CONTEXT.md; regenerates CODEMAP.md; archives specs/_epic/ → specs/epics/<slug>/. Single git commit.
+argument-hint: "(none — reads specs/_epic/)"
 model: sonnet
 ---
 
 Invoke `.claude/skills/finalize-workflow/SKILL.md`. The skill owns the
-phases, scripts, and branch logic. This command only routes control flow.
-When command and skill disagree, the skill wins — fix this command.
+phases and scripts. This command only routes control flow. When command
+and skill disagree, the skill wins — fix this command.
 
-1. Pre-flight (`scripts/preflight.py` — verifies feature-list, all features
-   terminal, prd.md present; outputs `SLUG`, `BRANCH=archive|retro`)
-2. If `BRANCH=retro`: walk each deferred feature's open_questions via
-   AskUserQuestion (Approve / Edit / Escalate); spawn `planner` agent with
-   scoped amendment prompt; reset affected features to `todo`; report and
-   stop (no commit)
-3. If `BRANCH=archive`: single AskUserQuestion checkpoint (Approve / Edit
-   slug / Abort); promote ADRs (`finalize_adr.py`); merge Domain terms
-   (`merge_domain_terms.py`); regen CODEMAP (`regen_codemap.py`);
-   summarize + archive (`summarize_batch.py` + `archive_batch.sh`); single
-   `chore(finalize):` commit; report
+1. Pre-flight (`epic_status.py --is-done` → exit 0; refuse otherwise with
+   "/loop must complete first")
+2. Phase 1 — Promote ADRs (`finalize_adr.py`: proposed → accepted +
+   retroactive supersedes backfill + index regen)
+3. Phase 2 — Merge domain terms (`merge_domain_terms.py`: spec.md → CONTEXT.md, idempotent, lazy-creates)
+4. Phase 3 — Regen CODEMAP (`regen_codemap.py`: barrel docstrings → CODEMAP.md)
+5. Phase 4 — Archive (`archive_batch.sh`: mv specs/_epic/* → specs/epics/<slug>/)
+6. Phase 5 — Single commit (`git add docs/adr/ CONTEXT.md CODEMAP.md specs/epics/<slug>/`)
+7. Phase 6 — Summary (epic name, sprints completed, ADRs promoted, terms added, archive path)
 
-Next step:
-- Archive path → `/prd` (for next batch)
-- Retro path → `/execution-loop` (re-run features just reset to todo)
+Next step: /init (for next epic)
