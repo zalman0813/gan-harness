@@ -125,10 +125,10 @@ When you create a new stack skill that should support PBT:
    the stack-specific PBT idiom — generator-side guidance points to
    this when the planner asks for property tests.
 
-3. **Do NOT add a `[pbt]` section to `sensors.ini`.** Property tests
-   are just decorated unit tests; they run via `[test] unit` like any
-   other test. Adding a PBT-specific runner is wrong unless your stack
-   genuinely separates the two (none we know of as of 2026-05).
+3. **Do NOT add a `pbt` row to the `## Commands` table.** Property
+   tests are just decorated unit tests; they run via `test.unit` like
+   any other test. Adding a PBT-specific runner is wrong unless your
+   stack genuinely separates the two (none we know of as of 2026-05).
 
 4. **Mention shrink-output handling** in the stack skill: when a PBT
    test fails, the runner prints a shrunk minimal repro. Generators

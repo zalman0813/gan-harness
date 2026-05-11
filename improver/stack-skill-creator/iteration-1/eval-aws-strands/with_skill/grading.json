@@ -1,0 +1,109 @@
+{
+  "expectations": [
+    {
+      "text": "Stack skill SKILL.md exists at .claude/skills/aws-strands/SKILL.md",
+      "passed": true,
+      "evidence": "All 1 paths present: ['.claude/skills/aws-strands/SKILL.md']",
+      "id": "a01",
+      "blocking": true
+    },
+    {
+      "text": "SKILL.md frontmatter name field is exactly 'aws-strands'",
+      "passed": true,
+      "evidence": "frontmatter[name] contains '^aws-strands$' in all of ['.claude/skills/aws-strands/SKILL.md']",
+      "id": "a02",
+      "blocking": true
+    },
+    {
+      "text": "SKILL.md frontmatter description field is non-empty (\u226540 chars)",
+      "passed": true,
+      "evidence": "frontmatter[description] contains '^.{40,}$' in all of ['.claude/skills/aws-strands/SKILL.md']",
+      "id": "a03",
+      "blocking": true
+    },
+    {
+      "text": "references/ has between 4 and 8 .md files total (3-5 topical seeds + upstream.md per Starter scope; mega-file would be 1-2)",
+      "passed": true,
+      "evidence": "6 files matched '.claude/skills/aws-strands/references/*.md': ['.claude/skills/aws-strands/references/upstream.md', '.claude/skills/aws-strands/references/quickstart.md', '.claude/skills/aws-strands/references/testing.md', '.claude/skills/aws-strands/references/model-providers.md', '.claude/skills/aws-strands/references/agents.md', '.claude/skills/aws-strands/references/tools.md']",
+      "id": "a04",
+      "blocking": true
+    },
+    {
+      "text": "references/upstream.md exists (provenance log for web-vendored content)",
+      "passed": true,
+      "evidence": "All 1 paths present: ['.claude/skills/aws-strands/references/upstream.md']",
+      "id": "a05",
+      "blocking": true
+    },
+    {
+      "text": "references/upstream.md mentions strandsagents.com or aws.amazon.com (the canonical source URLs)",
+      "passed": true,
+      "evidence": "regex 'strandsagents\\\\.com|aws\\\\.amazon\\\\.com|github\\\\.com/strands-agents' matched all paths",
+      "id": "a06",
+      "blocking": true
+    },
+    {
+      "text": "sensors.ini exists at .claude/skills/aws-strands/sensors.ini (top level, not under references/)",
+      "passed": true,
+      "evidence": "All 1 paths present: ['.claude/skills/aws-strands/sensors.ini']",
+      "id": "a07",
+      "blocking": true
+    },
+    {
+      "text": "sensors.ini contains [lint] section with both fix and check keys",
+      "passed": true,
+      "evidence": "regex '(?s)\\\\[lint\\\\].*?fix\\\\s*=.*?check\\\\s*=' matched all paths",
+      "id": "a08",
+      "blocking": true
+    },
+    {
+      "text": "sensors.ini contains [typecheck] section with command key",
+      "passed": true,
+      "evidence": "regex '(?s)\\\\[typecheck\\\\].*?command\\\\s*=' matched all paths",
+      "id": "a09",
+      "blocking": true
+    },
+    {
+      "text": "sensors.ini contains [test] section with unit key",
+      "passed": true,
+      "evidence": "regex '(?s)\\\\[test\\\\].*?unit\\\\s*=' matched all paths",
+      "id": "a10",
+      "blocking": true
+    },
+    {
+      "text": "sensors.ini commands appear stack-appropriate for Python (ruff / mypy / pytest tokens present somewhere)",
+      "passed": true,
+      "evidence": "regex 'ruff|mypy|pytest' matched all paths",
+      "id": "a11",
+      "blocking": false
+    },
+    {
+      "text": "SKILL.md has a ## References section listing reference files",
+      "passed": true,
+      "evidence": "regex '##\\\\s+References' matched all paths",
+      "id": "a12",
+      "blocking": true
+    },
+    {
+      "text": "At least one references/*.md file covers agent / model / tools topic (regex on filenames)",
+      "passed": true,
+      "evidence": "matched: ['.claude/skills/aws-strands/references/agents.md', '.claude/skills/aws-strands/references/model-providers.md', '.claude/skills/aws-strands/references/tools.md', '.claude/skills/aws-strands/references/quickstart.md']",
+      "id": "a13",
+      "blocking": true
+    },
+    {
+      "text": "SKILL.md does NOT pre-bake role-specific reference filenames (no sink-module-doc, test-contract, etc.)",
+      "passed": true,
+      "evidence": "regex 'sink-module-doc|test-contract|deep-module-doc' correctly absent from all paths",
+      "id": "a14",
+      "blocking": false
+    }
+  ],
+  "summary": {
+    "passed": 14,
+    "failed": 0,
+    "total": 14,
+    "pass_rate": 1.0,
+    "blocking_failed": 0
+  }
+}

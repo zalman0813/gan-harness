@@ -1,0 +1,48 @@
+---
+name: <name>-handbook
+description: Approach handbook for <Methodology Name> — the methodology that <list of loaders, e.g. "planner uses when designing X, generator uses when implementing Y, evaluator uses when judging Z">. Loaded by <list of agent files>.md frontmatter `skills:`. Use whenever an agent is about to <decision verbs, e.g. "design / implement / test / review"> <subject the methodology covers>. Covers <one-line content summary, e.g. "definitions, applicability scope (when NOT to apply), red flags with primary-source citations, and per-role application slices">.
+---
+
+# <Handbook Title>
+
+<one-line methodology positioning sentence — e.g., "Approach handbook for the test-driven development methodology. This is the school of thought; the agent-specific application lives in each consuming agent's slice.">
+
+This is an **approach handbook**. It does not define any single agent's behavior; it defines a methodology that <list of loaders> each apply at their stage.
+
+## When the agent reaches each decision
+
+| Decision point | Read |
+|---|---|
+| Always before any <methodology> reasoning | [references/foundation.md](references/foundation.md) |
+| <loader-1's decision-point — e.g. "Designing module boundaries"> | [references/<loader-1>-slice.md](references/<loader-1>-slice.md) _OR_ `references/foundation.md` only |
+| <loader-2's decision-point> | [references/<loader-2>-slice.md](references/<loader-2>-slice.md) _OR_ `references/foundation.md` only |
+| <…> | <…> |
+
+## Loading order
+
+Always read `foundation.md` first — it establishes definitions, scope, applicability, and the red-flag schema all slices reference. Then read exactly your role's slice (if one exists for your role; otherwise stop after foundation). **Do not load other roles' slices** — that defeats progressive disclosure and leaks the wrong agent's concerns into your context.
+
+## What this skill IS
+
+- <is-item-1 — e.g. "Definitions of <core terms> with primary-source citations">
+- <is-item-2 — e.g. "Applicability scope: when NOT to apply this methodology">
+- <is-item-3 — e.g. "Red flags with explicit Source / Pattern / Trigger / If-fires-recommend / Retirement-criteria fields">
+- <is-item-4 — e.g. "Per-role application slices: how each loader translates principles into their stage's actions">
+
+## What this skill is NOT
+
+- <is-not-item-1 — e.g. "Each agent's full operating prompt (the agents' own .claude/agents/<agent>.md files)">
+- <is-not-item-2 — e.g. "Stack-specific conventions (those are stack skills)">
+- <is-not-item-3 — e.g. "Workflow orchestration (this skill does not drive any slash command)">
+- <is-not-item-4 — e.g. "A lint enforcement target (heuristics are design-time doctrine, not runtime gates)">
+
+## Anti-patterns when consuming this skill
+
+- **Loading all slices upfront** — defeats progressive disclosure; burns context budget; exposes you to the wrong agent's concerns. Read only `foundation.md` + your role's slice (if any).
+- **Treating red flags as auto-FAIL** — red flags are investigation triggers, not verdicts. They produce open_questions with recommendations; the user judges.
+- **Bypassing the source-citation requirement** — if you find yourself proposing a new red flag, it must cite a primary source per `foundation.md` § Red flag schema. Folklore flags rot.
+- <consume-anti-pattern-N — methodology-specific items go here, e.g. "Treating TDD as 'write tests first then ignore them' — the refactor step is non-negotiable">
+
+## Where the heavy thinking lives
+
+This SKILL.md is a routing index. The substantive doctrine lives in `references/`. Per-loader slices apply the doctrine in role-specific ways without duplicating the foundation.

@@ -1,0 +1,129 @@
+{
+  "eval_id": 1,
+  "eval_name": "greenfield-cli",
+  "prompt": "I want to scaffold a new Python CLI project called 'kvstore' that will be a small kv-store inspector for local JSON config files. I'm starting from an empty directory. Use the gan-harness substrate at /Users/eason/person_project/gan-harness/ as the source. Walk me through setup.",
+  "assertions": [
+    {
+      "id": "a01",
+      "text": "Target has .claude/agents/{planner,generator,evaluator,codebase-fact-finder}.md present after setup",
+      "kind": "file_exists",
+      "paths": [
+        ".claude/agents/planner.md",
+        ".claude/agents/generator.md",
+        ".claude/agents/evaluator.md",
+        ".claude/agents/codebase-fact-finder.md"
+      ],
+      "blocking": true
+    },
+    {
+      "id": "a02",
+      "text": "Target does NOT have .claude/skills/setup-gan-harness-skills/ (excluded from copy)",
+      "kind": "file_absent",
+      "paths": [".claude/skills/setup-gan-harness-skills/"],
+      "blocking": true
+    },
+    {
+      "id": "a03",
+      "text": "Target has v3.8 commands (init.md, loop.md, finalize.md) and NOT v1 commands (prd.md, plan.md, execution-loop.md)",
+      "kind": "file_set",
+      "must_present": [
+        ".claude/commands/init.md",
+        ".claude/commands/loop.md",
+        ".claude/commands/finalize.md"
+      ],
+      "must_absent": [
+        ".claude/commands/prd.md",
+        ".claude/commands/plan.md",
+        ".claude/commands/execution-loop.md"
+      ],
+      "blocking": true
+    },
+    {
+      "id": "a04",
+      "text": "Target has v3.8 workflow skills (init-workflow, harness-loop, finalize-workflow) and NOT v1 (prd-workflow, plan-workflow, escalation)",
+      "kind": "file_set",
+      "must_present": [
+        ".claude/skills/init-workflow/SKILL.md",
+        ".claude/skills/harness-loop/SKILL.md",
+        ".claude/skills/finalize-workflow/SKILL.md"
+      ],
+      "must_absent": [
+        ".claude/skills/prd-workflow/",
+        ".claude/skills/plan-workflow/",
+        ".claude/skills/escalation/"
+      ],
+      "blocking": true
+    },
+    {
+      "id": "a05",
+      "text": "Target has CLAUDE.md or AGENTS.md with ### Domain docs block",
+      "kind": "regex_match",
+      "paths": ["CLAUDE.md", "AGENTS.md"],
+      "either": true,
+      "regex": "### Domain docs",
+      "blocking": true
+    },
+    {
+      "id": "a06",
+      "text": "Target has README.md referencing /init (not /prd)",
+      "kind": "regex_match",
+      "paths": ["README.md"],
+      "regex": "/init",
+      "blocking": false
+    },
+    {
+      "id": "a07",
+      "text": "Target has README.md NOT referencing v1 commands /prd /plan /execution-loop",
+      "kind": "regex_no_match",
+      "paths": ["README.md"],
+      "regex": "/prd|/plan |/execution-loop",
+      "blocking": false
+    },
+    {
+      "id": "a08",
+      "text": "Target has empty container sentinels: specs/_epic/.gitkeep + specs/epics/.gitkeep (NOT specs/_batch/, NOT specs/completed/)",
+      "kind": "file_set",
+      "must_present": ["specs/_epic/.gitkeep", "specs/epics/.gitkeep"],
+      "must_absent": ["specs/_batch/", "specs/completed/"],
+      "blocking": true
+    },
+    {
+      "id": "a09",
+      "text": "A python-related stack skill is present at .claude/skills/<name>/ where <name> ∈ {python, python-cli, python-stdlib, kvstore-stack}",
+      "kind": "any_file_exists",
+      "paths_glob": [".claude/skills/python*/SKILL.md", ".claude/skills/*-cli/SKILL.md"],
+      "blocking": true
+    },
+    {
+      "id": "a10",
+      "text": "Agent frontmatter has the stack skill wired: planner.md, generator.md, evaluator.md skills: list contains the python stack skill name",
+      "kind": "yaml_frontmatter_contains",
+      "paths": [".claude/agents/planner.md", ".claude/agents/generator.md", ".claude/agents/evaluator.md"],
+      "yaml_path": "skills",
+      "value_regex": "python",
+      "blocking": false
+    },
+    {
+      "id": "a11",
+      "text": "block_pretool.py is present and references spec.md immutability rule",
+      "kind": "regex_match",
+      "paths": [".claude/hooks/block_pretool.py"],
+      "regex": "specs/_epic/spec\\.md|SPEC_PATH_RE|spec\\.immutable",
+      "blocking": true
+    },
+    {
+      "id": "a12",
+      "text": ".claude/schemas/spec.schema.md and contract.schema.json exist",
+      "kind": "file_exists",
+      "paths": [".claude/schemas/spec.schema.md", ".claude/schemas/contract.schema.json"],
+      "blocking": true
+    },
+    {
+      "id": "a13",
+      "text": "feature-list.schema.json (v1 artifact) is NOT present",
+      "kind": "file_absent",
+      "paths": [".claude/schemas/feature-list.schema.json"],
+      "blocking": false
+    }
+  ]
+}

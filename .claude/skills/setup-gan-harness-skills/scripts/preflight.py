@@ -22,20 +22,20 @@ from pathlib import Path
 def is_gan_harness_source(path: Path) -> bool:
     """Heuristic: is this path a gan-harness clone (not a target)?
 
-    Marker = docs/maintainer/design/agent-prompt-doctrine.md exists.
-    Maintainer-only file (excluded from setup copy), reliably present
-    in any gan-harness clone, replaces the older gan-harness.md marker
-    after that file was consolidated into the top-level README.
+    Marker = .claude/skills/setup-gan-harness-skills/SKILL.md exists.
+    This skill is bootstrap-only and explicitly excluded from
+    `copy_substrate.sh`, so any properly set-up target will NOT have it.
+    Therefore its presence uniquely identifies a gan-harness source repo.
     """
-    return (path / "docs" / "maintainer" / "design" / "agent-prompt-doctrine.md").is_file()
+    return (path / ".claude" / "skills" / "setup-gan-harness-skills" / "SKILL.md").is_file()
 
 
-def specs_batch_non_empty(target: Path) -> bool:
-    """Return True iff specs/_batch/ has files other than .gitkeep."""
-    batch = target / "specs" / "_batch"
-    if not batch.is_dir():
+def specs_epic_non_empty(target: Path) -> bool:
+    """Return True iff specs/_epic/ has files other than .gitkeep."""
+    epic = target / "specs" / "_epic"
+    if not epic.is_dir():
         return False
-    for entry in batch.iterdir():
+    for entry in epic.iterdir():
         if entry.name != ".gitkeep":
             return True
     return False
@@ -88,10 +88,10 @@ def main() -> int:
         )
         return 1
 
-    if specs_batch_non_empty(target):
+    if specs_epic_non_empty(target):
         print(
-            "ERROR: specs/_batch/ has live batch artefacts. Finish "
-            "/finalize or clear the batch before re-running setup.",
+            "ERROR: specs/_epic/ has live epic artefacts. Finish "
+            "/finalize or clear the epic before re-running setup.",
             file=sys.stderr,
         )
         return 1
@@ -114,7 +114,7 @@ def main() -> int:
     print(f"HAS_AGENTS_MD={'true' if has_agents_md else 'false'}")
     print(f"HAS_DOT_CLAUDE=false")
     print(f"HAS_README={'true' if has_readme else 'false'}")
-    print(f"BATCH_NON_EMPTY=false")
+    print(f"EPIC_NON_EMPTY=false")
     return 0
 
 

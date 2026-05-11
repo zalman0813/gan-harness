@@ -10,29 +10,29 @@ Behaviour:
     - When specs/_batch/_traces/current-context.json is absent or malformed
       → exit 0 (allow normal maintainer commits outside a live batch).
     - When the file is present with feature + round → run the gate over
-      the active stack skill's sensors.ini commands:
+      the active stack skill's `## Commands` markdown table (parsed via
+      `.claude/scripts/parse_stack_commands.py`):
           Stage 1 (autofix in place):
-              [lint] fix          via stack's sensors.ini
+              lint.fix
           Stage 2 (read-only verification):
-              [lint] check        via stack's sensors.ini
-              [typecheck] command via stack's sensors.ini
-              [test] unit         via stack's sensors.ini, scope=changed-files
-              ac_coverage         INLINE — every AC literal appears in a test
-                                  body, eval_anchors string match, and for
-                                  `kind: negative` ACs the must_not literal
-                                  is paired with an absence-assertion.
+              lint.check
+              typecheck
+              test.unit            scope=changed-files
+              ac_coverage          INLINE — every AC literal appears in a test
+                                   body, eval_anchors string match, and for
+                                   `kind: negative` ACs the must_not literal
+                                   is paired with an absence-assertion.
 
 Exit codes:
     0  PASS or short-circuit (commit allowed)
     1  any stage FAIL (commit aborted)
-    2  script error (sensors.ini missing, stack skill missing, malformed
+    2  script error (parser missing, stack skill missing, malformed
        feature-list.json) — also aborts the commit because we are inside
        a live batch and cannot verify
 """
 from __future__ import annotations
 
 import ast
-import configparser
 import json
 import re
 import subprocess
@@ -73,31 +73,56 @@ def _read_context(project_dir: Path) -> tuple[str, int] | None:
 
 
 # ---------------------------------------------------------------------------
-# sensors.ini reader
+# Stack command reader — delegates to .claude/scripts/parse_stack_commands.py
+# (single source of truth: the stack skill's `## Commands` markdown table).
 # ---------------------------------------------------------------------------
 
-def _read_sensor(stack: Path, section: str, key: str) -> str:
-    parser = configparser.ConfigParser(interpolation=None, allow_no_value=True)
-    if not parser.read(stack / "sensors.ini", encoding="utf-8"):
-        return ""
-    if not parser.has_section(section) or not parser.has_option(section, key):
-        return ""
-    return parser.get(section, key) or ""
+def _parser_path(project_dir: Path) -> Path:
+    return project_dir / ".claude" / "scripts" / "parse_stack_commands.py"
 
 
-def _render_sensor(template: str, **subs: str) -> str:
-    out = template
-    for k, v in subs.items():
-        out = out.replace("{" + k + "}", str(v))
-    return out
+def _stack_command(project_dir: Path, key: str, scope: str) -> str:
+    """Resolve a stack command via the shared parser. Returns empty string
+    if the parser is missing, the key is missing, or the call fails — the
+    caller treats empty as 'skip this stage'."""
+    helper = _parser_path(project_dir)
+    if not helper.is_file():
+        return ""
+    try:
+        out = subprocess.run(
+            [
+                sys.executable, str(helper),
+                "--project-dir", str(project_dir),
+                "--key", key,
+                "--scope", scope,
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return ""
+    if out.returncode != 0:
+        return ""
+    return out.stdout.strip()
 
 
 def _find_stack(project_dir: Path) -> Path | None:
+    """Locate the active stack skill by scanning for SKILL.md with a
+    `## Commands` heading. Mirrors parse_stack_commands.py auto-detect.
+    Used here only for the printed 'stack=<name>' banner; command resolution
+    goes through the parser directly."""
     skills_root = project_dir / ".claude" / "skills"
     if not skills_root.is_dir():
         return None
+    cmds_re = re.compile(r"^##\s+Commands\s*$", re.MULTILINE)
     for d in sorted(skills_root.iterdir()):
-        if d.is_dir() and (d / "sensors.ini").is_file():
+        skill = d / "SKILL.md"
+        if not skill.is_file():
+            continue
+        try:
+            text = skill.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if cmds_re.search(text):
             return d
     return None
 
@@ -128,13 +153,13 @@ def _run_shell(label: str, cmd: str, project_dir: Path) -> int:
     print()
     print(f"▶ {label}")
     if not cmd or not cmd.strip():
-        print("  (skipped: sensors.ini value empty)")
+        print("  (skipped: command empty in stack's `## Commands` table)")
         return 0
     print(f"  $ {cmd}")
     try:
         rc = subprocess.run(cmd, shell=True, cwd=project_dir, timeout=240).returncode
     except subprocess.TimeoutExpired:
-        print("  ✗ FAIL (subprocess timeout 240s — check sensors.ini for watch-mode / TTY hangs)")
+        print("  ✗ FAIL (subprocess timeout 240s — check the `## Commands` row for watch-mode / TTY hangs)")
         return 1
     except (subprocess.SubprocessError, OSError) as exc:
         print(f"  ✗ FAIL (subprocess error: {exc})")
@@ -411,8 +436,18 @@ def main() -> int:
 
     stack = _find_stack(project_dir)
     if stack is None:
-        print(f"ERROR: no .claude/skills/<stack>/sensors.ini under {project_dir}",
-              file=sys.stderr)
+        print(
+            f"ERROR: no .claude/skills/<stack>/SKILL.md with `## Commands` "
+            f"table under {project_dir}",
+            file=sys.stderr,
+        )
+        return 2
+    if not _parser_path(project_dir).is_file():
+        print(
+            f"ERROR: missing {_parser_path(project_dir)} — the substrate copy "
+            f"is incomplete; re-run setup-gan-harness-skills",
+            file=sys.stderr,
+        )
         return 2
 
     scope = _collect_changed_scope(project_dir)
@@ -426,7 +461,7 @@ def main() -> int:
 
     overall = 0
 
-    fix_cmd = _render_sensor(_read_sensor(stack, "lint", "fix"), scope=scope)
+    fix_cmd = _stack_command(project_dir, "lint.fix", scope)
     rc = _run_shell("Stage 1 / lint.fix", fix_cmd, project_dir)
     if rc != 0:
         print()
@@ -436,12 +471,10 @@ def main() -> int:
         return 1
 
     for label, cmd in (
-        ("Stage 2 / lint.check",
-         _render_sensor(_read_sensor(stack, "lint", "check"), scope=scope)),
-        ("Stage 2 / typecheck",
-         _render_sensor(_read_sensor(stack, "typecheck", "command"), scope=scope)),
+        ("Stage 2 / lint.check", _stack_command(project_dir, "lint.check", scope)),
+        ("Stage 2 / typecheck", _stack_command(project_dir, "typecheck", scope)),
         ("Stage 2 / test.unit (scope=changed)",
-         _render_sensor(_read_sensor(stack, "test", "unit"), scope=scope)),
+         _stack_command(project_dir, "test.unit", scope)),
     ):
         if _run_shell(label, cmd, project_dir) != 0:
             overall = 1

@@ -148,8 +148,8 @@ Tell the user:
 - **Red flags without `Source` field** — folklore flags rot. Refuse to write a flag that names no source (even `internal/team-retro-2026-Q1` is acceptable; the constraint is having something to point to).
 - **Auto-creating per-loader slices** — slices are elective per Q4. Default is no slice; the creator must justify each slice it recommends.
 - **Skipping Step 5 (loader registration)** — a handbook with no loader is a dead file. The creator MUST refuse to claim done if any Q3 loader's frontmatter was not updated.
-- **Treating this as a stack-skill-creator clone** — the substrate (distilled doctrine) and validation contract (red-flag schema, loader registration) are different. Don't import stack-skill-creator's `sensors.ini` step or vendoring "verbatim" rule.
-- **Including a sensors.ini** — that is a stack-skill artefact. Approach handbooks have no machine command contract; they're prose-and-tables read by agent prompts.
+- **Treating this as a stack-skill-creator clone** — the substrate (distilled doctrine) and validation contract (red-flag schema, loader registration) are different. Don't import stack-skill-creator's `## Commands` table step or vendoring "verbatim" rule.
+- **Including a `## Commands` table** — that is a stack-skill artefact (the harness gate contract). Approach handbooks have no machine command contract; they're prose-and-tables read by agent prompts.
 
 ## Examples
 
@@ -237,7 +237,7 @@ Creator:
 
 ## What's intentionally NOT in this skill
 
-- **No `sensors.ini`** — that is a stack-skill artefact; approach handbooks have no machine contract.
+- **No `## Commands` table** — that is a stack-skill artefact (the harness gate contract); approach handbooks have no machine contract.
 - **No vendoring of verbatim official docs** — distillation is the substrate; if the user wants verbatim docs they want a stack skill, not a handbook.
 - **No automatic loader inference** — loaders MUST be explicit (Q3); the creator does not guess from the methodology name.
 - **No slice auto-creation** — slices are elective per loader (Q4); default is no slice with foundation-only consumption.

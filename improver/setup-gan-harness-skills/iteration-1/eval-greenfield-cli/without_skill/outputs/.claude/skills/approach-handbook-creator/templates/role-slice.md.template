@@ -1,0 +1,46 @@
+# <Methodology Name> — <Role> Slice
+
+You are the <role> agent. You have already read `references/foundation.md`. This slice tells you what the foundation's principles translate to inside YOUR stage's actions. It does NOT redefine terms or restate red flags — it points at them and applies them.
+
+If you find yourself reading this slice without having read `foundation.md`, stop. Read foundation first; the definitions and red-flag schema are not duplicated here.
+
+If you find yourself reading another role's slice (e.g. you are <role> but reading `<other-role>-slice.md`), stop. Slices are role-isolated. Reading the wrong slice leaks the wrong agent's concerns into your context and biases your judgment.
+
+## Decision points in your stage
+
+| Decision point in <role>'s stage | Foundation reference | Your action |
+|---|---|---|
+| <decision-1, e.g. "About to write the failing test"> | foundation §<N> | <one-sentence stage-specific action> |
+| <decision-2> | foundation §<N> RF-<id> | <one-sentence stage-specific action> |
+| <decision-3> | foundation §<N> | <one-sentence stage-specific action> |
+
+## §1 <First decision point in detail>
+
+<2–4 paragraphs explaining how to apply the foundation at this decision point. Reference the foundation by section/red-flag id; do not restate definitions. If you need to introduce a stage-specific term not in foundation, propose adding it to foundation rather than defining it here — slice-level terms drift away from cross-role consistency.>
+
+**Concrete example for <role>**:
+
+```
+<example showing the action in this role's actual artefact format —
+e.g., for generator: code + test diff;
+for planner: feature-list.json fragment;
+for evaluator: eval JSON verdict shape>
+```
+
+**When this collides with another foundation principle**: <how to resolve. E.g., "If foundation §2 says X but red flag RF-3 fires, prefer RF-3's recommendation because <reason>. Open an open_question to surface the conflict to the user.">
+
+## §2 <Second decision point in detail>
+
+<as above>
+
+## §3 <Third decision point in detail>
+
+<as above>
+
+## What this slice does NOT cover
+
+- <explicit non-coverage 1 — e.g. "How to pick the test framework — that is in the active stack skill, not here">
+- <explicit non-coverage 2 — e.g. "Whether the feature itself is a vertical slice — that is planner's call, raised in foundation §Applicability if it fires">
+- <explicit non-coverage 3>
+
+If a decision arises that is not in the table above and not in foundation, this slice does not bind your behaviour for that decision. Use your role's main agent prompt (`.claude/agents/<role>.md`) and the active stack skill instead. When in doubt, open an open_question rather than guess.

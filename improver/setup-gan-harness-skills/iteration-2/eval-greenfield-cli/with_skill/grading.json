@@ -1,0 +1,102 @@
+{
+  "expectations": [
+    {
+      "text": "Target has .claude/agents/{planner,generator,evaluator,codebase-fact-finder}.md present after setup",
+      "passed": true,
+      "evidence": "All 4 paths present: ['.claude/agents/planner.md', '.claude/agents/generator.md', '.claude/agents/evaluator.md', '.claude/agents/codebase-fact-finder.md']",
+      "id": "a01",
+      "blocking": true
+    },
+    {
+      "text": "Target does NOT have .claude/skills/setup-gan-harness-skills/ (excluded from copy)",
+      "passed": true,
+      "evidence": "All 1 paths correctly absent",
+      "id": "a02",
+      "blocking": true
+    },
+    {
+      "text": "Target has v3.8 commands (init.md, loop.md, finalize.md) and NOT v1 commands (prd.md, plan.md, execution-loop.md)",
+      "passed": true,
+      "evidence": "present=['.claude/commands/init.md', '.claude/commands/loop.md', '.claude/commands/finalize.md'] absent=['.claude/commands/prd.md', '.claude/commands/plan.md', '.claude/commands/execution-loop.md'] all OK",
+      "id": "a03",
+      "blocking": true
+    },
+    {
+      "text": "Target has v3.8 workflow skills (init-workflow, harness-loop, finalize-workflow) and NOT v1 (prd-workflow, plan-workflow, escalation)",
+      "passed": true,
+      "evidence": "present=['.claude/skills/init-workflow/SKILL.md', '.claude/skills/harness-loop/SKILL.md', '.claude/skills/finalize-workflow/SKILL.md'] absent=['.claude/skills/prd-workflow/', '.claude/skills/plan-workflow/', '.claude/skills/escalation/'] all OK",
+      "id": "a04",
+      "blocking": true
+    },
+    {
+      "text": "Target has CLAUDE.md or AGENTS.md with ### Domain docs block",
+      "passed": true,
+      "evidence": "regex matched in: ['CLAUDE.md']",
+      "id": "a05",
+      "blocking": true
+    },
+    {
+      "text": "Target has README.md referencing /init (not /prd)",
+      "passed": true,
+      "evidence": "regex '/init' matched all paths",
+      "id": "a06",
+      "blocking": false
+    },
+    {
+      "text": "Target has README.md NOT referencing v1 commands /prd /plan /execution-loop",
+      "passed": true,
+      "evidence": "regex '/prd|/plan |/execution-loop' correctly absent from all paths",
+      "id": "a07",
+      "blocking": false
+    },
+    {
+      "text": "Target has empty container sentinels: specs/_epic/.gitkeep + specs/epics/.gitkeep (NOT specs/_batch/, NOT specs/completed/)",
+      "passed": true,
+      "evidence": "present=['specs/_epic/.gitkeep', 'specs/epics/.gitkeep'] absent=['specs/_batch/', 'specs/completed/'] all OK",
+      "id": "a08",
+      "blocking": true
+    },
+    {
+      "text": "A python-related stack skill is present at .claude/skills/<name>/ where <name> \u2208 {python, python-cli, python-stdlib, kvstore-stack}",
+      "passed": true,
+      "evidence": "matched: ['.claude/skills/python-cli/SKILL.md', '.claude/skills/playwright-cli/SKILL.md', '.claude/skills/python-cli/SKILL.md']",
+      "id": "a09",
+      "blocking": true
+    },
+    {
+      "text": "Agent frontmatter has the stack skill wired: planner.md, generator.md, evaluator.md skills: list contains the python stack skill name",
+      "passed": true,
+      "evidence": "frontmatter[skills] contains 'python' in all of ['.claude/agents/planner.md', '.claude/agents/generator.md', '.claude/agents/evaluator.md']",
+      "id": "a10",
+      "blocking": false
+    },
+    {
+      "text": "block_pretool.py is present and references spec.md immutability rule",
+      "passed": true,
+      "evidence": "regex 'specs/_epic/spec\\\\.md|SPEC_PATH_RE|spec\\\\.immutable' matched all paths",
+      "id": "a11",
+      "blocking": true
+    },
+    {
+      "text": ".claude/schemas/spec.schema.md and contract.schema.json exist",
+      "passed": true,
+      "evidence": "All 2 paths present: ['.claude/schemas/spec.schema.md', '.claude/schemas/contract.schema.json']",
+      "id": "a12",
+      "blocking": true
+    },
+    {
+      "text": "feature-list.schema.json (v1 artifact) is NOT present",
+      "passed": true,
+      "evidence": "All 1 paths correctly absent",
+      "id": "a13",
+      "blocking": false
+    }
+  ],
+  "summary": {
+    "passed": 13,
+    "failed": 0,
+    "total": 13,
+    "pass_rate": 1.0,
+    "blocking_failed": 0
+  }
+}

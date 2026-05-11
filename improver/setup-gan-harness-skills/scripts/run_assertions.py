@@ -105,6 +105,23 @@ def assert_any_file_exists(
     return (False, f"no files matched globs: {paths_glob}")
 
 
+def assert_dir_file_count(
+    target: Path,
+    path_glob: str,
+    min_count: int | None = None,
+    max_count: int | None = None,
+) -> tuple[bool, str]:
+    """Count files matching a single glob and check against bounds."""
+    matches = list(target.glob(path_glob))
+    n = len(matches)
+    names = [str(p.relative_to(target)) for p in matches]
+    if min_count is not None and n < min_count:
+        return (False, f"only {n} files matched {path_glob!r} (need ≥{min_count}): {names}")
+    if max_count is not None and n > max_count:
+        return (False, f"{n} files matched {path_glob!r} (need ≤{max_count}): {names}")
+    return (True, f"{n} files matched {path_glob!r}: {names}")
+
+
 def assert_yaml_frontmatter_contains(
     target: Path, paths: list[str], yaml_path: str, value_regex: str
 ) -> tuple[bool, str]:
@@ -156,6 +173,9 @@ KIND_DISPATCH = {
     ),
     "any_file_exists": lambda target, a: assert_any_file_exists(
         target, a["paths_glob"]
+    ),
+    "dir_file_count": lambda target, a: assert_dir_file_count(
+        target, a["path_glob"], a.get("min"), a.get("max")
     ),
     "yaml_frontmatter_contains": lambda target, a: assert_yaml_frontmatter_contains(
         target, a["paths"], a["yaml_path"], a["value_regex"]

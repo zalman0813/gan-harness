@@ -1,0 +1,17 @@
+{
+  "skill_name": "stack-skill-creator",
+  "evals": [
+    {
+      "id": 1,
+      "name": "aws-strands",
+      "prompt": "Add AWS Strands Agents (Anthropic-recommended Python framework for building model-driven AI agents — https://strandsagents.com/) as a new stack to gan-harness. Vendor from the official documentation. Scope: Starter (3-5 seed topics).",
+      "expected_output": "A new stack skill at .claude/skills/aws-strands/ with SKILL.md (frontmatter name=aws-strands + description; index of references), references/*.md (3-5 topical files split by topic, not one mega-file), references/upstream.md (provenance for web-fetched material), sensors.ini at top level with all required keys ([lint] fix/check, [typecheck] command, [test] unit) and Python-stack-appropriate commands (Ruff / mypy --strict / pytest).",
+      "files": [],
+      "target_seed": {
+        "type": "empty_dir",
+        "git_initialized": true,
+        "files_pre_seeded": []
+      }
+    }
+  ]
+}

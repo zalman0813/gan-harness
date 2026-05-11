@@ -62,7 +62,7 @@ When the user asks to add or edit a principle in any project's CLAUDE.md `## Pri
 
 - Target already has a populated `.claude/` from a prior gan-harness setup
   — manual edits, not a re-run, are the right path
-- Mid-epic (`specs/_epic/` non-empty) — finish or abort the batch first
+- Mid-epic (`specs/_epic/` non-empty) — finish or abort the epic first
 - The user is inside the gan-harness source repo itself
 
 ## Inputs
@@ -70,7 +70,9 @@ When the user asks to add or edit a principle in any project's CLAUDE.md `## Pri
 - **Source path** (asked from user via AskUserQuestion in Section B) —
   absolute path to a gan-harness clone. The skill reads `.claude/`,
   `README.md` excerpt, and validates this path looks like gan-harness
-  (presence of `docs/maintainer/design/agent-prompt-doctrine.md`).
+  (presence of `<source>/.claude/skills/setup-gan-harness-skills/SKILL.md`
+  — that skill is bootstrap-only and excluded from target copies, so
+  its presence uniquely identifies a source checkout).
 - **Target path** = `$PWD` of the Claude Code session.
 - **Templates** under `.claude/skills/setup-gan-harness-skills/templates/`:
   - `README.template.md`
@@ -98,6 +100,39 @@ NOT created (lazy by downstream stages):
 - `target/CODEMAP.md` (created at first /finalize regen)
 - `target/docs/adr/` (created at first /init when planner writes an ADR)
 
+## Invocation context (interactive vs subagent)
+
+This skill runs in one of two contexts. The two branches differ in how
+user input is gathered; the file writes in Phase 4 are identical.
+
+**Interactive mode** — invoked in a main-session Claude with the
+`AskUserQuestion` and `Skill` tools available (the normal `/setup-…`
+flow). Walk Sections A–D one-at-a-time with `AskUserQuestion`. Build
+stack skills in 4b via Mode 1 (`Skill` chain-call to
+stack-skill-creator).
+
+**Subagent mode** — invoked as a `general-purpose` or similar subagent
+that does NOT have `AskUserQuestion` or `Skill` tools. The operator's
+prompt must pre-supply every answer the interactive walk would have
+collected:
+
+- Source path (gan-harness clone absolute path)
+- Project name (kebab-case slug)
+- One-line description
+- Memory file choice (`CLAUDE.md` or `AGENTS.md`)
+- Stack list (canonical names from Section D's table — operator names
+  them explicitly; no detection-driven question loop)
+
+If any of these is absent from the operator's prompt, ABORT with a
+diagnostic listing what's missing. Do NOT invent defaults for
+load-bearing decisions (stack identity, memory file).
+
+For 4b in subagent mode, use Mode 2 (inline scaffold; see 4b below).
+
+Both modes share Phase 1 preflight, Phase 4 writes, and Phase 5 done
+report verbatim. The only differences are Phase 2 (gather inputs) and
+4b (build mode).
+
 ## Process
 
 ### Phase 1 — Explore (silent)
@@ -116,11 +151,11 @@ Outputs env-style key=value lines:
 - `HAS_AGENTS_MD=true|false`
 - `HAS_DOT_CLAUDE=true|false`
 - `HAS_README=true|false`
-- `BATCH_NON_EMPTY=true|false`  ← non-trivial collision
+- `EPIC_NON_EMPTY=true|false`  ← non-trivial collision
 
-If `BATCH_NON_EMPTY=true` → ABORT immediately with:
-"specs/_epic/ has live batch artefacts. Finish /finalize or remove
-the batch before re-running setup."
+If `EPIC_NON_EMPTY=true` → ABORT immediately with:
+"specs/_epic/ has live epic artefacts. Finish /finalize or remove
+the epic before re-running setup."
 
 If `HAS_DOT_CLAUDE=true` → ABORT:
 "target already has .claude/. setup is for fresh targets; manual edits
@@ -139,9 +174,12 @@ the user can act on without reading docs.
 `AskUserQuestion(header="Source", question="Absolute path to gan-harness clone?")`.
 Free-text answer.
 
-Validate: `<source>/docs/maintainer/design/agent-prompt-doctrine.md` exists.
-If not, re-ask ("That doesn't look like a gan-harness checkout — try again
-or Cancel.").
+Validate: `<source>/.claude/skills/setup-gan-harness-skills/SKILL.md`
+exists. If not, re-ask ("That doesn't look like a gan-harness checkout
+— try again or Cancel."). This marker is reliable because the
+setup-gan-harness-skills directory is bootstrap-only and excluded from
+target copies, so any well-formed target will NOT have it; only a
+genuine source checkout will.
 
 #### Section B — Project identity
 
@@ -166,7 +204,13 @@ Branch on Phase 1's `HAS_CLAUDE_MD` / `HAS_AGENTS_MD`:
 - both exist → ABORT (Pocock rule: never have both; ask user to pick one
   manually before re-running)
 
-#### Section D — Stacks (detect + chain-call)
+#### Section D — Stacks (detect-only, decisions collected for Phase 4)
+
+**This section does NOT build any stack skill.** It only records the
+user's stack decisions. Actual stack-skill creation happens in Phase 4b,
+after `copy_substrate.sh` has built `target/.claude/skills/`. (Running
+stack-skill-creator before 4a would write into `target/.claude/skills/`
+and then 4a would ABORT because `target/.claude/` already exists.)
 
 Run stack detection:
 
@@ -178,22 +222,42 @@ python3 .claude/skills/setup-gan-harness-skills/scripts/detect_stacks.py \
 Output: JSON list of `{manifest, suggested_skill_name, evidence}`.
 
 For each detected stack, AskUserQuestion:
-- **Confirm** — chain-call stack-skill-creator with the suggested name
-- **Rename** — user provides corrected skill name; chain-call with that
+- **Confirm** — record the suggested name for Phase 4b
+- **Rename** — user provides corrected skill name; record that
 - **Skip** — don't build a stack skill for this manifest
 
-If detection found zero manifests, AskUserQuestion: "No stack detected.
-Skip stack wiring for now (you can run stack-skill-creator manually
-later) / Force a stack name (advanced)?".
+**Canonical stack skill names** (use these verbatim — `detect_stacks.py`
+emits these from `suggested_skill_name`; if the user types a name, gently
+nudge them to the canonical form when there's an obvious match):
 
-For each confirmed/renamed stack:
+| Stack | Canonical name |
+|---|---|
+| Python — stdlib library | `python-stdlib` |
+| Python — CLI app (argparse / click / typer) | `python-cli` |
+| Python — FastAPI service | `python-fastapi` |
+| Python — Django service | `python-django` |
+| Python — Flask service | `python-flask` |
+| Python — data pipeline | `python-data` |
+| Python — generic (no framework detected) | `python` |
+| TypeScript — Next.js frontend | `typescript-nextjs` |
+| TypeScript — React frontend | `typescript-react` |
+| TypeScript — Node service | `typescript` |
+| JavaScript — Express service | `javascript-express` |
+| Go — generic | `go` |
+| Go — Gin service | `go-gin` |
+| Rust — generic | `rust` |
+| Dart — Flutter app | `dart-flutter` |
+| Ruby — Rails app | `ruby-rails` |
+| PHP — Laravel app | `php-laravel` |
 
-```
-Skill(skill="stack-skill-creator", args="--name=<stack-name> --target=$PWD")
-```
+If detection found zero manifests, AskUserQuestion with the closed list
+of canonical names above (plus "Skip stack wiring"). Free-text answers
+are accepted but warn the user if the name doesn't match a known
+canonical (typo risk).
 
-Wait for it to return. Collect all produced stack skill names into
-`STACKS_TO_WIRE` for Phase 4.
+Collect every confirmed/renamed name into `STACKS_TO_BUILD` (an in-memory
+list the SKILL uses in Phase 4b). If user picks Skip for every stack,
+`STACKS_TO_BUILD` is empty — Phase 4b becomes a no-op.
 
 ### Phase 3 — Confirm (show drafts)
 
@@ -202,11 +266,12 @@ Show the user a single confirmation block:
 ```
 Ready to write to <target>:
 
+  .claude/            : copy from <source>/.claude/ (excluding setup-gan-harness-skills/)
+  Stack skills        : <STACKS_TO_BUILD — built in 4b, after .claude/ exists>
   README.md           : <new from template / skip — already exists>
   CLAUDE.md           : <inject ### Domain docs block>
-  .claude/            : copy from <source>/.claude/ (excluding setup-gan-harness-skills/)
-  Stack skills        : <list of names from Section D>
   Wire stacks into    : agents/{planner,generator,evaluator}.md `skills:`
+  Pre-commit hook     : .git/hooks/pre-commit
   Empty containers    : specs/_epic/.gitkeep, specs/epics/.gitkeep
 
 Approve / Edit / Abort
@@ -228,10 +293,78 @@ bash .claude/skills/setup-gan-harness-skills/scripts/copy_substrate.sh \
 ```
 
 Copies `.claude/` from source, with exclusions hard-coded in the script.
-Idempotent: skips files already at destination (Phase 1 guarantees no
-`.claude/` collision, but the script defends anyway).
+The script REFUSES to run if `target/.claude/` already exists (Phase 1
+preflight is supposed to have caught that; defense in depth).
 
-#### 4b. README.md (if not present)
+**Why this is 4a (first):** `target/.claude/skills/` must exist before
+any stack-skill writes to it. Reversing the order — building stack skills
+first — causes `copy_substrate.sh` to abort because `target/.claude/`
+exists.
+
+#### 4b. Stack-skill build (if `STACKS_TO_BUILD` non-empty)
+
+For each `<stack-name>` in `STACKS_TO_BUILD`, invoke stack-skill-creator
+to scaffold `target/.claude/skills/<stack-name>/`.
+
+Two invocation modes; pick the one the current context supports:
+
+**Mode 1 — Skill chain-call (preferred when this SKILL runs in a
+main-session Claude with `Skill` tool available):**
+
+```
+Skill(skill="stack-skill-creator",
+      args="--name=<stack-name> --target=$PWD")
+```
+
+Wait for it to return. The chained skill walks its own Pocock-style
+flow (detect dialect, ask sensors, write `SKILL.md` with `## Commands`
+table + `references/`). The user is in the loop for that skill's
+questions.
+
+**Mode 2 — Inline scaffold (fallback when `Skill` tool isn't available,
+e.g. this SKILL is being followed by a subagent without skill-invocation
+capability):**
+
+Read `<source>/.claude/skills/stack-skill-creator/SKILL.md` directly
+and execute its protocol inline as a subroutine within this run.
+Produce the same outputs as Mode 1: `target/.claude/skills/<stack-name>/SKILL.md`
+(including a `## Commands` markdown table — the harness gate contract),
+`references/`. **Do NOT produce `references/upstream.md` in Mode 2** —
+that file documents web-fetched provenance, and Mode 2 uses inline
+templates (no web fetch).
+
+For each canonical stack name in `STACKS_TO_BUILD`, use the default
+toolchain from this table (these defaults short-circuit the questions
+stack-skill-creator would otherwise ask):
+
+| Stack | CLI framework / entrypoint | Lint | Typecheck | Test |
+|---|---|---|---|---|
+| `python-stdlib` | n/a (library) | Ruff | mypy --strict | pytest |
+| `python-cli` | argparse (stdlib, no extra dep) | Ruff | mypy --strict | pytest |
+| `python-fastapi` | uvicorn + FastAPI router | Ruff | mypy --strict | pytest + httpx |
+| `python-django` | manage.py | Ruff | mypy --strict (django-stubs) | pytest-django |
+| `python-flask` | flask run | Ruff | mypy --strict | pytest |
+| `python-data` | python -m <pkg> (script entry) | Ruff | mypy --strict | pytest |
+| `python` | python -m <pkg> | Ruff | mypy --strict | pytest |
+| `typescript-nextjs` | Next.js app router | Biome | tsc --strict | vitest |
+| `typescript-react` | Vite + React | Biome | tsc --strict | vitest |
+| `typescript` | tsc / tsx | Biome | tsc --strict | vitest |
+| `javascript-express` | express server | Biome | n/a (JSDoc optional) | vitest |
+| `go` | `go run ./cmd/<pkg>` | `go vet` + golangci-lint | (lang built-in) | `go test ./...` |
+| `go-gin` | gin router | golangci-lint | (built-in) | `go test ./...` |
+| `rust` | `cargo run` | clippy | rustc (built-in) | `cargo test` |
+| `dart-flutter` | `flutter run` | dart analyze | (built-in) | flutter test |
+| `ruby-rails` | `bin/rails server` | RuboCop | Sorbet (optional) | RSpec |
+| `php-laravel` | `php artisan serve` | Pint | PHPStan | PHPUnit |
+
+If the canonical name isn't in the table, ABORT with diagnostic: `"No
+canonical inline default for stack '<name>'. Either rename to a known
+canonical, or run setup interactively (Mode 1) so stack-skill-creator
+can walk the user through tool choice."` — do NOT improvise a toolchain.
+
+`STACKS_TO_BUILD` empty → skip 4b entirely.
+
+#### 4c. README.md (if not present)
 
 If `HAS_README=false`, render
 `.claude/skills/setup-gan-harness-skills/templates/README.template.md`
@@ -240,7 +373,7 @@ Write to `$PWD/README.md`.
 
 If `HAS_README=true`, skip (the user owns their README).
 
-#### 4c. Memory file `### Domain docs` block
+#### 4d. Memory file `### Domain docs` block
 
 Read
 `.claude/skills/setup-gan-harness-skills/templates/claude-md-skills-block.template.md`
@@ -250,12 +383,15 @@ verbatim (no token substitution; the template is fixed content). Then:
   file (`CLAUDE.md` or `AGENTS.md`), update it in-place. Do not touch
   surrounding sections.
 - Else append the block at the end of the file.
-- If neither memory file exists, create the chosen one with frontmatter
-  + the block.
+- If neither memory file exists, create the chosen one **without any
+  YAML frontmatter** — the memory file is plain markdown that Claude
+  Code reads on session start, not a skill file. Do not add `---`
+  fences. A bare `# <project name>` H1 at the top is optional but
+  recommended for human readability.
 
 This MUST preserve user edits to other sections of the file.
 
-#### 4d. Wire stack skills into agent frontmatter
+#### 4e. Wire stack skills into agent frontmatter
 
 ```
 python3 .claude/skills/setup-gan-harness-skills/scripts/wire_stack_skills.py \
@@ -267,15 +403,17 @@ The script edits frontmatter `skills:` of `planner.md`, `generator.md`,
 `evaluator.md`. Idempotent (won't double-add). Skips
 `codebase-fact-finder.md` (stack-agnostic blindfold research).
 
-If `STACKS_TO_WIRE` is empty (Section D entirely skipped), no-op.
+If `STACKS_TO_BUILD` is empty (Section D entirely skipped), no-op.
 
-#### 4e. Pre-commit hook (the harness gate's only enforcement point)
+#### 4f. Pre-commit hook (the harness gate's only enforcement point)
 
 Install the project's `.git/hooks/pre-commit` so every `git commit`
 automatically runs the gate (lint.fix → lint.check → typecheck →
-test.unit → ac_coverage) over the active stack's `sensors.ini`. The
-hook short-circuits to allow normal maintainer commits when no batch
-is in flight (`specs/_epic/_traces/current-context.json` absent).
+test.unit → ac_coverage) over the active stack's `## Commands` table
+in its SKILL.md. The hook parses the table via
+`.claude/scripts/parse_stack_commands.py` (copied with the substrate).
+The hook short-circuits to allow normal maintainer commits when no
+epic is in flight (`specs/_epic/_traces/current-context.json` absent).
 
 ```
 bash .claude/skills/setup-gan-harness-skills/scripts/install_pre_commit_hook.sh "$PWD"
@@ -288,7 +426,7 @@ hint is printed to stderr.
 This is the SOLE enforcement point — generator agents do not invoke
 the gate manually, and the prompt must not instruct them to.
 
-#### 4f. Empty container sentinels
+#### 4g. Empty container sentinels
 
 ```
 mkdir -p specs/_epic specs/epics
@@ -346,13 +484,14 @@ Next: /init  (start your first epic)
 
 ## Done when
 
-- [ ] Phase 1 preflight clean (no live batch, no `.claude/` collision)
+- [ ] Phase 1 preflight clean (no live epic, no `.claude/` collision)
 - [ ] Sections A–D walked; each answer recorded
 - [ ] Phase 3 confirm Approve received
-- [ ] `.claude/` copied (minus setup-gan-harness-skills, `__pycache__`)
-- [ ] README.md present (template-rendered or pre-existing)
-- [ ] CLAUDE.md or AGENTS.md has `### Domain docs` block
-- [ ] Stack skills (if any) built + wired into agent frontmatter
-- [ ] `.git/hooks/pre-commit` installed + executable
-- [ ] `specs/_epic/.gitkeep` + `specs/epics/.gitkeep` present
+- [ ] 4a `.claude/` copied (minus setup-gan-harness-skills, `__pycache__`)
+- [ ] 4b stack skills built into `target/.claude/skills/<name>/` (if any)
+- [ ] 4c README.md present (template-rendered or pre-existing)
+- [ ] 4d CLAUDE.md or AGENTS.md has `### Domain docs` block (no YAML frontmatter added)
+- [ ] 4e stack names wired into planner/generator/evaluator frontmatter
+- [ ] 4f `.git/hooks/pre-commit` installed + executable
+- [ ] 4g `specs/_epic/.gitkeep` + `specs/epics/.gitkeep` present
 - [ ] Final report printed; `/init` suggested

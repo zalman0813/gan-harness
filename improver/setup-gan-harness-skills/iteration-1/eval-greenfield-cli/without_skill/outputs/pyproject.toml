@@ -1,0 +1,45 @@
+[project]
+name = "kvstore"
+version = "0.1.0"
+description = "A small kv-store inspector for local JSON config files."
+requires-python = ">=3.11"
+readme = "README.md"
+authors = [{ name = "kvstore maintainers" }]
+license = { text = "MIT" }
+
+[project.scripts]
+kvstore = "kvstore.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.10",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Ruff config — kept terse; the stack skill is the source of intent.
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# mypy config — strict mode is the default per the python-cli stack skill.
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+
+# Pytest config — tests live under tests/, importable thanks to src/ layout.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

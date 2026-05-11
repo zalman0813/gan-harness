@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gan-harness/schemas/contract.schema.json",
+  "title": "Sprint Contract Entry",
+  "description": "One line of specs/_epic/contracts.jsonl. Append-only log of per-sprint contracts negotiated between generator and evaluator. Lifecycle: agreed (after negotiation) -> completed (after evaluator QA passes) -> amended (rare, only when implementation reveals contract issue and evaluator approves the amendment). Each line is independent JSON.",
+  "type": "object",
+  "required": ["contract_id", "sprint", "phase", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_id": {
+      "type": "string",
+      "pattern": "^C-S[0-9]{2}-v[0-9]+$",
+      "description": "Contract identifier. Format: C-S{NN}-v{N} where S{NN} matches sprint id and v{N} is the negotiation revision (v1 first agreement, v2+ if amended). Same contract_id appears across phase transitions."
+    },
+    "sprint": {
+      "type": "string",
+      "pattern": "^S[0-9]{2}$",
+      "description": "Sprint id this contract covers. Must match a sprint in spec.md sprint plan."
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["agreed", "completed", "amended"],
+      "description": "Lifecycle state. agreed: negotiation done, generator may begin implementation. completed: evaluator QA passed all thresholds. amended: contract was revised mid-sprint (a new entry with same contract_id and incremented v in contract_id captures the amendment)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp when this entry was appended."
+    },
+    "features_covered": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^F[0-9]{2,3}$" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "F-ids from spec.md this sprint delivers. Required for phase=agreed."
+    },
+    "done_looks_like": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 10 },
+      "minItems": 1,
+      "description": "Human-readable bulleted statements of what 'done' means for this sprint, per Anthropic v2 negotiation. Required for phase=agreed. Each statement should be a behavioral outcome, not an implementation note."
+    },
+    "verification_plan": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/verification_step" },
+      "minItems": 1,
+      "description": "Concrete, executable steps the evaluator runs to verify done_looks_like. Required for phase=agreed. Each step has a unique id (vp-NN) referenced by criterion_mapping."
+    },
+    "criterion_mapping": {
+      "type": "object",
+      "patternProperties": {
+        "^.+$": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^vp-[0-9]{2,3}$" },
+          "minItems": 1,
+          "description": "verification_plan step ids that contribute evidence for this criterion."
+        }
+      },
+      "minProperties": 4,
+      "maxProperties": 4,
+      "description": "Maps each of the 4 evaluation criteria (from spec.md) to the verification_plan steps that exercise it. All 4 criteria from spec.md MUST appear as keys. Required for phase=agreed."
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "playwright_must_pass": {
+          "oneOf": [
+            { "const": "all" },
+            { "type": "string", "pattern": "^>=[0-9]+%$" }
+          ]
+        },
+        "api_must_pass": {
+          "oneOf": [
+            { "const": "all" },
+            { "type": "string", "pattern": "^>=[0-9]+%$" }
+          ]
+        },
+        "test_must_pass": {
+          "oneOf": [
+            { "const": "all" },
+            { "type": "string", "pattern": "^>=[0-9]+%$" }
+          ]
+        },
+        "matrix_must_pass": {
+          "oneOf": [
+            { "const": "all" },
+            { "type": "string", "pattern": "^>=[0-9]+%$" }
+          ]
+        },
+        "per_criterion": {
+          "type": "object",
+          "patternProperties": {
+            "^.+$": { "type": "string", "pattern": "^>=[0-9]+%?$" }
+          },
+          "description": "Optional per-criterion threshold overrides. Default is 'all required-pass' for hard criteria."
+        }
+      },
+      "description": "Hard thresholds for sprint completion. Any threshold below pass = sprint FAIL = generator gets feedback. Required for phase=agreed."
+    },
+    "evidence_ref": {
+      "type": "string",
+      "pattern": "^_traces/.+\\.jsonl(:L[0-9]+-L[0-9]+)?$",
+      "description": "Pointer to runtime evidence (Claude Code transcript slice) that backs this completion. Required for phase=completed."
+    },
+    "amendment_reason": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Why the contract was amended (e.g., 'spec referenced /api/v1 but planner intended /api/v2'). Required for phase=amended."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "phase": { "const": "agreed" } } },
+      "then": {
+        "required": ["features_covered", "done_looks_like", "verification_plan", "criterion_mapping", "thresholds"]
+      }
+    },
+    {
+      "if": { "properties": { "phase": { "const": "completed" } } },
+      "then": {
+        "required": ["evidence_ref"]
+      }
+    },
+    {
+      "if": { "properties": { "phase": { "const": "amended" } } },
+      "then": {
+        "required": ["features_covered", "done_looks_like", "verification_plan", "criterion_mapping", "thresholds", "amendment_reason"]
+      }
+    }
+  ],
+
+  "$defs": {
+    "verification_step": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^vp-[0-9]{2,3}$",
+          "description": "Step id, unique within this contract. Referenced by criterion_mapping."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["playwright", "api", "test", "matrix", "manual"],
+          "description": "What kind of verification. playwright: end-to-end browser flow. api: HTTP request/response. test: unit/integration test runner. matrix: deterministic sensor (perf/race/locale/sca/secret/mutation). manual: human verification (rare, only for vision/aesthetic checks the evaluator can't automate)."
+        },
+        "steps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered steps for kind=playwright|api|manual. Each step is a discrete action or assertion."
+        },
+        "path": {
+          "type": "string",
+          "description": "File path for kind=test (e.g., 'tests/test_project.py')."
+        },
+        "checks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sensor checks for kind=matrix (e.g., ['perf:budget', 'mutation:>=0.75'])."
+        },
+        "expected_outcome": {
+          "type": "string",
+          "description": "Optional: explicit pass criterion. Default is 'all steps succeed' for playwright/api/manual; 'exit 0' for test; 'all checks pass' for matrix."
+        }
+      }
+    }
+  }
+}
