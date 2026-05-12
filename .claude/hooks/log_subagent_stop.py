@@ -290,6 +290,29 @@ def _parse_tech_stack(spec_text: str) -> list[str]:
     return stacks
 
 
+def _infer_worktree_dir(stats: dict, fallback: Path) -> Path:
+    """Best-effort guess at the subagent's actual working dir.
+
+    Native subagents inherit CLAUDE_PROJECT_DIR from the parent session,
+    which is the main repo root; but the subagent may have been told to
+    write to a worktree. Inspect files_written / files_read for any path
+    ending in `/specs/_epic/spec.md` (or `/specs/_epic/contracts.jsonl`)
+    and use its prefix as the working dir. Falls back to `fallback`
+    (= CLAUDE_PROJECT_DIR) when no signal is present.
+    """
+    candidates: list[str] = []
+    candidates += list(stats.get("files_written") or [])
+    candidates += list(stats.get("files_read") or [])
+    for p in candidates:
+        for marker in ("/specs/_epic/spec.md",
+                       "/specs/_epic/contracts.jsonl"):
+            if p.endswith(marker):
+                cand = Path(p[: -len(marker)])
+                if (cand / "specs" / "_epic").is_dir():
+                    return cand
+    return fallback
+
+
 def _audit_stack_discovery(stats: dict, project_dir: Path) -> dict:
     """Verify the agent Read each stack SKILL.md named in spec.md.
 
@@ -298,6 +321,11 @@ def _audit_stack_discovery(stats: dict, project_dir: Path) -> dict:
     `.claude/skills/<stack>/SKILL.md` in the agent's files_read set, OR
     spec.md / Tech stack is absent (audit not required).
     """
+    # Native head-to-head: parent session's CLAUDE_PROJECT_DIR is the main
+    # repo, but the subagent may have been steered to a worktree. Try to
+    # locate the real spec.md from files_written/files_read before falling
+    # back to the parent dir.
+    project_dir = _infer_worktree_dir(stats, project_dir)
     spec = project_dir / "specs" / "_epic" / "spec.md"
     if not spec.is_file():
         return {"required": False, "satisfied": True,
@@ -589,10 +617,17 @@ def main() -> int:
         progress_tsv: Path | None = project_dir / "specs" / "_epic" / "progress.tsv"
         usage_json: Path | None = trace_dir / f"{feature}-{prefix}-usage-R{round_int}.json"
     else:
+        # Fallback path: harness-loop didn't write current-context.json.
+        # Still write progress.tsv + usage JSON so head-to-head experiments
+        # have a single source of truth — feature/round are unknown so we
+        # tag them and rely on `agent_variant` + the timestamped trace
+        # filename to disambiguate rows.
         ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         out_md = trace_dir / f"{agent_type}-{ts}.md"
-        progress_tsv = None
-        usage_json = None
+        progress_tsv = project_dir / "specs" / "_epic" / "progress.tsv"
+        usage_json = trace_dir / f"{agent_type}-{ts}-usage.json"
+        feature = "PENDING"  # progress.tsv `feature` column placeholder
+        # round_int stays at 0
 
     out_md.write_text(
         _render_trace_markdown(agent_type, feature or "PENDING", round_int, trace, stats),

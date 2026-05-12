@@ -44,6 +44,12 @@ This step is **observable**: SubagentStop hook records every stack
 SKILL.md Read and writes `## Audit — stack discovery` to your trace +
 `stack_audit` cell to `specs/_epic/progress.tsv`. Skipping = audit FAIL.
 
+**Per-invocation, not per-epic.** This discovery runs on EVERY
+invocation, including R2/R3+ review rounds and re-verifies. Do NOT
+cache "I read it last round so I'll skip this time" — each subagent
+starts a fresh context, the hook audits per-invocation, and a 2-round
+negotiation produces 2 separate audits both of which must PASS.
+
 ## Mode 1 — REVIEW_CONTRACT (Phase 1 of /loop)
 
 The generator has written `_pending/S{NN}-draft-v{R}.yaml`. You issue `approve`, `amend_request`, or `reject`.

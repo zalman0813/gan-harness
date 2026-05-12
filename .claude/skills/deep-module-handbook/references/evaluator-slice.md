@@ -98,6 +98,27 @@ For each module item, walk this checklist:
   back item for non-opt-out modules; the evaluator can request it
   be added or accept its absence with a recorded rationale.
 
+### Evidence parsimony (cite only what informed your verdict)
+
+The bullets above are **vocabulary, not a walk-all checklist**. Cite
+the criteria and flags that genuinely informed your position; silent
+criteria stay silent.
+
+Especially when emitting APPROVE on a clean contract — citing
+**2-3 most load-bearing criteria** (typically C1 + C4 + one of
+C5/C6/C7, plus any §5 red-flag *silences* if those were the load-
+bearing absences) beats enumerating all 8 PASSes. Foundation §3.5
+"How to use" warns: "If a module is obviously deep, citing C1+C2+C4
+is enough; not every module needs an 8-criterion narrative." Eight
+PASSes in a row produces equally-confident-looking citations for
+items you actually verified and items you pattern-matched on — the
+false-symmetry failure mode.
+
+The same parsimony applies to REQUEST_CHANGES (cite only the
+failing criteria + the load-bearing PASSes for what you accept) and
+REJECT (cite the structural failure that makes amendment
+insufficient).
+
 ### Where to write the review feedback
 
 This slice is content-shape only — it does NOT prescribe the file
@@ -161,6 +182,40 @@ git diff).
    `boundary_type: acl-needed`, an ACL must exist in the impl at
    the named boundary. If `internal`, no cross-BC translation
    should be necessary. Emit `boundary_type_honest` per module.
+
+### Vacuous-pass detection on matrix sensors
+
+The C7 `interface-stability:rename-internal-helper-…-tests-still-pass`
+sensor is **structurally vacuous** for modules that have zero internal
+helpers — there is nothing to rename, so the assertion is true by
+absence rather than by depth. Recording such a module as
+`interface-stability: PASS` hides the fact that C7 was never
+meaningfully exercised.
+
+When verifying a matrix sensor row:
+
+1. **Count internal helpers** in the module's git diff (private
+   functions, leading-underscore names, nested defs not exported).
+2. **If 0 internal helpers AND 1 public entry point**, the
+   interface-stability sensor is vacuous. Record it in
+   `matrix_sensor_notes.<module>.interface_stability` as `"N/A —
+   single public function, no helpers to rename"` and do NOT set the
+   top-level `matrix_sensor["interface-stability"]` boolean to `true`
+   solely on this module's behalf. If at least one other module in
+   the sprint has internal helpers and survives a real rename, the
+   sensor's top-level boolean reflects that module; if no module in
+   the sprint has internal helpers at all, set the top-level boolean
+   to `null` (rendered as `N/A` in trace) and surface a `kind: hint`
+   finding so the next sprint knows the sensor was inapplicable.
+
+Apply the same logic to any other sensor whose assertion is
+structurally vacuous given the module's actual shape (e.g.
+`race:stress` against a stateless one-shot CLI is vacuous-PASS — there
+is no shared state to race on; record `race:stress: N/A`, not PASS).
+
+The principle: a sensor that fires only because the target is too
+small to falsify it is not evidence the module is robust — it is
+evidence the sensor is inapplicable.
 
 ### The narrative review (per module)
 
