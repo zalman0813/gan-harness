@@ -167,8 +167,13 @@ Rules for findings:
 4. `git diff HEAD~1..HEAD` (code state)
 5. `CONTEXT.md`, cited ADRs (vocabulary + decisions)
 6. Active stack skill's `references/` (test commands, idioms)
-7. Auto-loaded `deep-module-handbook` (red flags for review),
-   `evaluator-handbook` (review heuristics)
+7. Auto-loaded `deep-module-handbook` and `evaluator-handbook`. Use
+   the first for module-level cognition at both phases — NEGOTIATE
+   (spot-check generator's contract draft per evaluator-slice §1.5
+   using APPROVE / REQUEST_CHANGES / REJECT vocabulary) and VERIFY
+   (three cross-checks + design_review per evaluator-slice §1.6;
+   emit `module_design_verification` array per §7). Use the second
+   for general review heuristics + transcript-as-evidence reading.
 
 ## Tools used beyond core
 

@@ -1,0 +1,102 @@
+{
+  "expectations": [
+    {
+      "text": "review.md exists at output/review.md",
+      "passed": true,
+      "evidence": "All 1 paths present: ['output/review.md']",
+      "id": "a01",
+      "blocking": true
+    },
+    {
+      "text": "Review cites at least 2 PASS criteria by number (C1-C8 from foundation \u00a73.5)",
+      "passed": false,
+      "evidence": "failed_match=['output/review.md'] missing=[]",
+      "id": "a02",
+      "blocking": true
+    },
+    {
+      "text": "Review names at least one specific red flag from foundation \u00a75 (pass-through / decorator-stack / config-leak / exception-leak / temporal-coupling / wrapper-around-stdlib)",
+      "passed": false,
+      "evidence": "failed_match=['output/review.md'] missing=[]",
+      "id": "a03",
+      "blocking": true
+    },
+    {
+      "text": "Review identifies the temporal-coupling specifically (load_config must be called first)",
+      "passed": true,
+      "evidence": "regex 'temporal-coupling|temporal coupling|load_config.*first|first call.*then|ordering constraint' matched all paths",
+      "id": "a04",
+      "blocking": true
+    },
+    {
+      "text": "Review identifies at least one pass-through method (get_user_by_id / get_user_by_email / list_all_users / count_users / user_exists / get_user_count_by_status)",
+      "passed": true,
+      "evidence": "regex 'pass-through|pass through|forward.*to.*repo|trivial wrapper|deletion test' matched all paths",
+      "id": "a05",
+      "blocking": true
+    },
+    {
+      "text": "Review identifies the leaky abstraction (raw SQLAlchemy Row / column-leakage / find_users_by_status_raw)",
+      "passed": true,
+      "evidence": "regex 'leak|leaky|sqlalchemy|raw row|raw.*Row|find_users_by_status_raw|implementation detail.*expose' matched all paths",
+      "id": "a06",
+      "blocking": true
+    },
+    {
+      "text": "Review identifies the entry-point budget violation (12+ public methods vs C4's 1-3 max)",
+      "passed": true,
+      "evidence": "regex 'entry.point|entry point|C4|public method.*too many|bag.of.getters|surface bloat|\u2264.*1-3|1-3.*entry' matched all paths",
+      "id": "a07",
+      "blocking": true
+    },
+    {
+      "text": "Review attributes to at least one primary source (Ousterhout / Parnas / Pocock)",
+      "passed": true,
+      "evidence": "regex 'Ousterhout|Parnas|Pocock|APOSD|Philosophy of Software Design' matched all paths",
+      "id": "a08",
+      "blocking": true
+    },
+    {
+      "text": "Review references the deletion test or interface-as-test-surface concept",
+      "passed": false,
+      "evidence": "failed_match=['output/review.md'] missing=[]",
+      "id": "a09",
+      "blocking": false
+    },
+    {
+      "text": "Review references the broad-interface concept (interface = signature + invariants + ordering + error modes)",
+      "passed": false,
+      "evidence": "failed_match=['output/review.md'] missing=[]",
+      "id": "a10",
+      "blocking": false
+    },
+    {
+      "text": "Review delivers a clear FAIL verdict (the module IS objectively shallow)",
+      "passed": true,
+      "evidence": "regex 'FAIL|fail verdict|verdict.*FAIL|shallow module|not deep|fails C[1-8]' matched all paths",
+      "id": "a11",
+      "blocking": true
+    },
+    {
+      "text": "Review names the config-leak (update_user's opts dict with 12+ fields)",
+      "passed": true,
+      "evidence": "regex 'config-leak|options.*bag|opts.*dict|options object|update_user.*opts' matched all paths",
+      "id": "a12",
+      "blocking": false
+    },
+    {
+      "text": "Review names the exception-leak (delete_user raises 6 distinct exception types including sqlalchemy)",
+      "passed": true,
+      "evidence": "regex 'exception-leak|exception leak|sqlalchemy.*OperationalError|6.*exception|six.*exception|exception types?.*leak' matched all paths",
+      "id": "a13",
+      "blocking": false
+    }
+  ],
+  "summary": {
+    "passed": 9,
+    "failed": 4,
+    "total": 13,
+    "pass_rate": 0.6923076923076923,
+    "blocking_failed": 2
+  }
+}

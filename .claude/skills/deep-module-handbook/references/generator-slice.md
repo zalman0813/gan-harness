@@ -8,28 +8,106 @@ red flags, and DDD calibration.
 
 **Scope reminder:** this slice covers only the deep-module-specific
 generator behaviors. The generator's general behavior (e.g.,
-conservative-default for ambiguity, surfacing open_questions when
-spec is silent) lives inline in `.claude/agents/generator.md`.
+strategic-decide refine-vs-pivot, anti-oscillation, when to call
+`propose_contract` vs `propose_contract_amendment`) lives inline in
+`.claude/agents/generator.md` and in the `generator-handbook` skill.
 
 ## §1 When the generator consults this slice
 
-- Before writing the first line of a new module
-- When the spec hands a `Module: <name>` block from
-  `feature.business_rules` (per `planner-slice.md` §5)
-- Before writing tests for a module
-- When tempted to extract a helper out of an existing module
+The generator engages this slice in **two distinct /loop phases**:
 
-## §2 Implementation order (strict)
+1. **NEGOTIATE phase** (proposing a sprint contract to evaluator,
+   appended to `contracts.jsonl` with `phase: agreed`). See §1.5.
+2. **IMPLEMENT phase** (writing modules + tests after contract is
+   agreed). See §2.
+
+Both phases share `foundation.md`'s vocabulary (§1 definitions, §3.5
+PASS criteria C1-C8, §5 red flags). They differ in the artefact you
+write into: NEGOTIATE writes `done_looks_like[]` narrative + the
+contract itself; IMPLEMENT writes code, tests, and (if needed) a
+`propose_contract_amendment` if implementation reveals the agreed
+contract is wrong.
+
+## §1.5 NEGOTIATE phase — module-level commitments in the sprint contract
+
+In v3.8 there is no separate `module_design` schema field. Module
+boundaries and depth commitments live inside the sprint contract's
+narrative — primarily `done_looks_like[]` and `verification_plan[]`.
+For each module this sprint will touch (new or modified), commit in
+the contract narrative to:
+
+| What to write | PASS criterion | Where it lands in the contract |
+|---|---|---|
+| The module's `hides_decision` (one sentence ≥30 chars naming what design decision it owns; Parnas) | C1 | `done_looks_like[]` item — use the canonical embedding (see "Per-module done_looks_like item shape" below) |
+| Applicability classification (business-logic / cross-system-integration / dto / framework-shaped / hot-path / one-shot — foundation.md §3) | (gate) | Same canonical item. Opt-out classes (`dto` / `framework-shaped` / `hot-path` / `one-shot`) STILL need their own `done_looks_like[]` item naming the module + applicability + one-line role; they only skip the C1-C8 row below |
+| Public-interface entry-point count (≤ 1-3 unless Unix-style genuine multi-use) | C4 | Same canonical item — append `Entry-point budget: N (`fn1`, `fn2`, ...)` |
+| Strategy / DI seam discipline — only commit to a port if ≥2 actual implementations exist OR one + one named imminent with date (Pocock two-adapter rule) | C5 | Same canonical item — append `Strategy seam: <none / interface_name with second_impl name>` |
+| Broad-interface commitments — declare invariants, ordering constraints, and named error modes the module will document in its docstring | C6 | Same canonical item — append `Broad interface: invariants=… ordering=… error_modes=…`. The docstring at IMPLEMENT time mirrors this verbatim. |
+| Bounded-context check — name the BC each module belongs to; if it crosses a BC, name the ACL | — | Same canonical item (or separate item if BC spans multiple modules); ACL is a structural deliverable |
+| `criterion_mapping` key naming (whole-contract concern, not per-module) | — | Keys MUST be the literal criterion names from `spec.md`'s `## Evaluation criteria` headings, case-sensitive. Do NOT lowercase or rename them. Evaluator parses by exact match for the 4-of-4 archetype-criterion coverage check; rename = misroute. |
+| Deletion-test pre-commitment (OPTIONAL — for modules at risk of pass-through smell, e.g. wrapper-shaped or one-method libs) | C3 | If you volunteer C3 reasoning at NEGOTIATE, name the ≥2 distinct callers that would regrow the complexity. **Don't list "tests" as the second caller — that's circular.** If you don't volunteer C3 here, evaluator will check it at VERIFY against the actual git diff. |
+| Interface-as-test-surface sensor (RECOMMENDED for non-opt-out modules) | C7 | `verification_plan[]` step of `kind: matrix` (the canonical kind for binary-outcome sensors). Use `checks: ["interface-stability:rename-internal-helper-in-<module>-tests-still-pass"]`. The check string is the human-readable assertion; the sensor implementation is the matrix runner's job. Don't use `kind: test` — that's for actual test-suite invocations, not meta-assertions about whether tests survive refactors. |
+
+### Per-module done_looks_like item shape (canonical embedding)
+
+Each module the sprint touches gets ONE `done_looks_like[]` item with
+this shape, so the evaluator can parse without ambiguity:
+
+```
+MODULE <path> (applicability: <enum>[; opt-out of C1-C8])
+  hides_decision: '<sentence ≥30 chars>'.
+  Entry-point budget: <N> (`<fn1>`, `<fn2>`, ...).
+  Strategy seam: <none | interface_name + named second impl>.
+  Broad interface: invariants=<…>; ordering=<…>; error_modes=<…>.
+  Bounded context: <ctx-name>[; ACL at <boundary>].
+  [Deletion test (optional): removing this module would force the path-walk + immutable-update logic to regrow in <caller-A> and <caller-B>.]
+```
+
+For opt-out modules (`dto` / `framework-shaped` / `hot-path` /
+`one-shot`), the shape collapses to:
+
+```
+MODULE <path> (applicability: <opt-out-enum> — opt-out of C1-C8 per foundation.md §3 row '<reason>')
+  Role: <one-line description of what wiring/data this module is>.
+```
+
+These don't need C1-C8 commitments because the §3 row says deep-module
+discipline doesn't apply. But they MUST still appear so evaluator
+knows you considered them.
+
+### Deferring decisions at NEGOTIATE
+
+If a deep-module question can't be resolved at NEGOTIATE time, say so
+explicitly in the canonical item — `Deletion test: TBD at IMPLEMENT;
+revisit via propose_contract_amendment if depth uncertain`. The
+evaluator either accepts the deferral or pushes back during contract
+review.
+
+If a red flag from foundation.md §5 fires *during contract drafting*
+(you can see e.g. an exception-leak pattern already implicit in the
+proposed boundary), surface it in the canonical item with a proposed
+mitigation — that's what NEGOTIATE is for.
+
+## §2 IMPLEMENT phase — implementation order (strict)
 
 1. **Public signatures + docstring** first.
    - The docstring's first line states what design decision the
-     module hides (Parnas check, foundation.md §1)
+     module hides (Parnas check, foundation.md §1; PASS criterion C1)
+   - The docstring also declares the **broad interface** (foundation.md
+     §1 + §3.5 C6): any invariants the caller must respect, any
+     ordering constraints (init-before-X, etc.), and the named error
+     modes the caller must handle. If callers must learn anything to
+     use the module correctly, it goes in the docstring — implicit
+     contract is no contract.
    - No implementation written yet
 2. **Self-review** the public signatures against:
-   - The `Module: <name>` block from spec (does interface match what
-     planner specified?)
+   - The agreed sprint contract's `done_looks_like[]` narrative (do
+     the actual signatures match what was committed at NEGOTIATE?)
    - foundation.md §1 leaky-abstraction check (caller doesn't need to
      know internal facts)
+   - foundation.md §3.5 C4 entry-point budget (≤ 1-3 public entry
+     points, unless this is a genuine multi-use module like Unix's
+     file API)
    - foundation.md §5 temporal-coupling flag (no required call order)
 3. **Tests against the public signatures.** See §4. Tests target the
    interface, not internals.
@@ -42,9 +120,13 @@ spec is silent) lives inline in `.claude/agents/generator.md`.
    delete (pass-through) or confirm as ACL (translation work
    justifies it).
 
-If step 5 fires and is not an ACL, surface an open_question rather
-than silently inlining; planner may have intended the wrapper for a
-reason not visible in the spec.
+If step 5 fires and is not an ACL, do NOT silently inline. Either:
+- the agreed contract's `done_looks_like[]` committed to this method
+  as a real boundary — in which case `propose_contract_amendment`
+  before deleting (the evaluator agreed to that interface; you can't
+  unilaterally remove it); OR
+- the contract is silent on this method — inline it and note the
+  cleanup in your commit message.
 
 ## §3 Information hiding rules
 
@@ -55,9 +137,11 @@ without negotiation.
   abstraction, not the implementation choice.
 - **Do not expose third-party types in public signatures.** A
   third-party type in the public surface triggers ACL need (per
-  foundation.md §1 ACL definition); this is a planner concern, not
-  generator. If the spec's interface includes a third-party type,
-  open_question to planner before implementing.
+  foundation.md §1 ACL definition). If the agreed contract's
+  `done_looks_like[]` commits to such a leak (e.g. "returns
+  sqlalchemy.Row"), `propose_contract_amendment` before
+  implementing — that was an interface-design mistake at NEGOTIATE
+  time and silently honouring it locks in the leak.
 - **Internal helper methods stay private.** Never make a private
   method public for "ease of testing" — extract to a new module
   with its own public interface instead (see §4 and §5 below).
@@ -67,9 +151,15 @@ without negotiation.
 
 ## §4 Test layer rules
 
+(Implements foundation.md §3.5 C7 — interface = test surface.)
+
 - **Test the public interface.** Each test invokes a public method
   and asserts on observable result (return value, raised exception,
   or externally-observable side effect).
+- **Tests survive internal refactor.** Renaming an internal helper
+  must not break any test. If renaming breaks a test, that test was
+  testing implementation, not interface — rewrite the test or extract
+  the helper to its own module with its own public interface.
 - **Use real internal collaborators.** Per foundation.md §4
   cross-cutting tension #2 (Mockist vs Classicist), this methodology
   is Classicist: internal collaborators inside the module are real,
@@ -80,8 +170,10 @@ without negotiation.
   collaboration and defeats deep-module value.
 - **Mock budget red flag.** If a single test's mock setup feels like
   it encodes the module's internal collaboration graph, you have
-  crossed into Mockist territory — back off. Surface as open_question
-  if you cannot reduce mocks without losing meaningful coverage.
+  crossed into Mockist territory — back off. If you cannot reduce
+  mocks without losing meaningful coverage, the boundary is wrong:
+  `propose_contract_amendment` to revisit either the module boundary
+  or the `verification_plan` test target.
 
 ## §5 Pass-through self-check
 
@@ -101,8 +193,10 @@ apply the foundation.md §5 `fake-deep-pass-through` trigger:
 - **No** (removal would force callers to handle internal complexity)
   → the method earns its existence.
 
-If unsure (the answer is "maybe"), surface as open_question. Do not
-silently keep or silently delete.
+If unsure (the answer is "maybe"), do not silently keep or silently
+delete. Either commit to the rationale in your commit message AND in
+the next contract negotiation round, or `propose_contract_amendment`
+to clarify the boundary.
 
 ## §6 Common Rationalizations (deep-module specific)
 
@@ -119,9 +213,10 @@ in `.claude/agents/generator.md`.
 
 ## §7 What's NOT here
 
-- Generator's general ambiguity-handling discipline
-  (conservative-default decision table, when to surface as
-  open_question, when to BLOCK) → inline in `.claude/agents/generator.md`.
+- Generator's general ambiguity-handling discipline (strategic-decide
+  refine-vs-pivot, when to call `propose_contract_amendment`,
+  anti-oscillation, vertical-slice self-check) → inline in
+  `.claude/agents/generator.md` + `generator-handbook` skill.
 - Stack-specific test runner / barrel / module conventions → active
   stack skill's `references/`.
 - AC interpretation (what to implement) → spec's

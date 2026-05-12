@@ -38,7 +38,7 @@
       "type": "array",
       "items": { "type": "string", "minLength": 10 },
       "minItems": 1,
-      "description": "Human-readable bulleted statements of what 'done' means for this sprint, per Anthropic v2 negotiation. Required for phase=agreed. Each statement should be a behavioral outcome, not an implementation note."
+      "description": "Human-readable bulleted statements of what 'done' means for this sprint, per Anthropic v2 negotiation. Required for phase=agreed. Each statement should be a behavioral outcome, not an implementation note. For module-touching sprints, generator ALSO includes one item per module touched using the canonical embedding shape from deep-module-handbook references/generator-slice.md §1.5 (carrying hides_decision, applicability, entry-point budget, Strategy seam, broad interface, bounded context, optional deletion-test pre-commitment). Free-text string format is deliberate (LLM-readable); the canonical embedding gives evaluator a deterministic per-module parse target."
     },
     "verification_plan": {
       "type": "array",

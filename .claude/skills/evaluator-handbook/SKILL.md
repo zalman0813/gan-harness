@@ -13,10 +13,21 @@ criteria, and format findings.
 
 ## Two responsibilities
 
+> **Cross-handbook layering.** This handbook covers contract-level
+> reviewing and verification mechanics. **Module-level cognition is in
+> `deep-module-handbook/references/evaluator-slice.md`** — load that
+> slice alongside this handbook when the sprint touches modules.
+> NEGOTIATE phase: §1.5 of the slice (markdown feedback with APPROVE /
+> REQUEST_CHANGES / REJECT vocabulary). VERIFY phase: §1.6 + §7 of the
+> slice (`module_design_verification` array inside the
+> `contracts.jsonl` evaluator entry's `findings[]`).
+
 ### 1. Contract review (negotiation phase)
 
 When generator proposes a contract draft (typically at
-`_pending/S{NN}-draft-v{N}.yaml`), apply five checks before responding.
+`_pending/S{NN}-draft-v{N}.yaml`), apply six checks before responding.
+Checks 1-5 are contract-mechanics; Check 6 is module-level (delegated
+to deep-module-handbook).
 
 #### Check 1: Verification depth
 
@@ -67,6 +78,19 @@ Generator hedging looks like:
 (read spec.md `## Sprint plan > ### S{NN}` to confirm). If `features_covered`
 is missing any F-id from the sprint, reject.
 
+#### Check 6: Deep-module spot-check (delegated)
+
+If the sprint touches modules (not a pure config / docs / data sprint),
+walk the deep-module-handbook `evaluator-slice.md` §1.5 NEGOTIATE-phase
+checklist: C1 falsifiability, C4 entry-point budget, C5 two-adapter
+rule, §3 applicability honesty, visible §5 red flags, optional C3
+deletion-test spot-check, recommended C7 sensor presence. Surface
+findings using that slice's APPROVE / REQUEST_CHANGES / REJECT
+severity vocabulary. **Do not re-implement the checklist here** — load
+the slice and use it as written. Checks 1-5 above are not a substitute
+for the slice; an evaluator that emits APPROVE on Checks 1-5 without
+running Check 6 has missed the module-level lens.
+
 #### Output
 
 Write to `_pending/S{NN}-review-v{N}.yaml`:
@@ -94,6 +118,15 @@ narrative: |
 ### 2. Behavioral verification (post-implementation phase)
 
 After generator commits, you run QA against the agreed contract.
+
+If the sprint touched modules, also run the **VERIFY-phase
+deep-module review** per `deep-module-handbook/references/evaluator-slice.md`
+§1.6 (three cross-checks per module) and emit a
+`module_design_verification` array inside this round's
+`contracts.jsonl` evaluator entry's `findings[]` per §7 of that
+slice. The 5-checks-then-roll-up loop below covers contract mechanics;
+the module-level array is the deep-module dimension that lint and
+unit tests can't see.
 
 #### Reading order (locked)
 

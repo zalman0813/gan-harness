@@ -53,9 +53,11 @@ ASSUMPTIONS I'M MAKING:
 
 ### Phase 1 — Spawn planner agent
 
-The planner agent (auto-loads `planner-handbook`, `deep-module-handbook`,
-`adr-lifecycle`) does the actual work. Pass it the intent dump and any
-flags.
+The planner agent (auto-loads `planner-handbook`, `adr-lifecycle`) does
+the actual work. Pass it the intent dump and any flags. Note: planner
+does NOT load `deep-module-handbook` in v3.8 — module-level cognition
+is a /loop sprint-contract concern handled by generator and evaluator,
+not planner.
 
 The planner will:
 - Grill the user via `AskUserQuestion` (unless `--no-grill`).

@@ -1,0 +1,17 @@
+{
+  "skill_name": "deep-module-handbook",
+  "evals": [
+    {
+      "id": 1,
+      "name": "shallow-user-service",
+      "prompt": "Review the Python module at <target>/input/user_service.py through the lens of the deep-module-handbook. Produce a design_review document at <target>/output/review.md that follows the handbook's evaluator-slice protocol. The module is deliberately problematic; we want to see whether the agent diagnoses it using the handbook's own vocabulary (PASS criteria C1-C8, foundation §5 red flag names, broad-interface concept, deletion test, two-adapter rule). Verdict + rationale + which specific criteria fail must be auditable.",
+      "expected_output": "review.md citing at least 2 of C1-C8 PASS criteria by number, at least 2 distinct foundation §5 red flags by name (chosen from: fake-deep-pass-through, fake-deep-decorator-stack, config-leak, exception-leak, temporal-coupling, wrapper-around-stdlib), references to deletion test or interface-as-test-surface, attribution to Ousterhout / Parnas / Pocock, and a clear FAIL verdict with concrete drift_from_spec items.",
+      "files": ["input/user_service.py"],
+      "target_seed": {
+        "type": "input_module",
+        "git_initialized": true,
+        "files_pre_seeded": ["input/user_service.py"]
+      }
+    }
+  ]
+}

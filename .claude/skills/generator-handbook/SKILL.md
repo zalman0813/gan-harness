@@ -17,16 +17,33 @@ Anthropic v2 frames this clearly: "Before each sprint, the generator and
 evaluator negotiated a sprint contract: agreeing on what 'done' looked like
 for that chunk of work before any code was written."
 
+> **Cross-handbook layering.** This handbook covers contract-mechanics
+> (how to construct done_looks_like / verification_plan / etc.). For
+> sprints that touch modules, **also load
+> `deep-module-handbook/references/generator-slice.md`** — it adds the
+> per-module commitments that go INSIDE `done_looks_like[]` items
+> (canonical embedding shape; C1 hides_decision, C4 entry-point budget,
+> C5 two-adapter rule, C6 broad interface, optional C3 deletion test,
+> recommended C7 sensor in verification_plan). The two handbooks
+> compose: this one tells you the OUTER contract shape; the slice
+> tells you what to write per module.
+
 ### Negotiation deliverable: contract draft
 
 The contract is what gets appended to `contracts.jsonl` after the evaluator
 approves. Schema lives at `.claude/schemas/contract.schema.json`. Required
 fields when proposing:
 
-- `done_looks_like[]` — 2-7 behavioral statements
-- `verification_plan[]` — concrete steps the evaluator will run
+- `done_looks_like[]` — 2-7 behavioral statements **plus** one item per
+  module touched (per deep-module-handbook generator-slice §1.5
+  canonical embedding); the union is your `done_looks_like[]`
+- `verification_plan[]` — concrete steps the evaluator will run; for
+  non-opt-out modules include a C7 interface-stability sensor of
+  `kind: matrix` per generator-slice §1.5
 - `criterion_mapping` — maps each of the 4 spec.md criteria to one or more
-  verification step ids
+  verification step ids. **Keys MUST match spec.md `## Evaluation
+  criteria` headings verbatim, case-sensitive** — evaluator parses by
+  exact match
 - `thresholds` — pass thresholds per kind
 
 ### How to construct done_looks_like

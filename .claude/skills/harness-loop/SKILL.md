@@ -70,6 +70,14 @@ first.
 
 ### Phase 1 — Negotiate (per sprint S)
 
+Both agents auto-load `deep-module-handbook` via their frontmatter — at
+NEGOTIATE time, generator follows `generator-slice §1.5` (per-module
+commitments inside `done_looks_like[]`) and evaluator follows
+`evaluator-slice §1.5` (spot-check checklist + APPROVE / REQUEST_CHANGES
+/ REJECT vocabulary). The contract-mechanics handbooks
+(generator-handbook / evaluator-handbook) compose with these slices,
+not replace them.
+
 For round R = 1, 2, 3, ... (no cap):
 
 1. **Spawn generator** with prompt: "Propose contract for sprint S.

@@ -5,20 +5,30 @@ read this first before reading your role's slice.
 
 ## §1 Definitions
 
-All terms below are qualitative. Ousterhout gives no numeric threshold
-in *A Philosophy of Software Design*. There is no `depth_score`
-arithmetic gate; all checks below are qualitative.
+The depth axis itself is qualitative — Ousterhout deliberately offers no
+`depth_score` arithmetic gate. He DOES, however, endorse class size
+**200–2000 LOC** as an acceptable range (CS190 modular-design lecture);
+"classitis" (lots of tiny classes) is a positive shallow signal, not a
+verdict. Use the LOC band as a sanity proxy, never as a pass/fail axis.
 
 | Term | Definition | Qualitative check |
 |---|---|---|
-| **Deep module** | Hides substantially more complexity than its interface exposes (Ousterhout APOSD ch.4) | Could a maintainer reconstruct the implementation correctly from the public signatures alone? Yes → shallow. No → deep. |
+| **Deep module** | Hides substantially more complexity than its interface exposes; provides high leverage per unit of interface the caller must learn (Ousterhout APOSD ch.4; Pocock 2026 LANGUAGE.md). | Could a maintainer reconstruct the implementation correctly from the public signatures alone? Yes → shallow. No → deep. AND: can you name in one sentence the design decision this module owns (Parnas 1972)? Yes → depth has a target. |
 | **Shallow module** | Interface is comparable in complexity to implementation | Public surface item count ≈ private item count; or all behavior is implied by signatures |
-| **Information hiding (Parnas)** | A module hides one design decision likely to change (Parnas 1972) | Write down in one sentence: "this module hides X". If you cannot, the module's boundary is wrong. |
+| **Interface** (broad, Pocock LANGUAGE.md) | Everything a caller must know to use the module correctly: signatures **plus** invariants, ordering constraints, and error modes — NOT just the type signatures | When listing what a new caller must learn before they can call this module, do you have to mention an invariant ("must be initialised first"), an ordering rule, or a non-obvious error mode? Each such item IS part of the interface — count it. |
+| **Information hiding (Parnas)** | A module hides one **design decision likely to change** (Parnas 1972) | Write down in one sentence: "this module hides X". If you cannot, the module's boundary is wrong. Parnas's bar is sharper than generic "encapsulation" — X must be a decision likely to change, not "just implementation detail". |
 | **Pass-through method** | Public method that does little except invoke another with similar signature (Ousterhout APOSD ch.5) | Removing this method would only require renaming one callsite (no other change at the callsite) |
 | **Leaky abstraction** | Caller must know implementation details to use the interface correctly (Spolsky 2002) | List all implementation facts a caller must memorize. Each item is a leak. |
 | **Anti-corruption layer (ACL)** | Boundary translation layer between two bounded contexts; foreign types do not cross into the domain (Evans DDD) | Any third-party SDK class name appearing in domain-layer imports = ACL bypassed |
 | **Bounded context** | Linguistic boundary inside which a domain term has a single, consistent meaning (Evans DDD) | The same word ("Order", "User") may mean different things across contexts; one BC = one meaning |
 | **Ubiquitous language** | Vocabulary shared by domain experts, code, and (in this harness) AI agents (Evans DDD) | Terms appear verbatim in code identifiers, in CONTEXT.md, in agent conversations, in PRDs |
+
+> **Depth ≠ monolithic implementation** (Pocock LANGUAGE.md). Depth is a
+> property of the *interface*, not the *implementation*. A deep module
+> can be internally composed of small, mockable, swappable parts —
+> what matters is that callers only learn the deepened interface, not
+> the internal seams. Do not reject a well-decomposed module as
+> "shallow" just because its implementation is split across helpers.
 
 ## §2 Pocock-calibrated DDD
 
@@ -66,8 +76,60 @@ For each module the planner is about to design, classify it first.
 | Performance hot path (parser inner loop, real-time compute) | **No or partial** | Interface call cost is non-negligible |
 | One-shot script / migration | **No** | No second caller; depth has no payoff |
 
-The grey zone (something doesn't clearly fit any row above) is the
-planner's `open_question` candidate, not a silent decision.
+The grey zone (something doesn't clearly fit any row above) is a
+contract-negotiation discussion item for generator+evaluator — surface
+it in the sprint contract's `done_looks_like` narrative or as an
+evaluator finding during NEGOTIATE, not a silent decision.
+
+## §3.5 Success criteria — PASS checklist (positive, with sources)
+
+The current §5 catalogue lists negative red flags ("what makes this
+shallow / leaky / smelly"). This section is the **positive complement**:
+the criteria a module must SATISFY to be called deep. Use it to write
+PASS verdicts, not just FAIL ones.
+
+Apply only when §3 puts the module in an "apply deep module" row (the
+opt-out rows — DTO, framework-shaped, hot-path, one-shot — should NOT
+be measured against this checklist).
+
+| # | Criterion | Source | Concrete check |
+|---|---|---|---|
+| **C1** | **Name the hidden decision** | Parnas 1972 (criterion-based decomposition) | The module's `hides_decision` field is a ≥30-char sentence naming one design decision likely to change. Evaluator can falsify it within 1 minute? Then C1 fails — the sentence was ceremony. |
+| **C2** | **3-question self-test** | Ousterhout CS190 modular-design lecture | (a) "What unique value does this module provide?" — answerable in one sentence. (b) "What key knowledge does it use to provide that value?" — nameable. (c) "What's the LEAST of that knowledge that must be exposed through the interface?" — driven below the obvious. If any answer is "I don't know" or "everything", C2 fails. |
+| **C3** | **Deletion test** | Pocock LANGUAGE.md ("interface = test surface"); Ousterhout APOSD ch.5 implicitly | If you removed this module, would complexity reappear in ≥2 distinct callers? Yes → C3 passes (module earns its existence). No (single caller, or trivial inline replacement) → C3 fails (pass-through risk). |
+| **C4** | **Entry-point budget** | Pocock INTERFACE-DESIGN.md ("minimise the interface — 1-3 entry points max") | Count public methods / exported functions / surface routes. ≤ 1-3 entry points → C4 passes. ≥ 4 → C4 needs justification (genuine multi-use module like Unix file API which has 5 calls IS valid; "I needed lots of getters" is not). |
+| **C5** | **Two-adapter rule for ports** | Pocock LANGUAGE.md ("one adapter = hypothetical seam; two adapters = real seam") | If the module exposes a Strategy / DI / port interface, ≥2 actual implementations must exist (or one + one named imminent with a hard date). One implementation = the interface is a hypothetical seam = YAGNI; collapse to direct dependency. |
+| **C6** | **Interface is everything callers must know** | Pocock LANGUAGE.md (broader interface definition; see §1) | The "interface" is signature + invariants + ordering constraints + error modes. C6 passes when each of those four is either declared in code (type, contract) OR documented at the call site (docstring, README), AND callers don't need to read the implementation to discover any of them. |
+| **C7** | **Interface = test surface** | Pocock LANGUAGE.md (tests at deepened interface survive internal refactor); APOSD ch.6 indirectly | Tests for this module exercise the public interface only. They survive an internal refactor of the module's helpers without changes. If renaming an internal helper breaks a test → that test is testing implementation, not interface; C7 fails. |
+| **C8** | **Class-size sanity proxy** | Ousterhout CS190 (200-2000 LOC band) | Module LOC is in the 200-2000 range (qualitative — files much smaller may be "classitis" instances; files much larger may be unrelated concerns bundled). NOT a verdict on its own; a 30-LOC genuinely-thin facade can be deep, a 3000-LOC genuinely-cohesive parser can be deep. Use as a "look here first" tap, then apply C1-C7. |
+
+### How to use the checklist
+
+- **Generator NEGOTIATE phase** (proposing a sprint contract): for each
+  module the sprint touches, write C1 (hides_decision sentence), C2 (3-
+  question answers), C5 (any Strategy seam needs ≥2 actual impls)
+  into `done_looks_like[]` narrative items. C4 (entry-point budget) and
+  C6 (broad interface) are committed to as future constraints.
+- **Generator IMPLEMENT phase**: hold C6 (interface = invariants +
+  ordering + error modes in docstring) and C7 (tests at interface only,
+  no mocking internal collaborators) live throughout implementation.
+- **Evaluator NEGOTIATE phase** (reviewing the proposed contract):
+  spot-check each module-touching `done_looks_like` item against
+  C1-C5. Surface concerns as contract-amendment proposals before
+  agreeing.
+- **Evaluator VERIFY phase**: cite the criterion # when emitting a
+  PASS verdict's `design_review` paragraph — "C1 passes (hides_decision
+  is non-trivially true)", "C3 passes (deletion test fires; three
+  callers would regrow the cursor-signing logic)". Cite the criterion
+  # when emitting a FAIL — "C5 fails (Strategy seam introduced for one
+  named implementation; second impl is hypothetical)". C7 verification
+  = renaming an internal helper must not break tests. C8 is an
+  outcome observation.
+
+The checklist is a vocabulary, NOT a mandatory walk. If a module is
+obviously deep (Unix-file-API-shaped), citing C1+C2+C4 is enough; not
+every module needs an 8-criterion narrative. If a module is borderline,
+the criteria are how you write down WHY you accepted or rejected it.
 
 ## §4 Cross-cutting tensions
 
@@ -87,10 +149,12 @@ work against another tradition.
    process boundaries. (See `generator-slice.md` for implementation.)
 
 3. **Strategy/DI seam vs pass-through smell.** Every injection seam
-   is a candidate pass-through. **Discipline:** introduce a Strategy
-   only when a real second implementation exists or is imminent
-   (planner records the second implementation in the ADR or
-   open_question). YAGNI before "predictable variation".
+   is a candidate pass-through. **Pocock's two-adapter rule** (the
+   quantitative go/no-go from LANGUAGE.md): "One adapter = hypothetical
+   seam. Two adapters = real seam." Introduce a Strategy / port only
+   when ≥2 actual implementations exist, or one + one named imminent
+   with a hard date. One implementation = collapse to direct
+   dependency; the seam isn't earning its existence. (See §3.5 C5.)
 
 4. **ACL purity vs pass-through smell.** ACL methods may *look like*
    pass-throughs (forward to external). **Diagnostic:** if removing
@@ -119,8 +183,12 @@ source-cited flags age gracefully.
                 or paths>
 - **Trigger to investigate**: <yes/no question the agent self-asks>
 - **If fires, recommend to user**: <2-4 directions. Never auto-FAIL —
-                                     red flags are open_question triggers,
-                                     not verdicts>
+                                     red flags surface as
+                                     contract-amendment items
+                                     (generator-side) or design_review
+                                     findings (evaluator-side); the
+                                     evaluator's threshold check
+                                     decides verdict>
 - **Retirement criteria**: <what conditions would justify removing this
                             flag from doctrine>
 ```
@@ -221,7 +289,7 @@ fired, retire it before adding new.
 
 ## §5.5 The deletion test (diagnostic, not a flag)
 
-Used by `fake-deep-pass-through` and by planner-slice §2 Q6.
+Used by `fake-deep-pass-through` and as part of §3.5 C3 (deletion test). Generator runs it at NEGOTIATE time when sizing a new module boundary; evaluator runs it at VERIFY time when auditing committed code.
 
 For any module the planner is about to add, ask:
 
@@ -262,8 +330,19 @@ Secondary — informs application:
   https://blog.ploeh.dk/2011/05/24/DesignSmellTemporalCoupling/
 - Martin Fowler, "Anti-Corruption Layer" via Legacy Mimic article —
   https://martinfowler.com/articles/patterns-legacy-displacement/legacy-mimic.html
-- mattpocock/skills `improve-codebase-architecture` — deletion test
-  framing
+- mattpocock/skills `improve-codebase-architecture` —
+  https://github.com/mattpocock/skills/tree/main/skills/engineering/improve-codebase-architecture
+  - SKILL.md — overall workflow
+  - LANGUAGE.md — interface as everything callers must know;
+    depth = leverage at the interface; two-adapter rule; deletion
+    test; interface = test surface
+  - INTERFACE-DESIGN.md — 1-3 entry-point budget; "design it twice"
+    contrast on depth / locality / seam-placement
+  - DEEPENING.md — process for turning shallow modules into deep
+    ones (extract-then-deepen pattern)
+- John Ousterhout, CS190 Modular Design lecture (Stanford) —
+  https://web.stanford.edu/~ouster/cgi-bin/cs190-winter18/lecture.php?topic=modularDesign
+  (3-question self-test; 200-2000 LOC class-size endorsement)
 
 Critical conversation pieces (Fowler network on AI coding × DDD):
 - Birgitta Böckeler, "Harness Engineering — first thoughts" (Feb 2026)

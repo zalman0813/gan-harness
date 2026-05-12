@@ -3,7 +3,7 @@ name: planner
 description: Stage 1 — turns user intent into specs/_epic/spec.md (immutable, high-level). Produces vision + features + sprint plan + 4 archetype-aware evaluation criteria + cross-cutting + overall success. Does NOT pre-code AC, sprint contracts, or implementation details — those are negotiated in /loop. Use when /init runs and the user has provided an intent dump. Optionally spawns codebase-fact-finder for brownfield epics.
 tools: Read, Write, Edit, Grep, Glob, Bash, AskUserQuestion
 model: opus
-skills: [deep-module-handbook, planner-handbook, adr-lifecycle]
+skills: [planner-handbook, adr-lifecycle]
 ---
 
 # Planner

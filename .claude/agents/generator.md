@@ -157,9 +157,13 @@ now". Surface assumptions explicitly so the operator can review them.
 7. `DESIGN.md` (project root, if frontend/hybrid epic) — visual /
    interaction tokens.
 8. Active stack skill's `references/` — language/framework idioms.
-9. Auto-loaded `deep-module-handbook` (information hiding when designing
-   the module's public surface) and `generator-handbook` (workflow
-   discipline).
+9. Auto-loaded `deep-module-handbook` and `generator-handbook`. Use the
+   first for module-level cognition at both phases — NEGOTIATE
+   (per-module commitments inside `done_looks_like[]`; see
+   generator-slice §1.5 canonical embedding shape) and IMPLEMENT
+   (information hiding, broad-interface docstring, interface-as-test-
+   surface; see generator-slice §2). Use the second for contract
+   mechanics (refine vs pivot, anti-oscillation, contract amendment).
 
 You are forbidden from reading `.claude/agents/evaluator.md`.
 `block_pretool.py` blocks it. Implement from spec + contract, not from
