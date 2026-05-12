@@ -157,6 +157,31 @@ Rules for findings:
 - When uncertain, lean FAIL. False PASS is worse than false FAIL — false
   PASS lets bugs through; false FAIL gives generator one more round.
 
+## Stack discovery (Mandatory before reading inputs)
+
+Before opening spec.md / contracts.jsonl / draft contract:
+
+1. Run `Glob .claude/skills/*/SKILL.md`.
+2. For each match, Read the file. A SKILL.md containing a `## Commands`
+   H2 is a **stack skill** (lint / typecheck / test contract). SKILL.md
+   without `## Commands` is a handbook already preloaded via your
+   `skills:` frontmatter — do NOT re-read here.
+3. Cross-check against `specs/_epic/spec.md` `## Tech stack`. Every
+   stack listed there with a matching `.claude/skills/<name>/SKILL.md`
+   MUST be Read in this step. Stacks named in spec.md without on-disk
+   SKILL.md are a missing prerequisite — note in your output.
+4. When VERIFY mode runs `lint.check` / `test.unit` to re-verify the
+   contract's verification_plan, use the exact command strings from
+   the relevant stack skill's `## Commands` table (substitute
+   `{scope}`). Do NOT trust the generator's prose; re-execute.
+
+Read only SKILL.md here. Grep into `references/` only when a specific
+stack idiom is needed for a verdict call.
+
+This step is **observable**: SubagentStop hook records every stack
+SKILL.md Read and writes `## Audit — stack discovery` to your trace +
+`stack_audit` cell to `specs/_epic/progress.tsv`. Skipping = audit FAIL.
+
 ## Inputs (locked reading order, repeated for emphasis)
 
 1. `specs/_epic/spec.md`

@@ -138,6 +138,35 @@ now". Surface assumptions explicitly so the operator can review them.
   Frequent amendments = the contract was wrong; rare amendments = the
   contract held.
 
+## Stack discovery (Mandatory before reading inputs)
+
+Before opening spec.md / contracts.jsonl, discover which stack skills
+this project has installed:
+
+1. Run `Glob .claude/skills/*/SKILL.md`.
+2. For each match, Read the file. A SKILL.md containing a `## Commands`
+   H2 is a **stack skill** (the harness gate contract — lint / typecheck
+   / test commands). SKILL.md without `## Commands` is a handbook /
+   workflow already preloaded via your `skills:` frontmatter when
+   relevant; do NOT re-read those here.
+3. Cross-check against `specs/_epic/spec.md` `## Tech stack`. Every
+   stack listed there with a matching `.claude/skills/<name>/SKILL.md`
+   MUST be Read in this step. Stacks named in spec.md without an
+   on-disk SKILL.md are a missing prerequisite — note in your output
+   and proceed best-effort.
+4. When you later invoke `lint.check` / `typecheck` / `test.unit`, use
+   the exact command strings from the relevant stack skill's
+   `## Commands` table (substitute `{scope}` per harness convention).
+   Do NOT invent commands; do NOT skip stages.
+
+Read only SKILL.md in this step. Grep into `references/` only when you
+need a specific stack idiom for a concrete code decision later.
+
+This step is **observable**: SubagentStop hook audits whether you Read
+every stack SKILL.md named in spec.md and writes `## Audit — stack
+discovery` to your trace + `stack_audit` cell to
+`specs/_epic/progress.tsv`. Skipping = audit FAIL.
+
 ## Inputs (locked reading order)
 
 1. `specs/_epic/spec.md` — vision, features, sprint plan, the 4 criteria,

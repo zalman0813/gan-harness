@@ -4,22 +4,22 @@
 Pure logging hook (no validation). On every generator, evaluator, or
 planner subagent stop, parse the JSONL transcript and write audit files:
 
-    1. specs/_batch/_traces/{F}-{prefix}-trace-R{N}.md   structured trace
+    1. specs/_epic/_traces/{F}-{prefix}-trace-R{N}.md   structured trace
        (planner has no feature/round, so its trace lands at
-        specs/_batch/_traces/planner-{ts}.md instead — see fallback below)
-    2. specs/_batch/_traces/{F}-{prefix}-usage-R{N}.json token usage / cost
+        specs/_epic/_traces/planner-{ts}.md instead — see fallback below)
+    2. specs/_epic/_traces/{F}-{prefix}-usage-R{N}.json token usage / cost
        (only for generator and evaluator — planner has no usage_json)
-    3. specs/_batch/progress.tsv                          one append-only row
+    3. specs/_epic/progress.tsv                          one append-only row
        (only for generator and evaluator — planner is not part of the
         feature execution loop, so it does not appear in progress.tsv)
 
 Other agent_types (codebase-fact-finder) exit silently.
 
-Feature/round context comes from specs/_batch/_traces/current-context.json,
+Feature/round context comes from specs/_epic/_traces/current-context.json,
 written by harness-loop before spawning each generator/evaluator subagent.
 Planner runs once before the loop and does not write current-context.json,
 so its trace ALWAYS uses the timestamp-fallback path
-specs/_batch/_traces/planner-{ts}.md with no progress.tsv row and no
+specs/_epic/_traces/planner-{ts}.md with no progress.tsv row and no
 usage_json — by design.
 
 This hook does NO validation — it just records. AC literal coverage is
@@ -186,6 +186,27 @@ def _render_trace_markdown(agent_type: str, feature: str, round_num: int,
     for phase, count in sorted(stats["phase_counts"].items(), key=lambda x: -x[1]):
         lines.append(f"| {phase} | {count} |")
     lines.append("")
+    audit = stats.get("stack_audit") or {}
+    if audit:
+        lines += ["## Audit — stack discovery", ""]
+        if not audit.get("required"):
+            lines += [f"_skipped: {audit.get('reason', 'n/a')}_", ""]
+        else:
+            mark = "PASS" if audit["satisfied"] else "FAIL"
+            lines += [
+                f"Verdict: **{mark}**",
+                f"Stacks named in spec.md: "
+                f"{', '.join(audit['stacks_named']) or '(none)'}",
+                f"Expected reads (stack skills on disk): "
+                f"{', '.join(audit['expected_stack_skills']) or '(none)'}",
+                f"Stack SKILL.md Read by agent: "
+                f"{', '.join(audit['stack_skills_read']) or '(none)'}",
+            ]
+            if audit["missing_stack_skills"]:
+                lines.append(
+                    f"Missing reads: {', '.join(audit['missing_stack_skills'])}"
+                )
+            lines.append("")
     if stats["files_read"]:
         lines += ["## Files read", ""] + [f"- {f}" for f in stats["files_read"]] + [""]
     if stats["files_written"]:
@@ -212,7 +233,7 @@ def _render_trace_markdown(agent_type: str, feature: str, round_num: int,
 # ---------------------------------------------------------------------------
 
 def _read_evaluator_verdict(project_dir: str, feature: str, round_num: int) -> tuple[str, str]:
-    p = Path(project_dir) / "specs/_batch/_evals" / f"{feature}-R{round_num}.json"
+    p = Path(project_dir) / "specs/_epic/_evals" / f"{feature}-R{round_num}.json"
     if not p.is_file():
         return "", ""
     try:
@@ -235,10 +256,111 @@ def _git_head_short(project_dir: str) -> str:
         return ""
 
 
+# ---------------------------------------------------------------------------
+# Stack-discovery audit
+#
+# Observable check: did the agent Read every stack named in spec.md's
+# `## Tech stack` section? Used to verify the stack-discovery prompt
+# instruction actually fires at runtime (otherwise stack-aware behavior
+# becomes unprovable in head-to-head experiments).
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+
+def _parse_tech_stack(spec_text: str) -> list[str]:
+    """Extract candidate stack identifiers from spec.md `## Tech stack`.
+
+    Matches lines like `- Backend: python-stdlib` and returns the value
+    after the colon (e.g. ['python-stdlib', 'pytest']). Returns [] if the
+    section is missing or empty.
+    """
+    section = _re.search(
+        r"^##\s+Tech stack\s*$(.*?)(?=^##\s+)",
+        spec_text,
+        _re.MULTILINE | _re.DOTALL,
+    )
+    if not section:
+        return []
+    stacks: list[str] = []
+    for line in section.group(1).splitlines():
+        m = _re.match(r"^\s*-\s*[^:]+:\s*(\S+)", line)
+        if m:
+            stacks.append(m.group(1).strip())
+    return stacks
+
+
+def _audit_stack_discovery(stats: dict, project_dir: Path) -> dict:
+    """Verify the agent Read each stack SKILL.md named in spec.md.
+
+    Returns a dict consumed by trace markdown + progress.tsv. `satisfied`
+    is True iff every stack named in spec.md has a matching
+    `.claude/skills/<stack>/SKILL.md` in the agent's files_read set, OR
+    spec.md / Tech stack is absent (audit not required).
+    """
+    spec = project_dir / "specs" / "_epic" / "spec.md"
+    if not spec.is_file():
+        return {"required": False, "satisfied": True,
+                "reason": "no specs/_epic/spec.md"}
+    try:
+        spec_text = spec.read_text(encoding="utf-8")
+    except OSError:
+        return {"required": False, "satisfied": True,
+                "reason": "spec.md unreadable"}
+    stacks_named = _parse_tech_stack(spec_text)
+    if not stacks_named:
+        return {"required": False, "satisfied": True,
+                "reason": "no `## Tech stack` entries"}
+    # Audit only those names that actually have a stack skill on disk —
+    # `## Tech stack` may also list test runners / libraries / Python
+    # versions that legitimately have no SKILL.md. Those are not
+    # expected reads.
+    expected = [
+        s for s in stacks_named
+        if (project_dir / ".claude" / "skills" / s / "SKILL.md").is_file()
+    ]
+    if not expected:
+        return {"required": False, "satisfied": True,
+                "reason": "no matching stack skill on disk",
+                "stacks_named": stacks_named}
+    stack_skills_read = [
+        f for f in stats["files_read"]
+        if "/.claude/skills/" in f and f.endswith("/SKILL.md")
+    ]
+    missing = [
+        s for s in expected
+        if not any(f"/.claude/skills/{s}/SKILL.md" in f for f in stack_skills_read)
+    ]
+    return {
+        "required": True,
+        "stacks_named": stacks_named,
+        "expected_stack_skills": expected,
+        "stack_skills_read": stack_skills_read,
+        "missing_stack_skills": missing,
+        "satisfied": len(missing) == 0,
+    }
+
+
+def _format_stack_audit_cell(audit: dict) -> str:
+    """Render the audit dict into a single TSV-safe cell string."""
+    if not audit:
+        return ""
+    if not audit.get("required"):
+        return f"skip:{audit.get('reason', 'n/a')}"
+    expected = len(audit.get("expected_stack_skills", []))
+    read = expected - len(audit.get("missing_stack_skills", []))
+    state = "PASS" if audit.get("satisfied") else "FAIL"
+    return f"{state}:{read}/{expected}"
+
+
 def _append_progress_row(progress_tsv: Path, agent_type: str, feature: str,
-                         round_num: int, stats: dict, project_dir: str) -> None:
+                         round_num: int, stats: dict, project_dir: str,
+                         raw_agent_type: str) -> None:
     progress_tsv.parent.mkdir(parents=True, exist_ok=True)
-    header = "ts\tfeature\tround\tagent\ttools\tfiles_w\terrors\tverdict\tcommit\tnote\n"
+    header = (
+        "ts\tfeature\tround\tagent\tagent_variant\ttools\tfiles_w"
+        "\terrors\tverdict\tstack_audit\tcommit\tnote\n"
+    )
     if not progress_tsv.exists():
         progress_tsv.write_text(header)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -246,10 +368,12 @@ def _append_progress_row(progress_tsv: Path, agent_type: str, feature: str,
     verdict, note = ("", "")
     if agent_type == "evaluator":
         verdict, note = _read_evaluator_verdict(project_dir, feature, round_num)
+    audit_cell = _format_stack_audit_cell(stats.get("stack_audit") or {})
+    variant = raw_agent_type if raw_agent_type != agent_type else ""
     row = (
-        f"{ts}\t{feature}\t{round_num}\t{agent_type}"
+        f"{ts}\t{feature}\t{round_num}\t{agent_type}\t{variant}"
         f"\t{stats['total_steps']}\t{len(stats['files_written'])}"
-        f"\t{stats['error_count']}\t{verdict}\t{commit}\t{note}\n"
+        f"\t{stats['error_count']}\t{verdict}\t{audit_cell}\t{commit}\t{note}\n"
     )
     with progress_tsv.open("a") as f:
         f.write(row)
@@ -410,21 +534,38 @@ def _render_usage_section(metrics: dict, agent_type: str) -> str:
 _PREFIX = {"generator": "gen", "evaluator": "eval", "planner": "plan"}
 
 
+def _resolve_canonical(agent_type: str) -> str | None:
+    """Fuzzy-match an agent_type to a canonical role.
+
+    Accepts exact role names (generator, evaluator, planner) AND any
+    hyphen-suffixed variant (generator-iter2, evaluator-baseline, ...),
+    so head-to-head experiments don't fall through the SubagentStop hook.
+    """
+    if not agent_type:
+        return None
+    for canonical in _PREFIX:
+        if agent_type == canonical or agent_type.startswith(f"{canonical}-"):
+            return canonical
+    return None
+
+
 def main() -> int:
     try:
         event = json.load(sys.stdin)
     except json.JSONDecodeError:
         return 0
 
-    agent_type = event.get("agent_type", "")
-    if agent_type not in _PREFIX:
+    raw_agent_type = event.get("agent_type", "")
+    canonical = _resolve_canonical(raw_agent_type)
+    if canonical is None:
         return 0
+    agent_type = canonical
     transcript = event.get("agent_transcript_path", "")
     if not transcript or not Path(transcript).is_file():
         return 0
 
     project_dir = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
-    trace_dir = project_dir / "specs" / "_batch" / "_traces"
+    trace_dir = project_dir / "specs" / "_epic" / "_traces"
     trace_dir.mkdir(parents=True, exist_ok=True)
 
     context_file = trace_dir / "current-context.json"
@@ -440,10 +581,12 @@ def main() -> int:
     prefix = _PREFIX[agent_type]
     trace = _parse_transcript(transcript)
     stats = _compute_stats(trace["steps"])
+    stats["stack_audit"] = _audit_stack_discovery(stats, project_dir)
+    stats["raw_agent_type"] = raw_agent_type
 
     if feature:
         out_md = trace_dir / f"{feature}-{prefix}-trace-R{round_int}.md"
-        progress_tsv: Path | None = project_dir / "specs" / "_batch" / "progress.tsv"
+        progress_tsv: Path | None = project_dir / "specs" / "_epic" / "progress.tsv"
         usage_json: Path | None = trace_dir / f"{feature}-{prefix}-usage-R{round_int}.json"
     else:
         ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -459,7 +602,8 @@ def main() -> int:
     if progress_tsv is not None:
         try:
             _append_progress_row(progress_tsv, agent_type, feature, round_int,
-                                 stats, str(project_dir))
+                                 stats, str(project_dir),
+                                 stats.get("raw_agent_type", agent_type))
         except OSError:
             pass
 

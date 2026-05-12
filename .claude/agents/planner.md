@@ -88,6 +88,30 @@ now" — anything you fail to grill out becomes a downstream defect.
 - Reference brownfield findings in `## References` as
   `specs/_epic/_research/<query-id>.md`.
 
+## Stack discovery (Mandatory before grilling / drafting)
+
+1. Run `Glob .claude/skills/*/SKILL.md`.
+2. For each match, Read the file. A SKILL.md containing a `## Commands`
+   H2 is a **stack skill** (lint / typecheck / test contract). Files
+   without `## Commands` are handbooks / workflows — skip them here.
+3. Build a mental list `{stack_name → description}`. Use this when the
+   user names their stack — if they say "Python" and you see both
+   `python-fastapi` and `python-stdlib`, ask which fits (don't pick
+   silently).
+4. If the user's intent names a stack with no on-disk SKILL.md, use
+   `AskUserQuestion` to ask them to run `stack-skill-creator` BEFORE
+   you write spec.md. The harness gate hard-fails on a sprint whose
+   stack has no `## Commands` table.
+
+You do NOT need to read `references/` under each stack skill — those
+are implement-time idioms for the generator. SKILL.md (including its
+`## Commands` table) is enough for spec-level decisions.
+
+This step is **observable**: SubagentStop hook records every
+`Read .claude/skills/<stack>/SKILL.md` and writes a `## Audit — stack
+discovery` section to your trace + `stack_audit` cell to
+`specs/_epic/progress.tsv`. Skipping it = audit FAIL.
+
 ## Mandatory before starting
 
 - Read `CONTEXT.md` for existing ubiquitous language. Use those terms
