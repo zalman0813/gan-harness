@@ -1,0 +1,128 @@
+sprint: S02
+sprint_name: "List tasks"
+features_covered: ["F02"]
+phase: draft
+version: 1
+contract_id: C-S02-v1
+
+dependency_note: |
+  Sprint S01 (phase:completed C-S01-v2) is the upstream dependency.
+  S01 established the on-disk JSON schema:
+    list of {"id": int, "description": str, "timestamp": str (UTC ISO-8601)}
+  S02 reads that schema unchanged; no new fields are introduced.
+  The verification_plan setup step pre-populates the JSON file via the S01
+  `add` subcommand to prove the end-to-end chain works.
+
+done_looks_like:
+  - "Sprint S01 (phase:completed C-S01-v2) is already delivered; S02 builds on
+    its on-disk JSON schema (list of {id, description, timestamp}) without
+    modification."
+  - "Running `python todo.py list` after one `todo add buy milk` call prints
+    exactly one line to stdout formatted as `[1] buy milk (<timestamp>)`,
+    where <timestamp> is the UTC ISO-8601 string stored in the JSON file."
+  - "Running `python todo.py list` after three successive `todo add` calls
+    prints exactly three lines with ids 1, 2, 3 in insertion order — one
+    line per task, no extra blank lines."
+  - "Running `python todo.py list` against a fresh state where ~/.todo.json
+    does not yet exist exits with code 0 and produces no output (no error,
+    no traceback)."
+  - "Running `python todo.py list` against an existing but empty ~/.todo.json
+    exits with code 0 and produces no output."
+  - "The `list` subcommand writes its output to stdout only; diagnostics (if
+    any) go to stderr. The stdout output is pipeline-safe."
+  - "Module todo.py remains framework-shaped (argparse subcommand dispatch +
+    JSON file persistence). The `list` subcommand is added inside the existing
+    module without introducing new runtime dependencies outside the Python
+    standard library."
+
+verification_plan:
+  - id: vp-01
+    kind: smoke
+    description: "End-to-end chain: add via S01 subcommand, list via S02 subcommand (HOME isolated)"
+    steps:
+      - "Create a temporary directory: TMPDIR=$(mktemp -d); export HOME=$TMPDIR."
+      - "Run: python todo.py add buy milk — assert exit code 0."
+      - "Run: python todo.py list — assert exit code 0."
+      - "Assert stdout contains exactly one line."
+      - "Assert the line matches the pattern `[1] buy milk (` followed by a
+         UTC ISO-8601 timestamp string and `)` — e.g. regex
+         `^\\[1\\] buy milk \\(\\d{4}-\\d{2}-\\d{2}T.*\\)$`."
+      - "Remove the temporary directory on teardown."
+
+  - id: vp-02
+    kind: smoke
+    description: "Three tasks in insertion order (HOME isolated)"
+    steps:
+      - "Create a fresh temporary directory: TMPDIR2=$(mktemp -d); export HOME=$TMPDIR2."
+      - "Run: python todo.py add task one — assert exit code 0."
+      - "Run: python todo.py add task two — assert exit code 0."
+      - "Run: python todo.py add task three — assert exit code 0."
+      - "Run: python todo.py list — assert exit code 0."
+      - "Assert stdout contains exactly three lines."
+      - "Assert first line starts with `[1] task one (`."
+      - "Assert second line starts with `[2] task two (`."
+      - "Assert third line starts with `[3] task three (`."
+      - "Remove the temporary directory on teardown."
+
+  - id: vp-03
+    kind: smoke
+    description: "Missing ~/.todo.json — exit 0, empty stdout (HOME isolated)"
+    steps:
+      - "Create a fresh temporary directory with no .todo.json: TMPDIR3=$(mktemp -d); export HOME=$TMPDIR3."
+      - "Run: python todo.py list — assert exit code 0."
+      - "Assert stdout is empty (zero bytes / zero lines)."
+      - "Assert no traceback is present in stderr."
+      - "Remove the temporary directory on teardown."
+
+  - id: vp-04
+    kind: test
+    path: "tests/test_list_tasks.py"
+    description: "Unit tests covering list happy path and edge cases"
+    cases:
+      - "test_list_single_task: calls cmd_list (or main(['list'])) with a
+         JSON file containing one task; asserts stdout contains exactly one
+         line formatted as `[1] description (timestamp)`."
+      - "test_list_multiple_tasks_in_order: calls with three pre-populated
+         tasks; asserts three lines in ids 1, 2, 3 order."
+      - "test_list_missing_file_exits_zero: no todo file exists; asserts
+         exit code 0 and stdout is empty."
+      - "test_list_empty_file_exits_zero: todo file exists but is empty;
+         asserts exit code 0 and stdout is empty."
+      - "test_list_output_to_stdout: confirms output goes to stdout, not
+         stderr (captures both streams separately)."
+
+  - id: vp-05
+    kind: matrix
+    description: "Static quality sensors (same gate as S01)"
+    checks:
+      - "lint:ruff"
+      - "typecheck:mypy-strict"
+      - "stdlib-only:no-third-party-runtime-imports"
+
+  - id: vp-06
+    kind: smoke
+    description: "--help smoke: list subcommand is visible in top-level help"
+    steps:
+      - "Run: python todo.py --help — assert exit code 0."
+      - "Assert stdout contains the string 'list' (the new subcommand name)."
+      - "Run: python todo.py list --help — assert exit code 0."
+      - "Assert stdout is non-empty."
+
+criterion_mapping:
+  "UX quality":
+    - vp-06   # --help shows list subcommand; subcommand style consistent with add
+    - vp-04   # test_list_output_to_stdout verifies pipeline-safe stdout
+  "Robustness":
+    - vp-03   # missing file: exit 0, no traceback
+    - vp-04   # test_list_missing_file_exits_zero + test_list_empty_file_exits_zero
+  "Craft":
+    - vp-04   # unit tests for happy path + edge cases
+    - vp-05   # lint + typecheck + stdlib-only sensor
+  "Functionality":
+    - vp-01   # end-to-end chain: add then list, correct format
+    - vp-02   # three tasks in insertion order
+
+thresholds:
+  smoke_must_pass: all
+  test_must_pass: all
+  matrix_must_pass: all
