@@ -1,0 +1,157 @@
+contract_id: C-S02-v2
+review_round: 2
+verdict: approve
+
+amendments: []
+
+r1_amendment_resolution:
+  check: mock_honesty_path_injection
+  status: addressed
+  evidence: |
+    v2 vp-04 description (lines 89-93) now reads:
+      "Unit tests covering list happy path and edge cases.
+       Each case uses tempfile.mkdtemp() + os.environ['TODO_FILE']
+       injection to isolate from ~/.todo.json — consistent with S01
+       tests/test_add_task.py setUp (commit 2eda53e)."
+    This explicitly names the isolation mechanism (TODO_FILE env-var
+    injection) and cites the sibling-consistent S01 precedent — both
+    items the R1 review requested. Cross-checked against
+    todo.py:_todo_path() which reads TODO_FILE (line 21-25) and
+    tests/test_add_task.py setUp() which sets os.environ["TODO_FILE"]
+    (line 24-26). The S01 seam exists and is exactly the one vp-04
+    commits to using.
+
+  note_on_r1_header_wording: |
+    The R1 review-task header summarised the amendment as "HOME
+    isolation preamble" but the actual R1 amendment text accepted
+    either TODO_FILE env-var injection (S01-consistent) OR HOME
+    patching. v2 chose TODO_FILE, which is the S01-consistent
+    sibling and was the R1 suggested_resolution verbatim. The
+    smoke vps (vp-01/02/03) continue to use HOME=$tempdir at the
+    shell level, which is equally valid because _todo_path() falls
+    back to Path.home() / ".todo.json" when TODO_FILE is unset.
+    No inconsistency; both seams are exercised at the appropriate
+    level (env-var at unit, HOME at end-to-end shell).
+
+contract_mechanics_recheck:
+  verification_depth: |
+    Each done_looks_like[] entry has corresponding verification
+    coverage. DLL[1] one-task line -> vp-01; DLL[2] three-task
+    insertion order -> vp-02; DLL[3] missing-file zero-exit ->
+    vp-03 + vp-04 test_list_missing_file_exits_zero; DLL[4]
+    empty-file zero-exit -> vp-04 test_list_empty_file_exits_zero;
+    DLL[5] stdout-vs-stderr -> vp-04 test_list_output_to_stdout;
+    DLL[6] framework-shaped + stdlib-only -> vp-05 matrix sensors.
+    DLL[0] (S01 schema reused unchanged) is a design declaration
+    implicitly cross-verified by vp-01/vp-02 reading what S01's
+    `add` wrote — acceptable. End-to-end depth present via vp-01
+    and vp-02 (cross-sprint chain through real S01 `add` subcommand).
+  mock_honesty: |
+    vp-04 now spells out tempfile.mkdtemp() + os.environ['TODO_FILE']
+    injection — real filesystem with injected path, real argparse,
+    real json, no internal-collaborator mocking. vp-01/02/03 are
+    end-to-end shell-level smokes. Contract is not mock-only;
+    end-to-end coverage is the dominant signal.
+  criterion_coverage: |
+    All four spec.md criteria (UX quality, Robustness, Craft,
+    Functionality) appear in criterion_mapping with >=1 step each.
+    UX quality covered by vp-06 (--help) + vp-04
+    (test_list_output_to_stdout); Robustness by vp-03 (missing
+    file end-to-end) + vp-04 (missing- and empty-file unit cases);
+    Craft by vp-04 + vp-05; Functionality by vp-01 (add-then-list
+    chain) + vp-02 (three-task insertion order). Functionality
+    has true end-to-end coverage (not mock-backed).
+  threshold_realism: |
+    smoke_must_pass=all, test_must_pass=all, matrix_must_pass=all
+    — uniform `all` posture mirrors approved S01 C-S01-v2. No
+    hedging; appropriate for a smoke-sized pure-cli sprint.
+  scope_match: |
+    features_covered == ["F02"] matches spec.md S02 "List tasks".
+    No drift; only the `list` subcommand is in scope. spec.md S02
+    Smoke check (add buy milk, then list, expect [1] buy milk line)
+    is the exact behaviour vp-01 asserts.
+
+cross_sprint_dependency_honesty:
+  s01_format_respected: |
+    dependency_note correctly identifies the S01 on-disk schema as
+    "list of {id: int, description: str, timestamp: str (UTC ISO-
+    8601)}", which matches todo.py:9 docstring and cmd_add's
+    persisted shape verbatim (commit 2eda53e). S02 commits to
+    reading that schema unchanged — no new fields, no rename.
+  add_command_invoked_in_setup: |
+    vp-01 step 2 ("python todo.py add buy milk") and vp-02 steps
+    2-4 (three successive `add` invocations) prove the end-to-end
+    chain: S01's `add` writes the file, S02's `list` reads it.
+    This is the strongest dependency-honesty signal in the
+    contract — vp-01 and vp-02 would FAIL if S02 silently changed
+    the schema or broke S01's persistence.
+  acceptable_unit_test_shortcut: |
+    vp-04 cases write JSON files directly (bypassing S01 `add`).
+    For unit-level isolation this is acceptable — vp-01/vp-02
+    smoke already exercise the real S01->S02 chain. v2 now names
+    the TODO_FILE injection mechanism, closing the implicit-
+    isolation footgun from R1.
+
+deep_module_dimension:
+  load_bearing_pass_criteria:
+    - "C2 (Applicability honesty per foundation §3 row 4):
+       done_looks_like[6] keeps todo.py labelled framework-shaped,
+       consistent with the S01 declaration. Adding a `list`
+       subcommand keeps the module in the same applicability row
+       — argparse subcommand dispatch is exactly what the row
+       describes. C2 is the load-bearing criterion because the
+       'framework-shaped' opt-out (foundation §3 row 4) is what
+       legitimately removes this module from the C1/C3/C5/C6/C7
+       walk."
+    - "C4 (Entry-point budget): the CLI public surface grows by
+       one subcommand (`list`), total subcommand count = 2 (add +
+       list), still well within the Unix-style multi-use envelope
+       and far below the bag-of-getters threshold. No library-
+       style API exported."
+  red_flags_silent:
+    - "fake-deep-pass-through: cmd_list is expected to call
+       _load_tasks + format inline — not a pass-through wrapper
+       around a single inner method."
+    - "wrapper-around-stdlib: argparse / json / pathlib used
+       directly per S01 precedent; no thin wrapper class added."
+    - "temporal-coupling: list subcommand is independent of any
+       prior call ordering in the same process; each invocation
+       is a fresh process reading fresh JSON."
+  silent_criteria_note: |
+    C1/C3/C5/C6/C7/C8 not cited — they do not load-bear for a
+    framework-shaped CLI script of this size, per parsimony rule
+    in evaluator-slice §1.5 ("APPROVE on a clean contract → cite
+    the 2-3 most load-bearing PASS criteria") and foundation §3.5
+    ("If a module is obviously deep, citing C1+C2+C4 is enough;
+    not every module needs an 8-criterion narrative"). The
+    framework-shaped row in foundation §3 explicitly says these
+    modules SHOULD NOT be measured against the full checklist —
+    citing them as PASS here would be ceremony, not evidence.
+
+narrative: |
+  Contract C-S02-v2 is approved. The single R1 amendment item
+  (naming the vp-04 path-injection mechanism for isolation
+  honesty) is resolved cleanly: vp-04 description now spells out
+  tempfile.mkdtemp() + os.environ['TODO_FILE'] injection and
+  cites the S01 sibling test (commit 2eda53e
+  tests/test_add_task.py setUp) verbatim. The mechanism matches
+  todo.py:_todo_path() — the test seam exists and is the one
+  the contract commits to using.
+
+  Contract mechanics (verification depth, criterion coverage,
+  threshold realism, scope match) are unchanged from R1, where
+  they all passed. Mock honesty now passes too — the contract
+  no longer leaves the unit-level isolation implicit.
+
+  Cross-sprint dependency honesty: vp-01/vp-02 invoke S01's
+  `add` subcommand in setup, exercising the real on-disk schema
+  written by completed C-S01-v2. The contract would FAIL fast
+  if S02 silently changed that schema, which is the strongest
+  cross-sprint signal possible without re-running the S01 suite.
+
+  Deep-module dimension: todo.py stays in the framework-shaped
+  applicability row (foundation §3 row 4); C2 + C4 are the
+  load-bearing PASS criteria. Red flags silent on the planned
+  shape.
+
+  Verdict: APPROVE. Generator may proceed to IMPLEMENT.

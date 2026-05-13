@@ -1,0 +1,121 @@
+contract_id: C-S02-v1
+review_round: 1
+verdict: amend_request
+
+amendments:
+  - check: mock_honesty_path_injection
+    point: |
+      vp-04 unit-test cases ("pre-populated tasks", "no todo file
+      exists", "todo file exists but is empty") do not name the
+      path-injection mechanism. S01's todo.py:_todo_path() reads
+      TODO_FILE env var as the test seam (and S01's existing
+      tests/test_add_task.py uses os.environ["TODO_FILE"] for
+      isolation — see commit 2eda53e tests/test_add_task.py setUp).
+      For sibling-consistency and to prevent vp-04 from accidentally
+      mutating the operator's real ~/.todo.json (the same footgun
+      S01 R1 caught), spell out the mechanism each vp-04 case uses:
+      either TODO_FILE-env-var injection (S01-consistent path) OR
+      HOME=$tempdir patching for the duration of the test. Without
+      this, vp-04 looks mock-only on inspection but its actual
+      isolation strategy is implicit.
+    suggested_resolution: |
+      Add a one-line preamble to vp-04 description (or a
+      shared-setup note above the cases) such as:
+        "Each case uses tempfile.mkdtemp() + os.environ['TODO_FILE']
+         injection to isolate from ~/.todo.json — consistent with
+         S01 tests/test_add_task.py setUp."
+
+contract_mechanics_recheck:
+  verification_depth: |
+    Each done_looks_like[] entry has corresponding verification
+    coverage. DLL[1] one-task line -> vp-01; DLL[2] three-task
+    insertion order -> vp-02; DLL[3] missing-file zero-exit ->
+    vp-03 + vp-04 test_list_missing_file_exits_zero; DLL[4]
+    empty-file zero-exit -> vp-04 test_list_empty_file_exits_zero;
+    DLL[5] stdout-vs-stderr -> vp-04 test_list_output_to_stdout;
+    DLL[6] framework-shaped + stdlib-only -> vp-05 matrix sensors.
+    DLL[0] (S01 schema reused unchanged) is a design declaration
+    rather than a behavioural claim and is implicitly cross-
+    verified by vp-01/vp-02 reading what S01's `add` wrote —
+    acceptable.
+  scope_match: |
+    features_covered == ["F02"] matches spec.md S02 "List tasks".
+    No drift; only the `list` subcommand is in scope.
+  criterion_coverage: |
+    All four spec.md criteria (UX quality, Robustness, Craft,
+    Functionality) appear in criterion_mapping with >=1 step each.
+    UX quality covered by vp-06 (--help) + vp-04
+    (test_list_output_to_stdout); Robustness by vp-03 (missing
+    file end-to-end) + vp-04 (missing- and empty-file unit cases);
+    Craft by vp-04 + vp-05; Functionality by vp-01 (add-then-list
+    chain) + vp-02 (three-task insertion order).
+  threshold_realism: |
+    smoke_must_pass=all, test_must_pass=all, matrix_must_pass=all
+    — uniform `all` posture mirrors approved S01 C-S01-v2. No
+    hedging; appropriate for a smoke-sized pure-cli sprint.
+
+cross_sprint_dependency_honesty:
+  s01_format_respected: |
+    dependency_note correctly identifies the S01 on-disk schema as
+    "list of {id: int, description: str, timestamp: str (UTC ISO-
+    8601)}", which matches commit 2eda53e todo.py:9 docstring and
+    cmd_add's persisted shape verbatim. S02 commits to reading
+    that schema unchanged — no new fields, no rename.
+  add_command_invoked_in_setup: |
+    vp-01 step 2 ("python todo.py add buy milk") and vp-02 steps
+    2-4 (three successive `add` invocations) prove the end-to-end
+    chain: S01's `add` writes the file, S02's `list` reads it.
+    This is the strongest dependency-honesty signal in the
+    contract — vp-01 and vp-02 would FAIL if S02 silently changed
+    the schema or broke S01's persistence. Approved.
+  acceptable_unit_test_shortcut: |
+    vp-04 cases write JSON files directly (bypassing S01 `add`).
+    For unit-level isolation this is acceptable — vp-01/vp-02
+    smoke already exercise the real S01->S02 chain. Flagged in
+    mock_honesty_path_injection above only to make the isolation
+    mechanism explicit, not because writing JSON directly is
+    itself dishonest.
+
+deep_module_dimension:
+  load_bearing_pass_criteria:
+    - "C2 (Applicability honesty per foundation §3 row 4):
+       done_looks_like[6] keeps todo.py labelled framework-shaped,
+       consistent with the S01 declaration. Adding a `list`
+       subcommand keeps the module in the same applicability row
+       — argparse subcommand dispatch is exactly what the row
+       describes."
+    - "C4 (Entry-point budget): the CLI public surface grows by
+       one subcommand (`list`), still well within the Unix-style
+       multi-use envelope. No library-style API exported."
+  red_flags_silent:
+    - "fake-deep-pass-through: cmd_list is expected to call
+       _load_tasks + format inline — not a pass-through wrapper."
+    - "wrapper-around-stdlib: argparse / json / pathlib used
+       directly per S01 precedent."
+    - "temporal-coupling: list subcommand is independent of any
+       prior call ordering in the same process."
+  silent_criteria_note: |
+    C1/C3/C5/C6/C7/C8 not cited — they do not load-bear for a
+    framework-shaped CLI script of this size, per parsimony rule
+    in evaluator-handbook Check 6 and foundation §3.5 "If a module
+    is obviously deep, citing C1+C2+C4 is enough; not every module
+    needs an 8-criterion narrative."
+
+narrative: |
+  Contract C-S02-v1 is solid on the cross-sprint dimension: the
+  dependency_note explicitly names the S01 schema, and vp-01/vp-02
+  invoke S01's `add` subcommand in setup so the end-to-end chain
+  is actually exercised (not just asserted). Criterion coverage,
+  scope match, and threshold posture all mirror the approved
+  S01 C-S01-v2 — sibling-consistent, no hedging.
+
+  One amendment item: vp-04's unit-test cases don't name the
+  path-injection mechanism, leaving the isolation strategy
+  implicit. S01 R1 review explicitly caught the analogous footgun
+  on its smoke steps; tightening vp-04 to name TODO_FILE env-var
+  injection (the S01 test-seam already in tests/test_add_task.py
+  setUp) keeps the contract honest at the unit-test level too.
+  This is a minor wording amendment, not a structural one.
+
+  Re-propose as C-S02-v2 with the vp-04 isolation mechanism named
+  and this review will move to APPROVE.
