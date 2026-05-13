@@ -1,0 +1,87 @@
+{
+  "sprint": "S01",
+  "round": 2,
+  "contract_id": "C-S01-v2",
+  "transcript_note": "No specs/_epic/_traces/ directory present for R2; transcript-slice evidence unavailable. Verification grounded on contract literal, git diff HEAD~1..HEAD (commit 2eda53e), and re-executed verification_plan steps.",
+  "verification_steps": [
+    {
+      "vp_id": "vp-01",
+      "kind": "smoke",
+      "result": "PASS",
+      "evidence": "Re-executed shell-side: `TMPDIR=$(mktemp -d); export HOME=$TMPDIR; python3 todo.py add buy milk` -> exit 0; $HOME/.todo.json contains [{\"id\":1,\"description\":\"buy milk\",\"timestamp\":\"2026-05-13T02:01:38.560340+00:00\"}]. id is int 1, description matches, timestamp is UTC ISO-8601 ending in '+00:00'. R1 root cause (description = single positional) closed by todo.py:85 nargs='+' + todo.py:56 ' '.join join."
+    },
+    {
+      "vp_id": "vp-02",
+      "kind": "smoke",
+      "result": "PASS",
+      "evidence": "Re-executed shell-side: same HOME tempdir, `python3 todo.py add buy milk && python3 todo.py add fix tests` -> both exit 0; $HOME/.todo.json contains two entries with ids 1 and 2; second entry description='fix tests'. Auto-increment correct on the contract-literal unquoted form."
+    },
+    {
+      "vp_id": "vp-03",
+      "kind": "test",
+      "result": "PASS",
+      "evidence": "`python3 -m unittest discover -s tests -v` -> 6 tests run in 0.037s, OK. New case test_multiword_description_persisted (tests/test_add_task.py:160-174) invokes `subprocess.run([sys.executable, 'todo.py', 'add', 'buy', 'milk'])` with three discrete argv tokens — the exact real-shell tokenization that R1 flagged as missing — and asserts the persisted description is 'buy milk'. This is no longer vacuous against the bug R1 surfaced."
+    },
+    {
+      "vp_id": "vp-04",
+      "kind": "matrix",
+      "result": "PASS",
+      "evidence": "lint:ruff -> `ruff check todo.py tests/` -> 'All checks passed!' exit 0. typecheck:mypy-strict -> `mypy --strict todo.py tests/` -> 'Success: no issues found in 3 source files' exit 0. stdlib-only -> AST walk of todo.py imports = {argparse, datetime, json, os, pathlib, sys}, intersection with non-stdlib = empty set."
+    },
+    {
+      "vp_id": "vp-05",
+      "kind": "smoke",
+      "result": "PASS",
+      "evidence": "`python3 todo.py --help` -> exit 0; stdout non-empty; contains 'add' subcommand named with help text. `python3 todo.py add --help` -> exit 0; stdout non-empty; usage now reads `usage: todo add [-h] description [description ...]` reflecting the nargs='+' contract honestly."
+    }
+  ],
+  "matrix_sensor_notes": {
+    "todo.py": {
+      "interface_stability": "N/A — contract did not request a rename-internal-helper sensor; not declared, not vacuously asserted.",
+      "race_stress": "N/A — stateless single-process CLI; no shared state to race on.",
+      "regression_check_quoted_form": "PASS — `python3 todo.py add 'buy milk'` (single-token quoted form) still produces description='buy milk' with nargs='+' (one-element list joined). No regression vs R1's already-working quoted path."
+    }
+  },
+  "module_design_verification": [
+    {
+      "module_name": "todo.py",
+      "hides_decision_falsifiable_within_one_minute": false,
+      "applicability_honest": true,
+      "boundary_type_honest": true,
+      "design_review": "todo.py remains framework-shaped per deep-module-handbook §3 (argparse subcommand dispatch + JSON file persistence). R2 change (nargs='+' + join) is internal to the argparse adapter layer; applicability and boundary-type unchanged. No hides_decision claim was made at NEGOTIATE (waived for framework-shaped row), so nothing to falsify. C4 entry-point budget still passes (one __main__ entry). No §5 red flag fires: no pass-through stack, no decorator stack, no config-leak, no temporal coupling, no wrapper-around-stdlib (argparse / json / pathlib used directly). R1 drift item (done_looks_like[0] literal `add buy milk` not honoured) is closed: verified end-to-end above.",
+      "drift_from_contract": []
+    }
+  ],
+  "criteria": [
+    {
+      "name": "UX quality",
+      "passed": true,
+      "evidence": ["vp-05 PASS (--help screens single-screen on both top-level and `add`; 'add' subcommand named)", "vp-03 test_add_no_description_exits_nonzero PASS (stderr names the offending argument 'description')"]
+    },
+    {
+      "name": "Robustness",
+      "passed": true,
+      "evidence": ["vp-01 PASS (HOME-isolated `add buy milk` succeeds end-to-end; missing ~/.todo.json handled — file is created on first add)", "vp-03 test_add_empty_file_succeeds PASS (pre-existing 0-byte file treated as empty list, not a parse error)"]
+    },
+    {
+      "name": "Craft",
+      "passed": true,
+      "evidence": ["vp-03 6/6 unit tests PASS — including the new subprocess test that closes R1's vacuous-pass gap", "vp-04 ruff PASS / mypy --strict PASS / stdlib-only PASS"]
+    },
+    {
+      "name": "Functionality",
+      "passed": true,
+      "evidence": ["vp-01 PASS — `python todo.py add buy milk` (contract-literal unquoted form) persists a well-formed JSON entry with id=1, correct description, UTC ISO-8601 timestamp", "vp-02 PASS — second `add` produces id=2, confirming auto-increment across successive calls on the contract-literal form"]
+    }
+  ],
+  "findings": [
+    {
+      "kind": "hint",
+      "vp_id": "vp-04",
+      "evidence": "todo.py:60 — `assert isinstance(next_id, int)`. Same line as R1's hint finding; carried unchanged through R2.",
+      "gap": "Defensive assert against a self-controlled JSON schema is dead weight; under `python -O` the type narrowing it expresses vanishes silently. Acceptable in R2 since (a) it does not affect any verification_plan step and (b) it was flagged `hint` not `blocking` in R1.",
+      "suggested_fix_hint": "If a future sprint touches the schema or this hot-path, drop the assert and rely on the type annotation + mypy --strict for narrowing. Not blocking this round."
+    }
+  ],
+  "verdict": "PASS"
+}

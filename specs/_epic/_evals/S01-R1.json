@@ -1,0 +1,102 @@
+{
+  "sprint": "S01",
+  "round": 1,
+  "contract_id": "C-S01-v2",
+  "transcript_note": "No specs/_epic/_traces/ directory exists; transcript-slice evidence unavailable. Verification grounded on contract literal, git diff (HEAD=6dffaaf), and re-executed verification_plan steps.",
+  "verification_steps": [
+    {
+      "vp_id": "vp-01",
+      "kind": "smoke",
+      "result": "FAIL",
+      "evidence": "Reproduced via `TMPDIR=$(mktemp -d); export HOME=$TMPDIR; python3 todo.py add buy milk` — argparse emits `unrecognized arguments: milk` and exits 2; ~/.todo.json is NOT created. The literal contract step `Run: python todo.py add buy milk` fails."
+    },
+    {
+      "vp_id": "vp-02",
+      "kind": "smoke",
+      "result": "FAIL",
+      "evidence": "Same root cause as vp-01: literal step `Run: python todo.py add fix tests` also fails with `unrecognized arguments: tests`. Internal auto-increment LOGIC works when invoked with quoted args (`add 'buy milk'` then `add 'fix tests'` produces ids [1,2]), but the contract-literal invocation form fails."
+    },
+    {
+      "vp_id": "vp-03",
+      "kind": "test",
+      "result": "PASS",
+      "evidence": "`python -m unittest discover -s tests` — 5/5 tests pass in 0.003s. Note: every test invokes `todo.main([\"add\", \"buy milk\"])` with the description pre-split into a single argv element; none exercise the shell-tokenised `add buy milk` path that the spec.md smoke check and contract literals require, so the test suite is vacuous against the actual bug."
+    },
+    {
+      "vp_id": "vp-04",
+      "kind": "matrix",
+      "result": "PASS",
+      "evidence": "lint:ruff: `ruff check todo.py tests/` -> `All checks passed!` exit 0. typecheck:mypy-strict: `mypy --strict todo.py tests/` -> `Success: no issues found in 3 source files` exit 0. stdlib-only: AST walk of todo.py imports yields only {argparse, datetime, json, os, pathlib, sys} — all in sys.stdlib_module_names."
+    },
+    {
+      "vp_id": "vp-05",
+      "kind": "smoke",
+      "result": "PASS",
+      "evidence": "`python3 todo.py --help` exit 0, non-empty stdout, contains 'add'. `python3 todo.py add --help` exit 0, non-empty stdout."
+    }
+  ],
+  "matrix_sensor_notes": {
+    "todo.py": {
+      "interface_stability": "N/A — contract did not request a rename-internal-helper sensor; not declared, not vacuously asserted.",
+      "race_stress": "N/A — stateless single-process CLI; no shared state to race on."
+    }
+  },
+  "module_design_verification": [
+    {
+      "module_name": "todo.py",
+      "hides_decision_falsifiable_within_one_minute": false,
+      "applicability_honest": true,
+      "boundary_type_honest": true,
+      "design_review": "Single-file CLI honestly labelled framework-shaped per deep-module-handbook §3 (argparse subcommand dispatch + JSON file persistence). No hides_decision claim was made at NEGOTIATE (waived for the framework-shaped row), so nothing to falsify. Public surface is one entry point (the script run as __main__); C4 entry-point budget passes. No §5 red flag fires (no pass-through stack, no decorator stack, no config-leak, no exception-leak — stdlib exceptions propagate naturally as a CLI; no temporal coupling — no init/start protocol; no wrapper-around-stdlib — argparse / json / pathlib used directly). Per §3, opt-out modules are not measured against C1-C7 PASS criteria.",
+      "drift_from_contract": [
+        "done_looks_like[0]: `Running python todo.py add buy milk persists a new entry to ~/.todo.json with integer id=1, description='buy milk', ...` — the implementation defines the `description` positional as a single-token arg (no nargs='+' or equivalent), so the literal unquoted form `add buy milk` is rejected by argparse with `unrecognized arguments: milk` instead of persisting a `buy milk` task. The contract literal does not work."
+      ]
+    }
+  ],
+  "criteria": [
+    {
+      "name": "UX quality",
+      "passed": true,
+      "evidence": ["vp-05 PASS (--help screens are single-screen, 'add' subcommand named)", "vp-03 test_add_no_description_exits_nonzero PASS (stderr names the offending argument 'description')"]
+    },
+    {
+      "name": "Robustness",
+      "passed": false,
+      "evidence": ["vp-01 FAIL: literal contract step `add buy milk` rejected by argparse; ~/.todo.json never written, so 'handles a missing or empty ~/.todo.json cleanly' end-to-end path is not demonstrated against the spec smoke literal", "vp-03 test_add_empty_file_succeeds PASS in isolation (covers empty-file edge case via main([\"add\", \"buy milk\"]))"]
+    },
+    {
+      "name": "Craft",
+      "passed": true,
+      "evidence": ["vp-03 5/5 unit tests PASS", "vp-04 ruff PASS / mypy --strict PASS / stdlib-only PASS"]
+    },
+    {
+      "name": "Functionality",
+      "passed": false,
+      "evidence": ["vp-01 FAIL (`add buy milk` does not persist a well-formed JSON entry against the spec smoke literal)", "vp-02 FAIL (`add fix tests` likewise rejected; auto-increment logic works only when description is pre-quoted to a single argv token)"]
+    }
+  ],
+  "findings": [
+    {
+      "kind": "blocking",
+      "vp_id": "vp-01",
+      "evidence": "todo.py:82-85 — `add_parser.add_argument(\"description\", help=...)` defines description as a single-token positional. Reproduced shell-side: `python3 todo.py add buy milk` -> `todo: error: unrecognized arguments: milk`, exit 2, ~/.todo.json not created. Spec.md S01 smoke check, contract C-S01-v2 done_looks_like[0], and vp-01 step `Run: python todo.py add buy milk` all use this literal unquoted multi-word form.",
+      "gap": "When the developer runs `todo add buy milk` (the literal in spec.md S01 smoke check and contract done_looks_like[0]), the CLI errors out instead of recording a task. Quoting the description (`todo add 'buy milk'`) works, but neither the spec smoke check nor the contract step nor any reasonable end-user workflow includes quotes. As written, the sprint does not deliver F01.",
+      "suggested_fix_hint": "Either declare description as `nargs='+'` and join with spaces in cmd_add, or accept the rest of the line via `nargs=argparse.REMAINDER`. The unit tests must then be augmented with a case that invokes `todo.main(['add', 'buy', 'milk'])` (multi-token argv) so this regression is caught next time."
+    },
+    {
+      "kind": "blocking",
+      "vp_id": "vp-03",
+      "evidence": "tests/test_add_task.py:34, 68, 117 — every add call uses `[\"add\", \"buy milk\"]` (description pre-collapsed into one argv element). No test exercises `[\"add\", \"buy\", \"milk\"]` or shell-tokenised invocation.",
+      "gap": "The unit-test suite is vacuous against the actual bug: it can only ever pass once description is already a single token, so it never catches the argparse misconfiguration that breaks the spec smoke literal. Tests demonstrate the internal helpers work; they do NOT demonstrate the CLI works as specified.",
+      "suggested_fix_hint": "Add a `test_add_multi_word_description` case that calls `todo.main(['add', 'buy', 'milk'])` and asserts the persisted entry has `description == 'buy milk'`. This is the test that, written first, would have made the implementer choose `nargs='+'`."
+    },
+    {
+      "kind": "hint",
+      "vp_id": "vp-04",
+      "evidence": "todo.py:59 — `assert isinstance(next_id, int)`. Asserts are an internal-only check that disappears under `python -O`. Acceptable for now; flagged so it doesn't become a robustness regression if the schema ever evolves (e.g., gets a `archived` flag that someone might confuse for `id`).",
+      "gap": "Defensive assert against a self-controlled schema is dead weight; in a CLI run with `-O` the type narrowing it expresses disappears silently.",
+      "suggested_fix_hint": "Drop the assert; rely on the type annotation + mypy --strict for the narrowing."
+    }
+  ],
+  "verdict": "FAIL"
+}
