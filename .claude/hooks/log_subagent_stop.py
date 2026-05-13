@@ -369,15 +369,38 @@ def _audit_stack_discovery(stats: dict, project_dir: Path) -> dict:
     }
 
 
-def _format_stack_audit_cell(audit: dict) -> str:
-    """Render the audit dict into a single TSV-safe cell string."""
+def _infer_round_kind(stats: dict) -> str:
+    """Detect whether this invocation is a fresh R1 / mode-switch round or
+    an R>1 incremental amend, based on files_written patterns.
+
+    Returns 'R1' (treat audit miss as FAIL — first time the role sees the
+    sprint) or 'Rgt1' (R>1 amend in NEGOTIATE/REVIEW mode — treat audit
+    miss as SKIP-Rgt1 informational, since incremental work doesn't
+    require re-Read of stack SKILL.md to address amendments).
+    """
+    for w in stats.get("files_written") or []:
+        m = _re.search(r"_pending/S\d+-(?:draft|review)-v(\d+)\.yaml", w)
+        if m and int(m.group(1)) >= 2:
+            return "Rgt1"
+    return "R1"
+
+
+def _format_stack_audit_cell(audit: dict, round_kind: str = "R1") -> str:
+    """Render the audit dict into a single TSV-safe cell string.
+
+    R1 + mode-switch (impl / verify) miss => `FAIL:N/M` (real gap).
+    R>1 amend miss => `SKIP-Rgt1:N/M` (informational; task-focused
+    increment doesn't require re-Read).
+    """
     if not audit:
         return ""
     if not audit.get("required"):
         return f"skip:{audit.get('reason', 'n/a')}"
     expected = len(audit.get("expected_stack_skills", []))
     read = expected - len(audit.get("missing_stack_skills", []))
-    state = "PASS" if audit.get("satisfied") else "FAIL"
+    if audit.get("satisfied"):
+        return f"PASS:{read}/{expected}"
+    state = "SKIP-Rgt1" if round_kind == "Rgt1" else "FAIL"
     return f"{state}:{read}/{expected}"
 
 
@@ -396,7 +419,10 @@ def _append_progress_row(progress_tsv: Path, agent_type: str, feature: str,
     verdict, note = ("", "")
     if agent_type == "evaluator":
         verdict, note = _read_evaluator_verdict(project_dir, feature, round_num)
-    audit_cell = _format_stack_audit_cell(stats.get("stack_audit") or {})
+    audit_cell = _format_stack_audit_cell(
+        stats.get("stack_audit") or {},
+        _infer_round_kind(stats),
+    )
     variant = raw_agent_type if raw_agent_type != agent_type else ""
     row = (
         f"{ts}\t{feature}\t{round_num}\t{agent_type}\t{variant}"
