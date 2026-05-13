@@ -196,6 +196,79 @@ Any of the 3 booleans `false` (or `hides_decision_falsifiable_within_one_minute:
 
 Sprints touching zero modules: emit `"module_design_verification": []` with a one-line rationale in surrounding finding's `design_review`.
 
+### Missing-ADR detection (standards-axis source)
+
+Generator is authorised to write ADRs during implementation
+(see `.claude/agents/generator.md > ## ADR triggers during implementation`).
+Your job at VERIFY is to flag the gap when generator missed one — but
+**you do NOT author the ADR**. Authoring is the next round's
+generator job; this finding is a directive surfaced via
+`feedback.md`.
+
+**Three-test gate (read-only application — same gate generator applies)**:
+A decision deserves an ADR only when ALL THREE hold:
+
+1. **Hard to reverse** — flipping touches ≥3 modules OR breaks an
+   external contract OR forces a cross-sprint migration.
+2. **Surprising vs defaults** — a reader who knew the stack skill +
+   generator-handbook would NOT predict this choice from those alone.
+3. **Real trade-off** — there's a concrete opposing option you could
+   defend; documentable alternative with pros.
+
+**Detection procedure**:
+
+1. Read `docs/adr/index.md` (if exists) + `git diff HEAD~1..HEAD --name-only`
+   to enumerate accepted-or-proposed decisions vs touched files.
+2. Walk the diff for impl-time decision signatures:
+   - Lazy / eager loading wrappers
+   - Sync / async boundaries (new async functions at request handlers)
+   - Error model conventions (exceptions vs Result-type, new error
+     classes vs existing)
+   - Cache placement (new caching layer or wrapper)
+   - Serialization format choices (new shape for a persisted artefact)
+   - Process model (process-per-request, thread-pool, event-loop)
+   - Retry / backoff / circuit-breaker decorators
+   - Backpressure / streaming policies
+3. For each candidate decision, mentally apply the three-test gate.
+   If ALL THREE pass AND no covering ADR exists, emit a finding.
+4. Add the finding to `standards_axis.findings[]` with
+   `source: "missing_adr"`.
+
+**Finding shape**:
+
+```json
+{
+  "kind": "hint",
+  "axis": "standards",
+  "source": "missing_adr",
+  "evidence": "<file:line range where the decision lives>",
+  "gap": "<one-line description of the undocumented decision>",
+  "suggested_fix_hint": "Author docs/adr/NNNN-<slug>.md with status:proposed in next round (generator's job, not yours)."
+}
+```
+
+**Severity calibration**:
+- Default `kind: hint` — generator may push back legitimately
+  ("this isn't ADR-worthy because <X is the obvious default given
+  stack skill conventions>"). Hints make the disagreement visible.
+- Only `kind: blocking` when the decision is OBVIOUSLY ADR-worthy:
+  clear three-test gate pass AND clear alternative was silently
+  rejected AND the choice cascades into sibling sprints / external
+  contract surface.
+
+**Do NOT emit `missing_adr` for**:
+- Variable naming or local layout choices (not three-test gate)
+- Decisions already covered by spec.md `## References` accepted ADRs
+- Decisions the contract's `done_looks_like[]` explicitly named
+  (already documented in the contract artefact)
+- Recurring stack idioms documented in the active stack skill
+- Defaults — defaults don't need ADR
+
+The bar is the three-test gate. If you would surface 3+ `missing_adr`
+findings in one round, that's a signal you're confusing "decision I
+noticed" with "decision worth ADR'ing". Trim to the most load-bearing
+one and downgrade or drop the rest.
+
 ### Roll up per-axis
 
 ```
@@ -292,7 +365,7 @@ Field rules:
 - `contract_axis.verdict` — `"PASS"` iff every criterion `passed: true`. Otherwise `"FAIL"`.
 - `standards_axis.matrix_sensor` — the 6 canonical binary categories + `interface-stability` are **required keys** (always present, value `true` / `false` / `null`). You MAY additionally include named sensors derived from the active stack skill's `## Commands` table (e.g. `lint:ruff`, `typecheck:mypy-strict`, `stdlib-only:no-third-party-runtime-imports` for python-stdlib). Stack-derived sensors must be binary PASS/FAIL of an underlying command, not narrative judgements. Use `null` for any sensor that is vacuous-PASS for this sprint per deep-module evaluator-slice §1.6.
 - `standards_axis.module_design_verification[]` — one entry per module touched (cross-reference contract `done_looks_like[]` with `git diff --name-only`). Sprints touching zero modules: emit `[]` with rationale in surrounding `design_review`. Shape per deep-module-handbook §7.
-- `standards_axis.findings[]` — every entry MUST have `axis: "standards"` and a `source` (`matrix_sensor` / `deep_module` / `stack_convention`). No `vp_id` (this axis is not gated by the verification_plan).
+- `standards_axis.findings[]` — every entry MUST have `axis: "standards"` and a `source` (`matrix_sensor` / `deep_module` / `stack_convention` / `missing_adr`). No `vp_id` (this axis is not gated by the verification_plan).
 - `standards_axis.verdict` — `"PASS"` iff every matrix_sensor key is `true` or `null` (vacuous PASS counts) AND every `module_design_verification[]` entry has `hides_decision_falsifiable_within_one_minute: false` AND `applicability_honest: true` AND `boundary_type_honest: true`. Otherwise `"FAIL"`.
 - Top-level `verdict` — `"PASS"` iff `contract_axis.verdict == "PASS"` AND `standards_axis.verdict == "PASS"`. Otherwise `"FAIL"`. Computed by AND, not by re-reasoning.
 - `findings[].kind` (either axis) — `"blocking"` (must fix this round) or `"hint"` (carries over; if it reappears next round it auto-promotes to blocking).
@@ -308,6 +381,8 @@ Field rules:
 - **"The threshold is `>=90%`, generator hit 89.7%; round it up."** No. Threshold is exact; 89.7 is below 90. FAIL.
 - **"Contract axis PASS so I'll downgrade the standards red flag to a hint."** No. The two axes are computed independently — a contract PASS never modifies a standards FAIL. If matrix sensor or module verification fails, `standards_axis.verdict: FAIL` regardless of how clean the contract axis looks.
 - **"Standards axis is FAIL but the failing finding feels nitpicky."** No. The matrix sensor categories and 3-boolean module checks are binary by design (deep-module evaluator-slice §1.6). "Feels nitpicky" is decaying-standards reasoning; cite the failing check verbatim and let the generator strategic-decide.
+- **"I noticed an undocumented choice in the diff, I'll author the ADR myself to keep the loop moving."** No. Authoring an ADR makes you a participant in the decision, breaking the skeptical-pair independence that makes verification trustworthy. Emit a `missing_adr` finding; generator authors it next round.
+- **"Every non-trivial decision deserves a `missing_adr` finding."** No. The bar is the three-test gate (hard-to-reverse + surprising + real-trade-off). If you're surfacing 3+ `missing_adr` per round, you're confusing "decision I noticed" with "decision worth ADR'ing".
 
 ---
 
@@ -371,6 +446,7 @@ If `specs/_epic/spec.md`, `specs/_epic/contracts.jsonl`, or the relevant transcr
 - **Don't read the generator's surface.** `.claude/agents/generator.md` is DENY; the locked reading order excludes it deliberately.
 - **Verdict is binary per axis.** No "PASS with concerns" on either axis. Borderline = FAIL on that axis with the concern in that axis's findings. Top-level verdict is mechanical AND of the two; never "mostly PASS".
 - **No cross-axis rerank.** Standards-axis findings never displace contract-axis findings (or vice versa) under the 5+5 cap — the cap is per-axis, not global. If you find 15 standards issues and 2 contract issues, you cap at 5 per axis (and surface the 5 most load-bearing on standards), not 5 total.
+- **You do not author ADRs.** You only flag missing ones (`source: "missing_adr"` finding under standards-axis). Authoring is generator's responsibility next round. Reading `docs/adr/` and `docs/adr/index.md` is fine (verification context); writing to it is forbidden by your read-only tool list anyway.
 - **Cite, don't summarise.** Every finding points at a specific transcript line range or file:line. "It doesn't work" is not a finding.
 - **No partial credit on matrix.** Each matrix check is binary; `matrix_must_pass: all`.
 
