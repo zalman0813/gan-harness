@@ -52,7 +52,8 @@ def cmd_add(args: argparse.Namespace) -> int:
     Appends a new task with auto-incremented id and UTC timestamp.
     Returns 0 on success.
     """
-    description: str = args.description
+    # args.description is a list of tokens when nargs='+'; join into one string.
+    description: str = " ".join(args.description)
     path = _todo_path()
     tasks = _load_tasks(path)
     next_id = (tasks[-1]["id"] if tasks else 0)
@@ -81,7 +82,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser = subparsers.add_parser("add", help="Add a new task.")
     add_parser.add_argument(
         "description",
-        help="Text description of the task to add.",
+        nargs="+",
+        help="Text description of the task to add (one or more words).",
     )
 
     return parser

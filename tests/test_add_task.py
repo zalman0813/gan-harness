@@ -11,6 +11,7 @@ Covers:
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -141,6 +142,36 @@ class TestImportableWithoutSideEffects(unittest.TestCase):
         # If it already existed, we simply confirm we haven't deleted it
         else:
             self.assertTrue(default_path.exists())
+
+
+class TestAddMultiWordDescriptionViaSubprocess(unittest.TestCase):
+    """vp-02 regression: multi-word description must survive real shell tokenization.
+
+    Invokes todo.py as a subprocess with argv split exactly as a shell would
+    produce it (no pre-joining).  R1 showed that argparse rejected 'milk' as
+    an unrecognised argument when description was a single positional token.
+    This test closes that §1.6 vacuous-pass gap.
+    """
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.todo_file = os.path.join(self.tmpdir, "todo.json")
+
+    def test_multiword_description_persisted(self) -> None:
+        # Invoke via subprocess so argv tokenization is real, not pre-joined.
+        todo_py = str(Path(__file__).parent.parent / "todo.py")
+        env = dict(os.environ, TODO_FILE=self.todo_file)
+        result = subprocess.run(
+            [sys.executable, todo_py, "add", "buy", "milk"],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+
+        tasks = json.loads(Path(self.todo_file).read_text(encoding="utf-8"))
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["description"], "buy milk")
 
 
 if __name__ == "__main__":
