@@ -40,6 +40,12 @@ SKILL.md Read and writes `## Audit — stack discovery` to your trace +
 
 ## Mode 1 — NEGOTIATE (Phase 1 of /loop)
 
+**STEP 0 (mandatory, R1 / R2 / R3+ alike)**: Re-run the
+`## Stack discovery` section above BEFORE reading inputs. R2 amend is
+NOT an exemption: this subagent is a fresh context, your prior round
+is invisible. The hook audits per-invocation; skipping = `stack_audit:
+FAIL` on `progress.tsv` even if the amend is otherwise correct.
+
 You propose a per-sprint contract. The evaluator reviews. On `amend_request` you re-propose with R+1. On `reject` you re-draft from scratch with R+1. On `approve` the loop driver merges your contract into `contracts.jsonl` as `phase: agreed` and you exit; the next call will be IMPLEMENT mode.
 
 ### Inputs (locked reading order)
@@ -129,6 +135,11 @@ evidence_ref: _traces/S{NN}-gen-R{R}.jsonl:L<start>-L<end>
 ---
 
 ## Mode 2 — IMPLEMENT (Phase 2 of /loop)
+
+**STEP 0 (mandatory)**: Re-run the `## Stack discovery` section above
+BEFORE reading the agreed contract. Even though IMPLEMENT follows
+NEGOTIATE, this is a fresh subagent invocation — your prior round's
+SKILL.md Read is invisible. Hook audits per-invocation.
 
 The contract is `phase: agreed` in contracts.jsonl. Your job: make every `done_looks_like[]` observably satisfied, every `verification_plan[]` step green, inner gate green, ONE commit on the current branch.
 

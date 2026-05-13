@@ -52,6 +52,12 @@ negotiation produces 2 separate audits both of which must PASS.
 
 ## Mode 1 — REVIEW_CONTRACT (Phase 1 of /loop)
 
+**STEP 0 (mandatory, applies to R1/R2/R3+ alike)**: Re-run the
+`## Stack discovery` section above BEFORE reading the draft. R2 review
+is NOT an exemption — this subagent is a fresh context, your prior
+round's Read of SKILL.md is invisible here. Skipping = audit FAIL on
+`progress.tsv`.
+
 The generator has written `_pending/S{NN}-draft-v{R}.yaml`. You issue `approve`, `amend_request`, or `reject`.
 
 ### Input
@@ -114,6 +120,13 @@ Deep-module-slice §1.5 also uses uppercase narrative vocabulary inside the YAML
 ---
 
 ## Mode 2 — VERIFY (Phase 3 of /loop)
+
+**STEP 0 (mandatory)**: Re-run the `## Stack discovery` section above
+BEFORE reading the contract. Same reason as REVIEW_CONTRACT: fresh
+context per invocation, hook audits per-invocation. Even though
+VERIFY runs after IMPLEMENT, this subagent has not seen the prior
+generator's transcript, so any "I already know the stack" assumption
+is false here.
 
 The generator has committed implementation for round IR. Your job: run every verification step, roll up to the 4 archetype criteria, decide PASS or FAIL.
 
