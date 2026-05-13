@@ -1,11 +1,13 @@
 ---
 name: adr-lifecycle
-description: ADR proposed→accepted lifecycle (MADR + supersedes retroactive backfill). The three-test gate, frontmatter spec, body convention, and lifecycle scripts. Loaded by planner on demand when an architectural decision surfaces during /plan Phase 1.
+description: ADR proposed→accepted lifecycle (MADR + supersedes retroactive backfill). The three-test gate, frontmatter spec, body convention, and lifecycle scripts. Loaded by planner during /init AND by generator during /loop sprint implementation — both agents may author ADRs (Position B). Evaluator reads ADRs for VERIFY context and may emit `missing_adr` standards-axis findings, but does not author.
 ---
 
 # ADR Lifecycle
 
-The planner creates ADRs as `status: proposed` during /plan Phase 1. /finalize promotes them to `accepted` and retroactively backfills `superseded_by` on any predecessors. Bodies are immutable from creation; only frontmatter `status` and `superseded_by` are ever mutated.
+**Multi-author authorship (Position B)**: gan-harness allows ADRs to be authored by either the planner (during /init, spec-level decisions) or the generator (during /loop, implementation-time decisions). Both apply the same three-test gate. The evaluator surfaces gaps via `missing_adr` standards-axis findings but does not author. /finalize promotes all `proposed` ADRs to `accepted` regardless of author.
+
+ADRs are always created as `status: proposed`. /finalize promotes them to `accepted` and retroactively backfills `superseded_by` on any predecessors. Bodies are immutable from creation; only frontmatter `status` and `superseded_by` are ever mutated.
 
 ## Three-test gate (apply BEFORE writing any ADR)
 
@@ -39,18 +41,34 @@ If any one fails → **do not write an ADR**. Route the concern instead:
 
 ## Frontmatter spec
 
+The frontmatter shape below matches the existing
+`docs/adr/0001-v3.8-redesign.md` (the seed ADR). Keep the same shape on
+every new ADR so the index regen + retroactive supersede script stay
+deterministic.
+
 ```yaml
 ---
+id: ADR-NNNN                  # zero-padded 4 digits, matches filename prefix
+title: <one-line decision>    # human-readable; appears in index.md
 status: proposed              # proposed | accepted | superseded | deprecated
-date: 2026-05-08              # ISO date the ADR was first written
-batch: <batch-slug>           # which batch introduced this (provenance; never changed)
-supersedes: [0030, 0015]      # explicit predecessors this ADR replaces; ids only (omit if none)
+proposed_date: 2026-05-08     # ISO date when the ADR was first written
+accepted_date: null           # filled at /finalize on promotion (omit at write time)
+supersedes: []                # explicit predecessor ids (e.g., ["ADR-0030"]); empty list if none
 superseded_by: null           # filled retroactively when a future ADR supersedes this (omit at write time)
+authors:                       # who authored this ADR — multi-author allowed (Position B)
+  - planner                    # for /init-time decisions (planner agent)
+  # OR
+  - generator-S{NN}-R{IR}      # for /loop-time decisions (generator agent at specific sprint+round)
+  # OR
+  - maintainer                 # for human-authored ADRs (seed ADRs, retros)
 tags: [auth, session]         # for topic grouping in index.md (omit if none)
+epic_slug: <slug>             # which epic introduced this — provenance; never changed. May be omitted on maintainer-authored seed ADRs.
 ---
 ```
 
-**Required**: `status`, `date`, `batch`. **Optional**: `supersedes`, `superseded_by`, `tags`. Omit entirely if not used; do not write empty arrays just to fill the slot.
+**Required**: `id`, `title`, `status`, `proposed_date`, `supersedes`, `superseded_by`, `authors`. **Optional**: `accepted_date` (filled by /finalize), `tags`, `epic_slug` (omit on maintainer ADRs).
+
+`authors` is a list to allow co-authorship (rare; e.g., generator drafts, planner extends in a subsequent /init). Single-author ADRs are the common case — write a single-item list.
 
 ## Body — minimal by default
 
@@ -71,43 +89,65 @@ The body is **immutable from creation**. To revise, write a new ADR that superse
 
 ## Lifecycle
 
-### 1. Created (planner during /plan Phase 1)
+### 1. Created (planner during /init OR generator during /loop)
 
-- Filename: `docs/adr/NNNN-<kebab-slug>.md` (NNNN = next free integer, zero-padded to 4)
-- Frontmatter `status: proposed`, `date: <today>`, `batch: <current-slug>`
+Two authoring entry points (Position B):
+
+- **Planner at /init**: cross-sprint / spec-level decisions surfaced
+  during grill. The ADR candidate appears in `_grill.html`'s ADR
+  toggle group; if user accepts, planner writes the file at finalize.
+  `authors: [planner]`.
+- **Generator at /loop sprint IMPLEMENT**: impl-time decisions that
+  surface when actually writing code (lazy/eager, sync/async, error
+  model, cache placement, etc.). Generator writes the ADR file in the
+  same commit as the implementation. `authors: [generator-S{NN}-R{IR}]`.
+
+Both authors apply the same three-test gate before writing.
+
+- Filename: `docs/adr/NNNN-<kebab-slug>.md` (NNNN = next free integer, zero-padded to 4 — author reads `docs/adr/index.md` or `ls docs/adr/` first to find the next free id)
+- Frontmatter: `status: proposed`, `proposed_date: <today>`, `authors: [<role>]`, `epic_slug: <slug>`
 - Body filled (1-3 sentences default)
-- Referenced from `feature-list.json[].decision_refs[]` so dependent features carry the link
+- Referenced from `spec.md` `## References` (planner-authored) OR the sprint commit body's `- ADR-NNNN: ...` bullet (generator-authored)
 
 ### 2. Promoted (at /finalize)
 
 `scripts/finalize_adr.py` runs:
-1. For each proposed ADR in current batch → set `status: accepted`.
+1. For each `status: proposed` ADR with `epic_slug` matching the current epic → set `status: accepted`, fill `accepted_date: <today>`.
 2. For each promoted ADR's `supersedes:` ids → open the predecessor → set frontmatter `superseded_by: <new_id>`, `status: superseded`. Body untouched.
 3. Regen `docs/adr/index.md`.
 
-### 3. Superseded (later batch)
+Promotion is author-agnostic — same script handles planner-authored and generator-authored proposed ADRs the same way.
 
-When a later batch's planner writes a new ADR with `supersedes: [NNNN]`, the next /finalize retroactively flips the older ADR's frontmatter only. The body remains the original decision text.
+### 3. Superseded (later epic)
+
+When a later epic's planner OR generator writes a new ADR with `supersedes: [ADR-NNNN]`, the next /finalize retroactively flips the older ADR's frontmatter only. The body remains the original decision text.
 
 ### 4. Deprecated (rare, manual)
 
 If a decision becomes irrelevant without being replaced, set `status: deprecated` manually. No retroactive backfill applies.
 
-## Planner's responsibilities
+## Author responsibilities (planner + generator)
 
-1. Three-test gate first. Skip ADR if any test fails; route to business_rules or open_questions.
-2. Check existing ADRs via `docs/adr/index.md` § Topic chains:
-   - Existing accepted + new decision *extends* it → reference via `decision_refs[]`, no new ADR.
-   - Existing accepted + new decision *replaces* it → write new ADR with `supersedes: [old_id]`.
+1. **Three-test gate first.** Skip ADR if any test fails; route to spec-level Non-goals (planner) or just don't write one (generator).
+2. **Check existing ADRs** via `docs/adr/index.md`:
+   - Existing accepted + new decision *extends* it → reference the existing ADR id; no new ADR.
+   - Existing accepted + new decision *replaces* it → write new ADR with `supersedes: [ADR-NNNN]`.
    - No existing topic match → write new ADR fresh.
-3. Always set `status: proposed` and `batch: <current-batch-slug>` at creation.
-4. Reference the new ADR's path in `feature-list.json[].decision_refs[]` for affected features.
-5. Default to 1-3 sentence body. Add Considered Options / Consequences only when they earn their place.
+3. Always set `status: proposed`, `proposed_date: <today>`, and `authors: [<role>]` at creation.
+4. Default to 1-3 sentence body. Add Considered Options / Consequences only when they earn their place.
 
-## What planner must NOT do
+## What ADR authors must NOT do (both planner and generator)
 
-- Promote `proposed` → `accepted` itself — that's /finalize's deterministic script job.
-- Edit a previously accepted ADR's body — write a superseding ADR instead.
-- Backfill `superseded_by` directly — `finalize_adr.py` does it deterministically.
-- Write an ADR that fails the three-test gate — those concerns go to business_rules or open_questions.
-- Pad the body with optional sections to "look complete".
+- **Promote `proposed` → `accepted` themselves** — that's /finalize's deterministic script job.
+- **Edit a previously accepted ADR's body** — write a superseding ADR instead.
+- **Backfill `superseded_by` directly** — `finalize_adr.py` does it deterministically.
+- **Write an ADR that fails the three-test gate** — those concerns go to spec Non-goals (planner) or the commit body (generator).
+- **Pad the body with optional sections to "look complete"**.
+
+## Evaluator's role (read-only)
+
+Evaluator does NOT author ADRs. During VERIFY mode it may:
+- Read `docs/adr/` + `docs/adr/index.md` as verification context.
+- Emit `standards_axis.findings[].source: "missing_adr"` when the diff shows an undocumented decision that passes the three-test gate.
+
+Authorship of the flagged ADR is the next round's generator job. See `.claude/agents/evaluator.md > ## Missing-ADR detection (standards-axis source)` for the detection procedure.

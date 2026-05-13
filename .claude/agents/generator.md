@@ -204,8 +204,11 @@ A decision deserves an ADR only when ALL THREE hold:
 this agent's frontmatter):
 - Path: `docs/adr/NNNN-<kebab-slug>.md` where NNNN = next sequential
   number (read the directory before picking).
-- MADR frontmatter: `status: proposed`, `date: <YYYY-MM-DD>`,
-  `deciders: generator-S{NN}-R{IR}`, `supersedes: (none unless real)`.
+- Frontmatter (matches existing `docs/adr/0001-v3.8-redesign.md`
+  shape; full spec in `adr-lifecycle` skill): `id: ADR-NNNN`,
+  `title: <one-line>`, `status: proposed`, `proposed_date: <YYYY-MM-DD>`,
+  `supersedes: []`, `superseded_by: null`,
+  `authors: [generator-S{NN}-R{IR}]`.
 - Body sections: Context / Decision / Consequences / Alternatives
   considered (with pros for each).
 - Same commit as the implementation. If the impl commit is rejected

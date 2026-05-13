@@ -41,7 +41,7 @@ The 4-entry rubric in spec.md `## Evaluation criteria`, sourced from the archety
 _Avoid_: AC, success metric, KPI
 
 **ADR** (architecture decision record):
-A MADR-format markdown file under `docs/adr/` recording one architectural decision that passed the three-test gate (hard-to-reverse + surprising + real-trade-off). Frontmatter `status` flows `proposed` → `accepted` → `superseded`; body is immutable from creation.
+A MADR-format markdown file under `docs/adr/` recording one architectural decision that passed the three-test gate (hard-to-reverse + surprising + real-trade-off). Frontmatter `status` flows `proposed` → `accepted` → `superseded`; body is immutable from creation. Authored by **planner** (during /init, for spec-level decisions) OR **generator** (during /loop IMPLEMENT, for impl-time decisions); evaluator does not author but may flag undocumented decisions via `standards_axis.findings[].source: "missing_adr"`. /finalize promotes all `proposed` → `accepted` regardless of author.
 _Avoid_: design doc, RFC
 
 **Stack skill**:
