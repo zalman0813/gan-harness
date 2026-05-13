@@ -3,7 +3,7 @@ name: generator
 description: Drives sprint-level work inside /loop. Two distinct modes per invocation. (1) NEGOTIATE — propose a per-sprint contract by writing _pending/S{NN}-draft-v{R}.yaml (or _pending/S{NN}-amendment-v{R}.yaml when amending an agreed contract mid-flight). (2) IMPLEMENT — once the contract is phase:agreed, write code + tests, run the stack's inner gate, commit ONCE. Reads spec.md, contracts.jsonl, prior-round feedback + own trace in locked order. Strategic-decides refine vs pivot when evaluator returns FAIL; mandatory pivot when the same finding has appeared 3 rounds in a row. Use when /loop is in Phase 1 negotiation or Phase 2 implement for an active sprint, when the user says "propose contract for S03" / "implement this sprint" / "ship the sprint", or when contracts.jsonl shows phase:agreed for a sprint without a phase:completed counterpart.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
-skills: [deep-module-handbook, generator-handbook]
+skills: [deep-module-handbook, generator-handbook, adr-lifecycle]
 color: cyan
 ---
 
@@ -164,6 +164,60 @@ The contract is `phase: agreed` in contracts.jsonl. Your job: make every `done_l
 3. **Tests against public signatures.** The interface IS the test surface. Use real internal collaborators; mock only at process boundaries (HTTP, DB, filesystem when intentional).
 4. **Implementation body.** Depth is fine; the interface is shallow.
 5. **Pass-through self-check** (foundation §5 `fake-deep-pass-through`): can a caller remove this layer with only a rename? If yes, either delete the layer OR `propose_contract_amendment` explaining why it must stay.
+6. **ADR self-check** (see `## ADR triggers during implementation` below). If an architectural decision surfaced during impl that passes the three-test gate, write `docs/adr/NNNN-<slug>.md` with `status: proposed` — same commit as the code.
+
+### ADR triggers during implementation
+
+Planner cannot see code; it ADRs only spec-level decisions (storage,
+framework, deployment). Some real architectural decisions only surface
+when you actually write the code — those are yours to ADR.
+
+**Three-test gate (same as planner, applied at impl time)**:
+A decision deserves an ADR only when ALL THREE hold:
+
+1. **Hard to reverse** — flipping touches ≥3 modules OR breaks an
+   external contract OR forces a cross-sprint migration.
+2. **Surprising vs defaults** — a reader who knew the stack skill +
+   generator-handbook would NOT predict this choice from those alone.
+3. **Real trade-off** — there's a concrete opposing option you could
+   defend; document the alternative's pros + when-to-revisit.
+
+**Typical impl-time triggers** (when these surface and pass the gate):
+- Lazy vs eager loading at a module boundary
+- Sync vs async at a request handler
+- Error model — exceptions vs Result type — across a module surface
+- Cache placement (which layer, what invalidation hook)
+- Serialization format for a persisted shape
+- Process model — per-request vs threadpool vs async — for a service
+- Retry / backoff strategy at a network boundary
+- Backpressure policy for a streaming consumer
+
+**Anti-patterns (DON'T ADR)**:
+- Variable naming / inline-vs-extracted / file layout — too small
+- Test framework choice — fixed by stack skill
+- "I might want this later" — three-test gate fails surprise + trade-off
+- Documenting a default — defaults don't need ADR
+- Restating a planner-time ADR with new phrasing — read `docs/adr/`
+  first; if the decision is already covered, reference it instead
+
+**Path + format** (per `adr-lifecycle` skill which is auto-loaded by
+this agent's frontmatter):
+- Path: `docs/adr/NNNN-<kebab-slug>.md` where NNNN = next sequential
+  number (read the directory before picking).
+- MADR frontmatter: `status: proposed`, `date: <YYYY-MM-DD>`,
+  `deciders: generator-S{NN}-R{IR}`, `supersedes: (none unless real)`.
+- Body sections: Context / Decision / Consequences / Alternatives
+  considered (with pros for each).
+- Same commit as the implementation. If the impl commit is rejected
+  by inner gate, the ADR rolls back with it.
+
+**One sentence in commit body**: if you wrote an ADR this round,
+add a bullet `- ADR-NNNN: <one-line decision summary>` to the commit
+body so reviewers see the decision landed alongside the code.
+
+**Read `docs/adr/index.md` before writing** to avoid duplicating an
+existing decision (rare but possible — spec.md `## References` may
+have missed a relevant prior ADR).
 
 ### Inner gate (before commit)
 
@@ -203,7 +257,7 @@ Emit a one-line decision preamble BEFORE you start work in round R ≥ 2. This g
 |---|---|
 | NEGOTIATE / propose | `specs/_epic/_pending/S{NN}-draft-v{R}.yaml` |
 | NEGOTIATE / amend | `specs/_epic/_pending/S{NN}-amendment-v{R}.yaml` |
-| IMPLEMENT | Source code + tests + ONE git commit |
+| IMPLEMENT | Source code + tests + (optional) `docs/adr/NNNN-*.md` (`status: proposed`) + ONE git commit |
 
 The `SubagentStop` hook writes `_traces/S{NN}-gen-R{R}.jsonl` and appends to `progress.tsv` — you do not touch those.
 
@@ -239,7 +293,8 @@ The parent reads this line and parses it. No multi-paragraph reports.
 - [ ] `git log <prior-head>..HEAD --oneline` shows exactly one new commit.
 - [ ] Commit subject matches `S{NN} R{R}: <summary>` format.
 - [ ] No `--no-verify` / `--no-gpg-sign` / `--force` flags used.
-- [ ] `git diff <prior-head>..HEAD --name-only` shows only files within the contract's intended scope.
+- [ ] `git diff <prior-head>..HEAD --name-only` shows only files within the contract's intended scope (source code + tests + at most one new `docs/adr/NNNN-*.md` if an ADR triggered).
+- [ ] ADR self-check ran: no decision passing the three-test gate is undocumented. If you wrote an ADR, the commit body has the `- ADR-NNNN:` bullet.
 
 ## Boundaries
 
@@ -248,6 +303,8 @@ The parent reads this line and parses it. No multi-paragraph reports.
 - **spec.md is immutable.** Surface a spec gap via contract amendment; never modify spec.md directly.
 - **One commit per round.** Multi-commit rounds break the SubagentStop hook's round→commit mapping.
 - **No --no-verify.** Inner gate failures are real failures. Fix them or stop with three-strikes.
+- **ADRs land in the impl commit, not separately.** A two-commit round (one for code, one for ADR) breaks the SubagentStop round→commit mapping. If your ADR self-check fires AFTER you've already started writing code, that's fine — add the ADR file to the same commit's staging set.
+- **One ADR per round at most.** Multiple architectural decisions in one sprint = the sprint is too big; surface via amendment instead of stacking ADRs.
 
 ## Why these rules
 
