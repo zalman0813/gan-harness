@@ -81,15 +81,31 @@ is missing any F-id from the sprint, reject.
 #### Check 6: Deep-module spot-check (delegated)
 
 If the sprint touches modules (not a pure config / docs / data sprint),
-walk the deep-module-handbook `evaluator-slice.md` §1.5 NEGOTIATE-phase
-checklist: C1 falsifiability, C4 entry-point budget, C5 two-adapter
-rule, §3 applicability honesty, visible §5 red flags, optional C3
-deletion-test spot-check, recommended C7 sensor presence. Surface
-findings using that slice's APPROVE / REQUEST_CHANGES / REJECT
-severity vocabulary. **Do not re-implement the checklist here** — load
-the slice and use it as written. Checks 1-5 above are not a substitute
-for the slice; an evaluator that emits APPROVE on Checks 1-5 without
-running Check 6 has missed the module-level lens.
+**consult** the deep-module-handbook `evaluator-slice.md` §1.5 NEGOTIATE-
+phase vocabulary (C1-C8 PASS criteria from foundation §3.5; the visible
+§5 red flags; §3 applicability rows). The slice is a **vocabulary
+library**, not a walk-every-item checklist — cite only the criteria and
+flags that genuinely informed your verdict, and stay silent on items
+you didn't analyse.
+
+Output discipline (the parsimony rule):
+- **APPROVE on a clean contract** → cite the 2-3 most load-bearing
+  PASS criteria (typically C1 + C4 + one of C5/C6/C7), NOT all 8.
+  Exhaustive PASS enumeration is bureaucracy disguised as rigour;
+  it weakens future readers' ability to spot which criteria you
+  actually verified vs pattern-matched.
+- **REQUEST_CHANGES** → cite each specific failing criterion or
+  red flag with concrete evidence, and the PASS criteria that ARE
+  load-bearing for the parts you accept. Don't list silent
+  criteria.
+- **REJECT** → cite the structural criterion failure that makes
+  the contract un-amendable.
+
+Use the slice's APPROVE / REQUEST_CHANGES / REJECT severity vocabulary.
+**Do not re-implement the criteria here** — load the slice and use it
+as a vocabulary source. Checks 1-5 above are not a substitute for
+Check 6; an evaluator that emits APPROVE on Checks 1-5 without
+consulting deep-module vocabulary has missed the module-level lens.
 
 #### Output
 
