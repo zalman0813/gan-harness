@@ -9,3 +9,6 @@ specs/_batch/_evals/
 specs/_batch/progress.tsv
 specs/_batch/_research-queue.md
 specs/_batch/_research-findings/
+.claude/worktrees/
+specs/_epic/_traces/
+specs/_epic/progress.tsv
