@@ -70,6 +70,24 @@ def cmd_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list(args: argparse.Namespace) -> int:  # noqa: ARG001
+    """Handle the `list` subcommand.
+
+    Prints each task on its own line as `[id] description (timestamp)`,
+    in insertion order.  Missing or empty file exits 0 with no output.
+    All output goes to stdout; nothing is written to stderr on success.
+    Returns 0 always.
+    """
+    path = _todo_path()
+    tasks = _load_tasks(path)
+    for task in tasks:
+        task_id = task["id"]
+        description = task["description"]
+        timestamp = task["timestamp"]
+        sys.stdout.write(f"[{task_id}] {description} ({timestamp})\n")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the top-level argument parser."""
     parser = argparse.ArgumentParser(
@@ -86,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Text description of the task to add (one or more words).",
     )
 
+    # list subcommand
+    subparsers.add_parser("list", help="List all tasks in insertion order.")
+
     return parser
 
 
@@ -96,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "add":
         return cmd_add(args)
+
+    if args.command == "list":
+        return cmd_list(args)
 
     # No subcommand supplied — print help to stderr and exit non-zero.
     parser.print_help(sys.stderr)
