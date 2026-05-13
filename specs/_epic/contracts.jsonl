@@ -1,3 +1,4 @@
 {"sprint": "S01", "phase": "agreed", "contract_id": "C-S01-v2", "timestamp": "2026-05-13T01:54:57Z", "contract_ref": "specs/_epic/_pending/S01-draft-v2.yaml", "review_ref": "specs/_epic/_pending/S01-review-v2.yaml", "negotiation_rounds": 2}
 {"sprint": "S01", "phase": "completed", "contract_id": "C-S01-v2", "timestamp": "2026-05-13T02:03:04Z", "round": 2, "evidence_ref": "specs/_epic/_evals/S01-R2.json", "commit": "2eda53e"}
 {"sprint": "S02", "phase": "agreed", "contract_id": "C-S02-v2", "timestamp": "2026-05-13T02:20:52Z", "contract_ref": "specs/_epic/_pending/S02-draft-v2.yaml", "review_ref": "specs/_epic/_pending/S02-review-v2.yaml", "negotiation_rounds": 2, "depends_on": "S01@2eda53e"}
+{"sprint": "S02", "phase": "completed", "contract_id": "C-S02-v2", "timestamp": "2026-05-13T02:24:26Z", "round": 1, "evidence_ref": "specs/_epic/_evals/S02-R1.json", "commit": "7ca4bba", "depends_on": "S01@2eda53e"}
