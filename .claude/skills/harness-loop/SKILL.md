@@ -40,6 +40,8 @@ first.
 | "I'll skip negotiation and let generator just implement against spec.md" | No. Per-sprint negotiation is load-bearing in v2; it's how high-level spec becomes testable contract. Skipping = generator is implementing against vague intent. |
 | "Sprint 3 has 30 findings, I'll pause and ask the user" | No. There is no escalate. Pass findings to generator; let them strategic-decide refine vs pivot. The user is opted out of per-round decisions. |
 | "Evaluator returned approve; I'll skip writing the contracts.jsonl entry" | No. contracts.jsonl is the source of truth for sprint state. Without the entry, epic_status.py thinks the sprint isn't done. |
+| "Contract axis FAIL but standards PASS — the standards-axis section is empty in feedback.md, I'll fold the contract findings into one big list" | No. The two H2 sections stay visible even when one is empty (`<no findings — axis PASS>`). The structural separation is the point; collapsing it puts you back in the single-evaluator failure mode Pocock's design counters. |
+| "Standards axis has the same finding round-on-round, contract keeps changing — I'll prioritise contract because it's the user-facing axis" | No. Per-axis anti-oscillation: same finding on the same axis 3 rounds → mandatory pivot for that axis. The generator strategic-decides; MAIN does not cross-axis prioritise. |
 
 ## Inputs
 
@@ -116,25 +118,67 @@ For implementation round IR = 1, 2, 3, ... (no cap):
 1. **Spawn evaluator** (fresh ctx) with prompt: "Verify sprint S round
    IR. Read in locked order: spec.md → contracts.jsonl[latest agreed for
    S] → `_traces/S{NN}-gen-R{IR}.jsonl[start:end]` → git diff. Run
-   verification_plan + matrix sensor. Emit `_evals/S{NN}-R{IR}.json`."
+   verification_plan + matrix sensor. Emit `_evals/S{NN}-R{IR}.json`
+   with **dual-axis** shape per evaluator.md VERIFY mode (contract_axis
+   + standards_axis + top-level verdict)."
 2. Evaluator runs `gate_eval.py` (in evaluator-handbook scripts) which
    actually executes the verification.
-3. Evaluator writes `_evals/S{NN}-R{IR}.json` with criteria + findings +
-   verdict.
+3. Evaluator writes `_evals/S{NN}-R{IR}.json` with the dual-axis
+   envelope: `contract_axis.{criteria, findings, verdict}`,
+   `standards_axis.{matrix_sensor, module_design_verification, findings, verdict}`,
+   plus top-level `verdict` = AND of the two.
 4. SubagentStop hook captures evaluator's transcript →
    `_traces/S{NN}-eval-R{IR}.jsonl`.
 
 ### Phase 4 — Decide
 
-Read `_evals/S{NN}-R{IR}.json`:
+Read `_evals/S{NN}-R{IR}.json` top-level `verdict`:
 
-- **verdict: PASS** → MAIN appends `phase: completed` entry to
-  `contracts.jsonl` with `evidence_ref` pointing into the transcript
-  slice. Loop back to Phase 0 to find next active sprint (or done).
-- **verdict: FAIL** → MAIN deterministically merges findings into
-  `_evals/S{NN}-R{IR}-feedback.md` (≤5 blocking + ≤5 hint, root-cause
-  ordered: matrix → criterion-fail → bug-list). Increment IR, loop back
-  to Phase 2.
+- **verdict: PASS** (both `contract_axis.verdict` AND
+  `standards_axis.verdict` are `PASS`) → MAIN appends `phase: completed`
+  entry to `contracts.jsonl` with `evidence_ref` pointing into the
+  transcript slice. Loop back to Phase 0 to find next active sprint (or
+  done).
+- **verdict: FAIL** (either axis FAIL) → MAIN deterministically merges
+  findings into `_evals/S{NN}-R{IR}-feedback.md` using the **dual-section
+  no-rerank rule** below. Increment IR, loop back to Phase 2.
+
+#### feedback.md merge rule (dual-section, no cross-axis rerank)
+
+Write `_evals/S{NN}-R{IR}-feedback.md` with **exactly two H2 sections**,
+in this fixed order:
+
+```markdown
+## Contract findings
+
+<root-cause ordered: criterion-fail blocking → criterion-fail hint, ≤5 blocking + ≤5 hint
+from contract_axis.findings[] verbatim>
+
+## Standards findings
+
+<root-cause ordered: matrix → module-verify → stack-convention, ≤5 blocking + ≤5 hint
+from standards_axis.findings[] verbatim>
+
+## Combined verdict
+
+contract_axis: <PASS|FAIL>
+standards_axis: <PASS|FAIL>
+overall: FAIL
+```
+
+**No reranking across the two H2 sections.** Each section is capped
+independently at 5 blocking + 5 hint. If `contract_axis` has 7 blocking
+findings and `standards_axis` has 1, MAIN keeps the top-5 contract +
+the 1 standards — it does NOT drop the standards finding to "make room"
+for a contract one, and it does NOT promote standards to blocking
+because contract is "more critical". The two sections stay visually
+parallel so neither axis masks the other.
+
+If both axes PASS, no feedback.md is written (the loop moves on).
+
+If only one axis FAIL, write feedback.md with the PASSing axis's
+section as `<no findings — axis PASS>` so the generator can see at a
+glance which axis to focus pivots on.
 
 ### Termination
 
@@ -145,8 +189,13 @@ Loop terminates when:
 ### Cost monitoring (operator-side, not enforced)
 
 The harness has no max-rounds cap. Operator monitors token spend
-externally. If a sprint is stuck on the same finding for 3+ rounds:
-- generator is supposed to pivot per anti-oscillation rule
+externally. If a sprint is stuck on the same finding **on the same
+axis** for 3+ rounds:
+- generator is supposed to pivot per the per-axis anti-oscillation rule
+  (generator-handbook): "same finding-on-same-axis 3 rounds → mandatory
+  pivot for that axis." A finding that appears in contract-axis R1 then
+  standards-axis R2 then contract-axis R3 is NOT three matches — the
+  anti-oscillation trigger is per-axis-per-finding.
 - if generator is genuinely stuck, operator decides whether to interrupt
 - the harness driver does NOT decide
 

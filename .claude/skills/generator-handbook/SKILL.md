@@ -152,23 +152,41 @@ Action: keep the same approach, address the specific findings.
 
 Symptoms:
 - Round R-1 had 4 findings, round R has 5 (regression)
-- Same finding appearing 3 rounds in a row (mandatory pivot)
+- Same finding appearing 3 rounds in a row **on the same axis** (mandatory pivot for that axis)
 - New findings keep appearing in different parts of the system as you fix
   one — sign of a systemic mismatch with the contract
 
 Action: write a one-line decision preamble in your trace:
 
-> "PIVOT: same finding 'auth state lost on refresh' appeared in R1, R2, R3.
-> Abandoning Redux + localStorage approach. Trying server-side session
-> with httpOnly cookies."
+> "PIVOT (standards-axis): same finding 'todo.py applicability_honest:false
+> — DTO label but contains business rules' appeared in R1, R2, R3.
+> Abandoning DTO labelling. Treating todo.py as business-logic module
+> and re-justifying its hides_decision."
 
 Then implement the new approach from scratch (within the same contract).
+A pivot may be scoped to one axis if the other axis is PASS — refining
+the contract-axis fixes while pivoting the standards-axis approach is
+legitimate.
 
-### Anti-oscillation: hard rule
+### Anti-oscillation: hard rule (per-axis)
 
-If the same finding appears in 3 rounds in a row, you MUST pivot. You may
-not refine round 4 on the same approach. This is the only hard rule on
-strategic decisions; everything else is judgment.
+If the same finding appears in 3 rounds in a row **on the same axis**,
+you MUST pivot for that axis. You may not refine round 4 on the same
+approach for that axis. This is the only hard rule on strategic
+decisions; everything else is judgment.
+
+The trigger is per-axis-per-finding, NOT cross-axis:
+- A finding tagged `axis: "contract"` in R1, R2, R3 → mandatory pivot
+  for contract-axis.
+- A finding tagged `axis: "standards"` in R1, R2, R3 → mandatory pivot
+  for standards-axis.
+- A finding that appears contract-axis R1, standards-axis R2,
+  contract-axis R3 → NOT a 3-round match (different axes). The trigger
+  does not fire.
+
+Findings are matched by their `gap` field (user-facing description),
+not by `evidence` path (the line may shift between rounds while the
+gap persists).
 
 ## Contract amendment patterns
 
@@ -278,7 +296,8 @@ test. Inner gate may pass on literal coverage; evaluator's behavioral
 verification trips it. Don't ship stubs.
 
 **Refining indefinitely.** The "anti-oscillation" rule exists because
-generators get stuck in local minima. 3 rounds same finding = pivot.
+generators get stuck in local minima. 3 rounds same finding **on the
+same axis** = pivot for that axis.
 
 **Submitting a contract you intend to amend.** Negotiate honestly the
 first time. Frequent amendments = the contract was wrong; rare

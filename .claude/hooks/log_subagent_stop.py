@@ -241,7 +241,19 @@ def _read_evaluator_verdict(project_dir: str, feature: str, round_num: int) -> t
     except (json.JSONDecodeError, OSError):
         return "", ""
     verdict = str(data.get("verdict", ""))
-    note = str(data.get("eval_feedback", {}).get("overall", "")).replace("\t", " ").replace("\n", " ")[:200]
+    # Dual-axis shape (current): summarise both axis verdicts + finding counts
+    # into the note column. Legacy single-axis shape: fall back to the old
+    # `eval_feedback.overall` field if present.
+    contract = data.get("contract_axis") or {}
+    standards = data.get("standards_axis") or {}
+    if contract or standards:
+        c_v = str(contract.get("verdict", "?"))
+        s_v = str(standards.get("verdict", "?"))
+        c_n = len(contract.get("findings") or [])
+        s_n = len(standards.get("findings") or [])
+        note = f"C:{c_v}/{c_n}f|S:{s_v}/{s_n}f"
+    else:
+        note = str(data.get("eval_feedback", {}).get("overall", "")).replace("\t", " ").replace("\n", " ")[:200]
     return verdict, note
 
 

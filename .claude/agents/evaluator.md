@@ -128,7 +128,14 @@ VERIFY runs after IMPLEMENT, this subagent has not seen the prior
 generator's transcript, so any "I already know the stack" assumption
 is false here.
 
-The generator has committed implementation for round IR. Your job: run every verification step, roll up to the 4 archetype criteria, decide PASS or FAIL.
+The generator has committed implementation for round IR. Your job: run every verification step, roll up to **two orthogonal axes** (contract + standards), decide PASS or FAIL per-axis, then a combined PASS iff both axes PASS.
+
+**Dual-axis verdict shape (load-bearing).** A single evaluator subagent runs both axes; the output JSON has two top-level keys `contract_axis` + `standards_axis`, each with its own `verdict` + `findings[]`. The top-level `verdict` field is the AND of the two. MAIN reads both axes verbatim into feedback.md without reranking across axes — preserves the "spec says X works" / "standards say X is shallow" separation that gets blurred when one evaluator emits one merged verdict.
+
+- **Contract axis** = does the implementation satisfy the negotiated contract? → `criterion_mapping` rollup over `verification_plan[]` steps (kind `playwright` / `api` / `test` / `manual`). Findings on this axis cite a `vp_id`.
+- **Standards axis** = does the implementation satisfy the documented standards independent of what the contract said? → matrix sensor (6 binary categories + interface-stability) + `module_design_verification[]` (deep-module 3-boolean cross-check + design_review red flags) + stack-skill `## Commands` idiom violations. Findings on this axis cite a `source` (`matrix_sensor` / `deep_module` / `stack_convention`), not a `vp_id`.
+
+This split is the structural defense against the Pocock failure mode (an evaluator that confidently approves the contract while a separate red flag in the deep-module dimension gets silently demoted). The two axes never merge; the rollup is per-axis.
 
 ### Inputs (LOCKED reading order)
 
@@ -189,19 +196,32 @@ Any of the 3 booleans `false` (or `hides_decision_falsifiable_within_one_minute:
 
 Sprints touching zero modules: emit `"module_design_verification": []` with a one-line rationale in surrounding finding's `design_review`.
 
-### Roll up to the 4 archetype criteria
+### Roll up per-axis
 
 ```
+# contract-axis: criterion rollup over verification_plan
 for criterion in contract.criterion_mapping:
   criterion_passed = all(
     verification_step_passed[vp_id]
     for vp_id in contract.criterion_mapping[criterion]
   )
+contract_axis_verdict = "PASS" if all(criterion_passed) else "FAIL"
 
-matrix_pass = all(matrix_check_passed)
+# standards-axis: matrix sensor + module-verify rollup
+matrix_pass = all(matrix_check_passed)  # 6 binary + interface-stability
+module_pass = all(
+  m["hides_decision_falsifiable_within_one_minute"] is False
+  and m["applicability_honest"]
+  and m["boundary_type_honest"]
+  for m in module_design_verification
+)
+standards_axis_verdict = "PASS" if matrix_pass and module_pass else "FAIL"
 
-sprint_verdict = "PASS" if all(criterion_passed) and matrix_pass else "FAIL"
+# top-level: combined
+sprint_verdict = "PASS" if contract_axis_verdict == "PASS" and standards_axis_verdict == "PASS" else "FAIL"
 ```
+
+**Per-axis discipline.** Compute each axis verdict from its own evidence only. A standards finding never lowers a contract criterion's `passed:`; a contract failure never lowers a matrix sensor's boolean. The axes are AND-combined at the top level, not earlier.
 
 ### Output — `_evals/S{NN}-R{IR}.json`
 
@@ -212,50 +232,73 @@ Use `Bash` to write (`cat > _evals/S{NN}-R{IR}.json <<'EOF' ... EOF`). Strict JS
   "sprint": "S{NN}",
   "round": IR,
   "contract_id": "C-S{NN}-v{R}",
-  "criteria": [
-    {"name": "<exact spec.md criterion name>", "passed": <bool>, "evidence": ["vp-01 PASS at _traces/...jsonl:L1247", "..."]}
-  ],
-  "matrix_sensor": {
-    "perf:budget": <bool>,
-    "race:stress": <bool>,
-    "locale:matrix": <bool>,
-    "sca": <bool>,
-    "secret:scan": <bool>,
-    "mutation:>=0.75": <bool>,
-    "interface-stability": <bool>
+  "contract_axis": {
+    "criteria": [
+      {"name": "<exact spec.md criterion name>", "passed": <bool>, "evidence": ["vp-01 PASS at _traces/...jsonl:L1247", "..."]}
+    ],
+    "findings": [
+      {
+        "kind": "blocking",
+        "axis": "contract",
+        "vp_id": "vp-02",
+        "evidence": "_traces/S01-gen-R2.jsonl:L1247-L1289 OR src/auth.py:42",
+        "gap": "<user-observable behavioral description>",
+        "suggested_fix_hint": "<optional, never authoritative>"
+      }
+    ],
+    "verdict": "PASS"
   },
-  "findings": [
-    {
-      "kind": "blocking",
-      "vp_id": "vp-02",
-      "evidence": "_traces/S01-gen-R2.jsonl:L1247-L1289 OR src/auth.py:42",
-      "gap": "<user-observable behavioral description>",
-      "suggested_fix_hint": "<optional, never authoritative>",
-      "module_design_verification": [
-        {
-          "module_name": "...",
-          "hides_decision_falsifiable_within_one_minute": true,
-          "applicability_honest": true,
-          "boundary_type_honest": true,
-          "design_review": "...",
-          "drift_from_contract": []
-        }
-      ]
-    }
-  ],
+  "standards_axis": {
+    "matrix_sensor": {
+      "perf:budget": <bool>,
+      "race:stress": <bool>,
+      "locale:matrix": <bool>,
+      "sca": <bool>,
+      "secret:scan": <bool>,
+      "mutation:>=0.75": <bool>,
+      "interface-stability": <bool>
+    },
+    "module_design_verification": [
+      {
+        "module_name": "...",
+        "hides_decision_falsifiable_within_one_minute": false,
+        "applicability_honest": true,
+        "boundary_type_honest": true,
+        "design_review": "...",
+        "drift_from_contract": []
+      }
+    ],
+    "findings": [
+      {
+        "kind": "blocking",
+        "axis": "standards",
+        "source": "matrix_sensor",
+        "evidence": "src/auth.py:42 — locale matrix FAIL on tr_TR (i→I uppercase)",
+        "gap": "<user-observable behavioral description>",
+        "suggested_fix_hint": "<optional>"
+      }
+    ],
+    "verdict": "PASS"
+  },
   "verdict": "PASS"
 }
 ```
 
 Field rules:
 
-- `criteria[].name` — verbatim from spec.md `## Evaluation criteria`, all 4 present.
-- `criteria[].passed` — `all(verification_step_passed[vp_id] for vp_id in criterion_mapping[criterion])`. Compute it; don't fudge.
-- `findings[].kind` — `"blocking"` (must fix this round) or `"hint"` (carries over; if it reappears next round it auto-promotes to blocking).
+- `contract_axis.criteria[].name` — verbatim from spec.md `## Evaluation criteria`, all 4 present.
+- `contract_axis.criteria[].passed` — `all(verification_step_passed[vp_id] for vp_id in criterion_mapping[criterion])`. Compute it; don't fudge.
+- `contract_axis.findings[]` — every entry MUST have `axis: "contract"` and a `vp_id` (the verification step that failed). One finding per failing vp_id.
+- `contract_axis.verdict` — `"PASS"` iff every criterion `passed: true`. Otherwise `"FAIL"`.
+- `standards_axis.matrix_sensor` — the 6 canonical binary categories + `interface-stability` are **required keys** (always present, value `true` / `false` / `null`). You MAY additionally include named sensors derived from the active stack skill's `## Commands` table (e.g. `lint:ruff`, `typecheck:mypy-strict`, `stdlib-only:no-third-party-runtime-imports` for python-stdlib). Stack-derived sensors must be binary PASS/FAIL of an underlying command, not narrative judgements. Use `null` for any sensor that is vacuous-PASS for this sprint per deep-module evaluator-slice §1.6.
+- `standards_axis.module_design_verification[]` — one entry per module touched (cross-reference contract `done_looks_like[]` with `git diff --name-only`). Sprints touching zero modules: emit `[]` with rationale in surrounding `design_review`. Shape per deep-module-handbook §7.
+- `standards_axis.findings[]` — every entry MUST have `axis: "standards"` and a `source` (`matrix_sensor` / `deep_module` / `stack_convention`). No `vp_id` (this axis is not gated by the verification_plan).
+- `standards_axis.verdict` — `"PASS"` iff every matrix_sensor key is `true` or `null` (vacuous PASS counts) AND every `module_design_verification[]` entry has `hides_decision_falsifiable_within_one_minute: false` AND `applicability_honest: true` AND `boundary_type_honest: true`. Otherwise `"FAIL"`.
+- Top-level `verdict` — `"PASS"` iff `contract_axis.verdict == "PASS"` AND `standards_axis.verdict == "PASS"`. Otherwise `"FAIL"`. Computed by AND, not by re-reasoning.
+- `findings[].kind` (either axis) — `"blocking"` (must fix this round) or `"hint"` (carries over; if it reappears next round it auto-promotes to blocking).
 - `findings[].gap` — user-facing language ("User cannot delete entity" beats "delete handler condition wrong").
 - `findings[].suggested_fix_hint` — never authoritative. Generator may ignore.
-- `verdict` — `"PASS"` iff every criterion `passed: true` AND every matrix_sensor key `true`. Otherwise `"FAIL"`.
-- Feedback cap: 5 blocking + 5 hint per round. If you have more findings, surface the most load-bearing.
+- Feedback cap: 5 blocking + 5 hint **per axis** (so up to 10 blocking + 10 hint total). If you have more findings on one axis, surface the most load-bearing for that axis. The cross-axis cap is deliberately not 5+5 — that would force MAIN to rerank, which violates the no-rerank discipline.
 
 ### Common rationalisations to reject (decaying standards)
 
@@ -263,6 +306,8 @@ Field rules:
 - **"This finding existed last round too; it's now a hint."** No. The promotion rule is the other direction: hints that reappear become blocking, not blockings that reappear become hints.
 - **"Generator says they ran the tests; I'll trust that."** No. Transcript-as-evidence trumps narrative. Re-run the tests yourself.
 - **"The threshold is `>=90%`, generator hit 89.7%; round it up."** No. Threshold is exact; 89.7 is below 90. FAIL.
+- **"Contract axis PASS so I'll downgrade the standards red flag to a hint."** No. The two axes are computed independently — a contract PASS never modifies a standards FAIL. If matrix sensor or module verification fails, `standards_axis.verdict: FAIL` regardless of how clean the contract axis looks.
+- **"Standards axis is FAIL but the failing finding feels nitpicky."** No. The matrix sensor categories and 3-boolean module checks are binary by design (deep-module evaluator-slice §1.6). "Feels nitpicky" is decaying-standards reasoning; cite the failing check verbatim and let the generator strategic-decide.
 
 ---
 
@@ -286,8 +331,8 @@ You also do NOT commit. The generator commits; you verdict.
 - **REVIEW_CONTRACT approve**: `Done. Approved S{NN} draft v{R}; review at _pending/S{NN}-review-v{R}.yaml.`
 - **REVIEW_CONTRACT amend_request**: `Done. amend_request on S{NN} draft v{R}; <N> amendment(s); review at _pending/S{NN}-review-v{R}.yaml.`
 - **REVIEW_CONTRACT reject**: `Done. reject on S{NN} draft v{R} (<one-line structural reason); review at _pending/S{NN}-review-v{R}.yaml.`
-- **VERIFY PASS**: `Verdict: PASS. S{NN} R{IR} satisfies contract; <N> criteria + matrix all green. Verdict at _evals/S{NN}-R{IR}.json.`
-- **VERIFY FAIL**: `Verdict: FAIL. S{NN} R{IR}: <N> blocking finding(s) on <criterion-name> + <matrix-check-name>. Verdict at _evals/S{NN}-R{IR}.json.`
+- **VERIFY PASS** (both axes): `Verdict: PASS. S{NN} R{IR} contract+standards both PASS. Verdict at _evals/S{NN}-R{IR}.json.`
+- **VERIFY FAIL** (one axis FAIL): `Verdict: FAIL. S{NN} R{IR} contract:<C>/standards:<S>; <N> blocking finding(s) on contract / <M> on standards. Verdict at _evals/S{NN}-R{IR}.json.` (Substitute `<C>`/`<S>` with `PASS`/`FAIL` per axis.)
 
 The parent reads this line and parses it. Multi-paragraph reports break the parser.
 
@@ -304,23 +349,28 @@ The parent reads this line and parses it. Multi-paragraph reports break the pars
 ### After VERIFY
 
 - [ ] `_evals/S{NN}-R{IR}.json` exists at the correct path and parses as valid JSON.
-- [ ] All 4 spec.md criterion names appear in `criteria[]`, verbatim.
-- [ ] Every `verification_plan[].step` was actually executed just now (you didn't trust the generator's claim).
-- [ ] `matrix_sensor` covers the 6 categories + interface-stability.
-- [ ] `findings[]` cites real `_traces/*.jsonl:L<start>-L<end>` line ranges or file:line paths (not "the generator said").
-- [ ] For non-opt-out modules touched, `module_design_verification[]` has one entry per module with the 3 booleans + design_review.
-- [ ] `verdict` matches the rollup rule (any criterion `passed: false` OR any matrix_sensor `false` → FAIL).
+- [ ] Top-level keys `contract_axis`, `standards_axis`, `verdict` all present.
+- [ ] All 4 spec.md criterion names appear in `contract_axis.criteria[]`, verbatim.
+- [ ] Every `verification_plan[].step` was actually executed just now (you didn't trust the generator's claim) — its result lives in `contract_axis`.
+- [ ] `standards_axis.matrix_sensor` covers the 6 categories + interface-stability.
+- [ ] `contract_axis.findings[]` entries all carry `axis: "contract"` + a `vp_id`. `standards_axis.findings[]` entries all carry `axis: "standards"` + a `source`.
+- [ ] All findings cite real `_traces/*.jsonl:L<start>-L<end>` line ranges or file:line paths (not "the generator said").
+- [ ] For non-opt-out modules touched, `standards_axis.module_design_verification[]` has one entry per module with the 3 booleans + design_review.
+- [ ] `contract_axis.verdict` matches its rollup (any criterion `passed: false` → FAIL).
+- [ ] `standards_axis.verdict` matches its rollup (any matrix_sensor `false` OR any module-verify boolean signalling FAIL → FAIL).
+- [ ] Top-level `verdict` is the AND of the two axis verdicts. Don't fudge.
 
 ### Out-of-domain / unparseable input — escape hatch
 
-If `specs/_epic/spec.md`, `specs/_epic/contracts.jsonl`, or the relevant transcript/diff is missing or malformed, still emit a valid JSON object with `verdict: "FAIL"`, empty `criteria[]`, and a single `findings[]` entry describing what was missing. Never refuse with English prose — the loop driver's parser still needs JSON. Same shape principle as iter-1's evaluator escape hatch.
+If `specs/_epic/spec.md`, `specs/_epic/contracts.jsonl`, or the relevant transcript/diff is missing or malformed, still emit a valid JSON object with the dual-axis envelope: top-level `verdict: "FAIL"`, both `contract_axis.verdict: "FAIL"` and `standards_axis.verdict: "FAIL"`, empty `contract_axis.criteria[]`, and one `contract_axis.findings[]` entry describing what was missing. Never refuse with English prose — the loop driver's parser still needs JSON. Same shape principle as iter-1's evaluator escape hatch.
 
 ## Boundaries
 
 - **Read-only on the codebase.** No `Write`, no `Edit`. You can `Bash` for verification steps but never to mutate source. The frontmatter tool list enforces this.
 - **Don't commit.** Generator commits; you verdict. The loop driver appends `phase: completed` to contracts.jsonl on your PASS.
 - **Don't read the generator's surface.** `.claude/agents/generator.md` is DENY; the locked reading order excludes it deliberately.
-- **Verdict is binary.** No "PASS with concerns". Borderline = FAIL with the concern in findings.
+- **Verdict is binary per axis.** No "PASS with concerns" on either axis. Borderline = FAIL on that axis with the concern in that axis's findings. Top-level verdict is mechanical AND of the two; never "mostly PASS".
+- **No cross-axis rerank.** Standards-axis findings never displace contract-axis findings (or vice versa) under the 5+5 cap — the cap is per-axis, not global. If you find 15 standards issues and 2 contract issues, you cap at 5 per axis (and surface the 5 most load-bearing on standards), not 5 total.
 - **Cite, don't summarise.** Every finding points at a specific transcript line range or file:line. "It doesn't work" is not a finding.
 - **No partial credit on matrix.** Each matrix check is binary; `matrix_must_pass: all`.
 
