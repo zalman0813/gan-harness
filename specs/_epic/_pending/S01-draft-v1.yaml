@@ -1,0 +1,80 @@
+sprint: S01
+sprint_name: "Add task"
+features_covered: ["F01"]
+phase: draft
+version: 1
+
+done_looks_like:
+  - "Running `python todo.py add buy milk` persists a new entry to ~/.todo.json
+    with integer id=1, description='buy milk', and a UTC ISO-8601 timestamp field."
+  - "Running `python todo.py add` a second time produces id=2, confirming
+    auto-increment across successive calls within the same JSON file."
+  - "The todo.py module is importable without side effects (entry point guarded
+    by `if __name__ == '__main__':`) so unit tests can import internal helpers."
+  - "Zero runtime imports outside the Python standard library (argparse, json,
+    pathlib, datetime — nothing else)."
+  - "Non-zero exit code and a message to stderr when `todo add` is called with
+    no description argument."
+
+verification_plan:
+  - id: vp-01
+    kind: smoke
+    description: "CLI end-to-end: add one task, assert JSON file state"
+    steps:
+      - "Remove ~/.todo.json if it exists (clean state)."
+      - "Run: python todo.py add buy milk"
+      - "Assert exit code 0."
+      - "Read ~/.todo.json; assert it is valid JSON, contains exactly one entry."
+      - "Assert entry has keys: id (int == 1), description (str == 'buy milk'),
+         timestamp (str, valid ISO-8601, ends with 'Z' or '+00:00')."
+
+  - id: vp-02
+    kind: smoke
+    description: "Auto-increment: second add produces id=2"
+    steps:
+      - "Continue from vp-01 state (id=1 already in file)."
+      - "Run: python todo.py add fix tests"
+      - "Assert exit code 0."
+      - "Read ~/.todo.json; assert it contains exactly two entries."
+      - "Assert second entry has id == 2."
+
+  - id: vp-03
+    kind: test
+    path: "tests/test_add_task.py"
+    description: "Unit tests covering happy path and edge cases"
+    cases:
+      - "test_add_first_task: mocks file I/O, asserts entry created with id=1,
+         correct description, UTC timestamp."
+      - "test_add_increments_id: mocks file with one existing entry, asserts
+         new entry gets id=2."
+      - "test_add_no_description_exits_nonzero: calls CLI with empty args,
+         asserts SystemExit with non-zero code."
+      - "test_importable_without_side_effects: imports todo module, asserts no
+         file is created as a side effect."
+
+  - id: vp-04
+    kind: matrix
+    description: "Static quality sensors"
+    checks:
+      - "lint:ruff"
+      - "typecheck:mypy-strict"
+      - "stdlib-only:no-third-party-runtime-imports"
+
+criterion_mapping:
+  "UX quality":
+    - vp-01   # smoke verifies CLI invocation, exit code, and no spurious output
+    - vp-03   # test_add_no_description_exits_nonzero verifies error on bad input
+  "Robustness":
+    - vp-01   # clean-state run verifies missing file handled gracefully
+    - vp-03   # edge-case unit tests
+  "Craft":
+    - vp-03   # unit tests for happy path + edge cases
+    - vp-04   # lint + typecheck + stdlib-only sensor
+  "Functionality":
+    - vp-01   # end-to-end: add persists well-formed JSON entry
+    - vp-02   # auto-increment across successive calls
+
+thresholds:
+  smoke_must_pass: all
+  test_must_pass: ">=90%"
+  matrix_must_pass: all

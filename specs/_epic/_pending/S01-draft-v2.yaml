@@ -1,0 +1,135 @@
+sprint: S01
+sprint_name: "Add task"
+features_covered: ["F01"]
+phase: draft
+version: 2
+contract_id: C-S01-v2
+
+amendments_addressed:
+  - check: verification_depth
+    resolution: |
+      Added stderr content assertion to vp-03 case
+      test_add_no_description_exits_nonzero: captures stderr and
+      asserts it is non-empty AND contains the word 'description'.
+  - check: criterion_coverage_ux_help
+    resolution: |
+      Added vp-05 (kind: smoke) that runs `python todo.py --help`
+      and `python todo.py add --help`, asserting exit code 0,
+      non-empty stdout, and that 'add' subcommand is mentioned.
+  - check: criterion_coverage_robustness_empty_file
+    resolution: |
+      Added test case test_add_empty_file_succeeds to vp-03:
+      pre-creates an empty ~/.todo.json and asserts todo add
+      still succeeds with id=1 (treats empty file as empty list).
+  - check: verification_depth_home_isolation
+    resolution: |
+      vp-01 and vp-02 smoke steps now specify HOME isolation via
+      a temporary directory. The smoke runner sets HOME=$TMPDIR
+      and asserts against $HOME/.todo.json in that tempdir.
+  - check: threshold_realism
+    resolution: |
+      test_must_pass tightened from >=90% to all. A 5-case suite
+      on a smoke-sized CLI has no honest reason to permit one failure.
+  - check: deep_module_spot_check
+    resolution: |
+      Added one done_looks_like item naming todo.py as a
+      framework-shaped module with applicability declared per
+      deep-module-handbook §3, no hides_decision required.
+
+done_looks_like:
+  - "Running `python todo.py add buy milk` persists a new entry to ~/.todo.json
+    with integer id=1, description='buy milk', and a UTC ISO-8601 timestamp field."
+  - "Running `python todo.py add` a second time produces id=2, confirming
+    auto-increment across successive calls within the same JSON file."
+  - "The todo.py module is importable without side effects (entry point guarded
+    by `if __name__ == '__main__':`) so unit tests can import internal helpers."
+  - "Zero runtime imports outside the Python standard library (argparse, json,
+    pathlib, datetime — nothing else)."
+  - "Non-zero exit code AND a message to stderr mentioning 'description' (the
+    offending argument) when `todo add` is called with no description argument."
+  - "Module `todo.py` is framework-shaped (argparse subcommand dispatch + JSON
+    file persistence). Applicability=framework-shaped per deep-module-handbook §3;
+    no hides_decision required. Public surface is the CLI entry-point only —
+    no library-style API exported."
+
+verification_plan:
+  - id: vp-01
+    kind: smoke
+    description: "CLI end-to-end: add one task, assert JSON file state (HOME isolated)"
+    steps:
+      - "Create a temporary directory, e.g. TMPDIR=$(mktemp -d); export HOME=$TMPDIR."
+      - "Run: python todo.py add buy milk"
+      - "Assert exit code 0."
+      - "Read $HOME/.todo.json; assert it is valid JSON, contains exactly one entry."
+      - "Assert entry has keys: id (int == 1), description (str == 'buy milk'),
+         timestamp (str, valid ISO-8601, ends with 'Z' or '+00:00')."
+      - "Remove the temporary directory on teardown."
+
+  - id: vp-02
+    kind: smoke
+    description: "Auto-increment: second add produces id=2 (HOME isolated, same tempdir)"
+    steps:
+      - "Reuse the same HOME=$TMPDIR from vp-01 (id=1 already in file)."
+      - "Run: python todo.py add fix tests"
+      - "Assert exit code 0."
+      - "Read $HOME/.todo.json; assert it contains exactly two entries."
+      - "Assert second entry has id == 2."
+      - "Remove the temporary directory on teardown if not already done."
+
+  - id: vp-03
+    kind: test
+    path: "tests/test_add_task.py"
+    description: "Unit tests covering happy path and edge cases"
+    cases:
+      - "test_add_first_task: mocks file I/O, asserts entry created with id=1,
+         correct description, UTC timestamp."
+      - "test_add_increments_id: mocks file with one existing entry, asserts
+         new entry gets id=2."
+      - "test_add_no_description_exits_nonzero: calls CLI with empty args,
+         asserts SystemExit with non-zero code AND captures stderr, asserts
+         stderr is non-empty AND contains the string 'description'."
+      - "test_add_empty_file_succeeds: pre-creates an empty temp file as the
+         todo file (simulating empty ~/.todo.json), calls todo add buy milk,
+         asserts exit code 0 and entry has id=1 (empty file treated as empty
+         task list, not a parse error)."
+      - "test_importable_without_side_effects: imports todo module, asserts no
+         file is created as a side effect."
+
+  - id: vp-04
+    kind: matrix
+    description: "Static quality sensors"
+    checks:
+      - "lint:ruff"
+      - "typecheck:mypy-strict"
+      - "stdlib-only:no-third-party-runtime-imports"
+
+  - id: vp-05
+    kind: smoke
+    description: "--help output smoke: verifies UX quality first clause"
+    steps:
+      - "Run: python todo.py --help"
+      - "Assert exit code 0."
+      - "Assert stdout is non-empty."
+      - "Assert stdout contains the string 'add' (the subcommand name)."
+      - "Run: python todo.py add --help"
+      - "Assert exit code 0."
+      - "Assert stdout is non-empty."
+
+criterion_mapping:
+  "UX quality":
+    - vp-05   # --help is a single screen, add subcommand named
+    - vp-03   # test_add_no_description_exits_nonzero verifies stderr names the offending argument
+  "Robustness":
+    - vp-01   # clean-state run verifies missing file handled gracefully (HOME isolated)
+    - vp-03   # edge-case unit tests: empty file case + no-description error path
+  "Craft":
+    - vp-03   # unit tests for happy path + edge cases
+    - vp-04   # lint + typecheck + stdlib-only sensor
+  "Functionality":
+    - vp-01   # end-to-end: add persists well-formed JSON entry
+    - vp-02   # auto-increment across successive calls
+
+thresholds:
+  smoke_must_pass: all
+  test_must_pass: all
+  matrix_must_pass: all

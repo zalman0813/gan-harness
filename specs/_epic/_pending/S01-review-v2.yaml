@@ -1,0 +1,111 @@
+contract_id: C-S01-v2
+review_round: 2
+verdict: approve
+
+amendments_verified:
+  - check: verification_depth
+    r1_point: "stderr content assertion for no-description case"
+    r2_resolution: |
+      vp-03 case `test_add_no_description_exits_nonzero` now reads
+      "asserts SystemExit with non-zero code AND captures stderr,
+      asserts stderr is non-empty AND contains the string
+      'description'". done_looks_like[5] mirrors this with
+      "...AND a message to stderr mentioning 'description' (the
+      offending argument)". Closed.
+
+  - check: criterion_coverage_ux_help
+    r1_point: "--help verification for UX quality criterion clause 1"
+    r2_resolution: |
+      New vp-05 (kind: smoke) drives `python todo.py --help` and
+      `python todo.py add --help`, asserting exit 0, non-empty stdout,
+      and 'add' subcommand mentioned. criterion_mapping["UX quality"]
+      now lists vp-05 + vp-03 — the help-output clause is now
+      verifiable end-to-end, not by inspection. Closed.
+
+  - check: criterion_coverage_robustness_empty_file
+    r1_point: "empty-file edge case distinct from missing-file"
+    r2_resolution: |
+      vp-03 case `test_add_empty_file_succeeds` pre-creates an empty
+      todo file, calls `todo add buy milk`, asserts exit 0 + id=1
+      (empty file treated as empty list, not parse error). This
+      covers the json.JSONDecodeError-on-empty-file footgun the
+      spec.md Robustness criterion implies. Closed.
+
+  - check: verification_depth_home_isolation
+    r1_point: "vp-01/vp-02 must not clobber operator's real ~/.todo.json"
+    r2_resolution: |
+      vp-01 step 1 is now `TMPDIR=$(mktemp -d); export HOME=$TMPDIR`,
+      assertions read `$HOME/.todo.json` (inside the tempdir), and
+      teardown removes the tempdir. vp-02 reuses the same isolated
+      HOME and teardown. Recommended option (a) adopted. Closed.
+
+  - check: threshold_realism
+    r1_point: "test_must_pass tighten from >=90% to all"
+    r2_resolution: |
+      thresholds.test_must_pass is now `all`. All three thresholds
+      (smoke / test / matrix) are now `all`, consistent posture
+      across the contract. Closed.
+
+  - check: deep_module_spot_check
+    r1_point: "framework-shaped opt-out must be named in done_looks_like"
+    r2_resolution: |
+      done_looks_like[6] adopts the R1 suggested wording verbatim,
+      naming `todo.py` as framework-shaped, citing
+      deep-module-handbook §3 applicability, declaring
+      "no hides_decision required" and "no library-style API
+      exported". A dishonest opt-out can now be flagged at VERIFY
+      against this explicit declaration. Closed.
+
+contract_mechanics_recheck:
+  scope_match: |
+    features_covered == ["F01"] matches spec.md S01 "Add task".
+    No drift.
+  criterion_coverage: |
+    All 4 spec.md criteria (UX quality, Robustness, Craft,
+    Functionality) appear in criterion_mapping with >=1 verification
+    step each; vp-05 closed the previously thin UX-quality mapping.
+  mock_honesty: |
+    vp-03 mocks file I/O at the process boundary (classicist-honest:
+    mocks the genuine seam, not internal collaborators). Mock-only
+    risk is offset by three black-box steps: vp-01 (real write),
+    vp-02 (real auto-increment), vp-05 (real argparse output).
+    No further amendment needed.
+  threshold_realism: |
+    smoke_must_pass=all, test_must_pass=all, matrix_must_pass=all.
+    Symmetric and appropriate for a smoke-sized pure-cli sprint.
+
+deep_module_dimension:
+  load_bearing_pass_criteria:
+    - "C2 (Applicability named): done_looks_like[6] explicitly cites
+       framework-shaped applicability per §3 — the opt-out is on
+       the record, verifiable at VERIFY."
+    - "C5 (Entry-point budget): single CLI entry-point declared as
+       the public surface; no library-style API leaks out — bounds
+       the module's API the way §3.5 calls for."
+  red_flags_triggered: "none"
+  silent_criteria_note: |
+    C1/C3/C4/C6/C7/C8 not cited — they do not load-bear for a
+    framework-shaped CLI script of this size (per parsimony rule
+    in evaluator-handbook Check 6).
+
+narrative: |
+  R2 lands all six R1 amendments faithfully, with no scope creep
+  and no new structural issues. Notable craft points:
+
+    - The recommended HOME-tempdir isolation (option a) was chosen
+      over backup-and-restore — cleaner teardown, no risk of leaving
+      operator state half-restored on test failure.
+    - The deep-module spot-check item was adopted as the suggested
+      wording rather than paraphrased — preserves the honesty
+      discipline without ceremony.
+    - thresholds collapsed to a uniform `all` across smoke / test /
+      matrix; no hedging.
+    - vp-05 was added rather than folding `--help` checks into
+      vp-01, which keeps each smoke step's intent surgical (one
+      verification, one verifiable behaviour).
+
+  Contract C-S01-v2 is APPROVED. Generator may begin S01-R1
+  implementation against this contract. On commit, evaluator will
+  re-run vp-01..vp-05 against the running CLI plus the matrix
+  sensors via python-stdlib ## Commands (ruff / mypy --strict /
+  unittest discover) and roll up by criterion_mapping.

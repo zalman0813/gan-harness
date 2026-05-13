@@ -1,0 +1,107 @@
+contract_id: C-S01-v1
+review_round: 1
+verdict: amend_request
+
+amendments:
+  - check: verification_depth
+    point: |
+      done_looks_like[4] commits to "a message to stderr when `todo add`
+      is called with no description argument", but vp-03's case
+      `test_add_no_description_exits_nonzero` only asserts SystemExit
+      with non-zero code — it does not assert that stderr actually
+      received a message naming the offending argument. Add an
+      assertion (or a dedicated case) that captures stderr and verifies
+      it is non-empty AND mentions `description` (the missing argument).
+      This is also what evaluation criterion "UX quality" demands
+      ("errors name the offending argument") — without the stderr
+      content assertion, that criterion cannot be verified through
+      vp-03 as currently scoped.
+
+  - check: criterion_coverage
+    point: |
+      criterion_mapping["UX quality"] lists vp-01 + vp-03, but neither
+      step exercises the spec.md criterion's first clause: "`--help` is
+      a single screen" and "subcommand flag style is consistent". For
+      a pure-cli sprint this is the load-bearing UX surface. Add a
+      verification step (suggest `kind: smoke` or a new `kind: test`
+      case) that:
+        - runs `python todo.py --help` and `python todo.py add --help`
+        - asserts exit code 0 and stdout is non-empty for each
+        - asserts the help output mentions the `add` subcommand by
+          name
+      Without this, the contract can pass while shipping a CLI whose
+      `--help` is broken — silently violating evaluation criterion 1.
+
+  - check: criterion_coverage
+    point: |
+      criterion_mapping["Robustness"] cites vp-01 (clean-state, file
+      missing) but the spec.md criterion explicitly says "handles a
+      missing OR EMPTY `~/.todo.json` cleanly". The empty-file case is
+      distinct from the missing-file case (json.load on an empty file
+      raises json.JSONDecodeError, not FileNotFoundError) and is the
+      classic stdlib-only footgun this sprint will face. Add a vp-03
+      case (or vp-05 smoke step) that pre-creates an empty
+      ~/.todo.json and asserts `todo add buy milk` still succeeds
+      (treats empty file as empty task list, writes id=1).
+
+  - check: verification_depth
+    point: |
+      vp-01 and vp-02 (kind: smoke) write to the real `~/.todo.json`
+      (the user's HOME). Running the evaluator harness against this
+      contract will pollute / clobber the operator's actual todo file.
+      Amend the smoke step description to specify isolation: either
+        (a) run the smoke step with `HOME` env-var pointed at a
+            tempdir and assert against `$HOME/.todo.json` in that
+            tempdir, OR
+        (b) move ~/.todo.json to a backup before the run and restore
+            after.
+      Option (a) is preferred (clean teardown). This is a
+      contract-mechanics fix — without it, vp-01 is not safely
+      re-runnable.
+
+  - check: threshold_realism
+    point: |
+      thresholds.test_must_pass is ">=90%" but vp-03 only declares 4
+      unit-test cases. 90% of 4 = 3.6, which floor-rounds to 3 —
+      effectively the threshold permits one case to fail silently.
+      For a 4-case suite on a smoke-sized CLI there is no honest
+      reason to hedge. Tighten to `all` (matches smoke_must_pass and
+      matrix_must_pass; consistent threshold posture across the
+      contract).
+
+  - check: deep_module_spot_check
+    point: |
+      Per deep-module-handbook evaluator-slice §1.5: opt-out modules
+      (framework-shaped CLI command, in this case) MUST still appear
+      as their own done_looks_like[] item naming the applicability,
+      so a dishonest opt-out can be spotted at VERIFY. The current
+      done_looks_like[] never names `todo.py` as a module nor declares
+      its applicability. For this single-file argparse-subcommand
+      sprint the right shape is one lightweight item, e.g.:
+        - "Module `todo.py` is framework-shaped (argparse subcommand
+          dispatch + JSON file persistence). Applicability=
+          framework-shaped per deep-module-handbook §3; no
+          hides_decision required. Public surface is the CLI
+          entry-point only — no library-style API exported."
+      Add that one item. This keeps the spot-check honest without
+      forcing deep-module ceremony on a CLI script.
+
+narrative: |
+  The contract is structurally sound: features_covered matches S01's
+  F01, all 4 spec.md criteria are mapped, the smoke/test/matrix mix is
+  appropriate for a pure-cli sprint, and the unit-test mock targets
+  (file I/O = process boundary) are classicist-honest rather than
+  Mockist-drift.
+
+  Six amendments to land before agreeing:
+    1. stderr-content assertion for the no-description case (Check 1)
+    2. `--help` verification (Check 3 — UX quality)
+    3. empty-file edge case (Check 3 — Robustness)
+    4. HOME isolation for smoke steps (Check 1 — re-runnability)
+    5. tighten test threshold to `all` (Check 4)
+    6. one framework-shaped module item in done_looks_like (Check 6)
+
+  Amendments 2 + 3 + 6 are load-bearing: amendments 2 and 3 close real
+  gaps in spec.md criterion coverage; amendment 6 is the deep-module
+  opt-out honesty discipline. Amendments 1, 4, 5 are tightening passes.
+  Once these are in, expect APPROVE.
