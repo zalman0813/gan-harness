@@ -10,8 +10,8 @@ generator/evaluator subagent dispatches, contract negotiation, MAIN
 deterministic merge, threshold check. This command only routes control
 flow. When command and skill disagree, the skill wins — fix this command.
 
-1. Pre-flight (verify `specs/_epic/spec.md` exists + passes lint; verify
-   epic not already done via `epic_status.py --is-done`)
+1. Pre-flight (verify `specs/_epic/spec.md` exists; verify epic not
+   already done via `epic_status.py --is-done`)
 2. Outer loop: while sprints remaining (active-sprint via
    `epic_status.py --active-sprint`):
    - Phase 1 — Negotiate (spawn generator → propose_contract; spawn
@@ -22,7 +22,8 @@ flow. When command and skill disagree, the skill wins — fix this command.
    - Phase 3 — Evaluate (spawn evaluator; run verification_plan; emit
      `_evals/S{NN}-R{N}.json`)
    - Phase 4 — Decide (PASS → contracts.jsonl append phase:completed →
-     next sprint; FAIL → MAIN merge feedback → next round, no cap)
+     next sprint; FAIL → next round, generator reads
+     `_evals/S{NN}-R{IR-1}.json` directly — no MAIN merge, no cap)
 3. Termination (epic_status.py --is-done == 0 OR operator interrupt)
 
 Next step: /finalize

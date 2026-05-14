@@ -280,6 +280,8 @@ related ones. A failed delete handler likely means: (a) test missing, (b)
 audit log missing, (c) keyboard shortcut also broken, (d) error path also
 broken. Surface all related findings in one round; don't drip-feed.
 
-**Too many findings (overload).** The MAIN feedback merge caps at 5
-blocking + 5 hint. If you find 30 issues, that's a sign the contract was
-too ambitious; consider amend_request to split the sprint.
+**Too many findings (overload).** The generator reads all findings
+directly from `_evals/*.json` — there is no MAIN cap. But 30 findings
+in one round is still a signal: the contract was too ambitious. Use
+`amend_request` to split the sprint instead of dumping the full list
+on the next-round generator.

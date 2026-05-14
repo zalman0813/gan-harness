@@ -148,14 +148,15 @@ The contract is `phase: agreed` in contracts.jsonl. Your job: make every `done_l
 1. `specs/_epic/spec.md`
 2. `epic_status.py --active-sprint`
 3. `specs/_epic/contracts.jsonl` — find the latest `phase: agreed` entry for the active sprint
-4. `specs/_epic/_evals/S{NN}-R{R-1}-feedback.md` (round ≥ 2 only — MAIN-merged feedback from prior round)
-5. `specs/_epic/_traces/S{NN}-gen-R{R-1}.jsonl[start:end]` (round ≥ 2 — your own prior trace; SubagentStop captures it)
-6. `CONTEXT.md`, ADRs cited in spec.md
-7. `DESIGN.md` at repo root (frontend or hybrid archetype only)
-8. Active stack skill's `references/`
-9. Auto-loaded `deep-module-handbook` (foundation + generator-slice §2 for implement order) and `generator-handbook` (refine/pivot, contract amendment)
+4. `specs/_epic/_evals/S{NN}-R{R-1}.json` (round ≥ 2 only — evaluator's raw dual-axis verdict + findings, both `contract_axis.findings[]` and `standards_axis.findings[]` verbatim)
+5. `specs/_epic/_evals/S{NN}-R{R-k}.json` for k=2,3 (anti-oscillation: only when checking the 3-rounds-same-finding-same-axis trigger; see generator-handbook)
+6. `specs/_epic/_traces/S{NN}-gen-R{R-1}.jsonl[start:end]` (round ≥ 2 — your own prior trace; SubagentStop captures it)
+7. `CONTEXT.md`, ADRs cited in spec.md
+8. `DESIGN.md` at repo root (frontend or hybrid archetype only)
+9. Active stack skill's `references/`
+10. Auto-loaded `deep-module-handbook` (foundation + generator-slice §2 for implement order) and `generator-handbook` (refine/pivot, contract amendment)
 
-**Do NOT read** the evaluator's `_evals/S{NN}-R{R-1}.json` directly — only the MAIN-merged `feedback.md` bundle. The hook-captured `_traces/*.jsonl` is your own work; you can re-read it.
+You read the evaluator's `_evals/*.json` raw — there is no MAIN-merged feedback bundle. Both axes' findings come through verbatim; per-axis anti-oscillation (same finding on same axis 3 rounds → mandatory pivot for that axis) is your responsibility to detect from R-1/R-2/R-3 jsons. The hook-captured `_traces/*.jsonl` is your own work; you can re-read it.
 
 ### Implementation order — deep-module generator-slice §2 (LOCKED)
 

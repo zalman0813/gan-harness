@@ -21,15 +21,13 @@ the run externally based on cost.
 ## Mandatory before starting
 
 ASSUMPTIONS I'M MAKING:
-1. `specs/_epic/spec.md` exists, has been approved at `/init`, and passes
-   `spec_lint.py`.
+1. `specs/_epic/spec.md` exists and has been approved at `/init`.
 2. The active stack skill provides a running app and the test runner
    commands the evaluator's `verification_plan` will reference.
 3. The user has not set a hard cost budget I should respect (if they
    have, the operator will halt externally — I don't enforce it).
 
-If `specs/_epic/spec.md` is missing or fails lint, ABORT. /init must run
-first.
+If `specs/_epic/spec.md` is missing, ABORT. /init must run first.
 
 ## Common rationalisations
 
@@ -40,8 +38,7 @@ first.
 | "I'll skip negotiation and let generator just implement against spec.md" | No. Per-sprint negotiation is load-bearing in v2; it's how high-level spec becomes testable contract. Skipping = generator is implementing against vague intent. |
 | "Sprint 3 has 30 findings, I'll pause and ask the user" | No. There is no escalate. Pass findings to generator; let them strategic-decide refine vs pivot. The user is opted out of per-round decisions. |
 | "Evaluator returned approve; I'll skip writing the contracts.jsonl entry" | No. contracts.jsonl is the source of truth for sprint state. Without the entry, epic_status.py thinks the sprint isn't done. |
-| "Contract axis FAIL but standards PASS — the standards-axis section is empty in feedback.md, I'll fold the contract findings into one big list" | No. The two H2 sections stay visible even when one is empty (`<no findings — axis PASS>`). The structural separation is the point; collapsing it puts you back in the single-evaluator failure mode Pocock's design counters. |
-| "Standards axis has the same finding round-on-round, contract keeps changing — I'll prioritise contract because it's the user-facing axis" | No. Per-axis anti-oscillation: same finding on the same axis 3 rounds → mandatory pivot for that axis. The generator strategic-decides; MAIN does not cross-axis prioritise. |
+| "Standards axis has the same finding round-on-round, contract keeps changing — I'll prioritise contract because it's the user-facing axis" | No. Per-axis anti-oscillation: same finding on the same axis 3 rounds → mandatory pivot for that axis. The generator strategic-decides by reading raw `_evals/*.json`; MAIN does not rerank or filter findings. |
 
 ## Inputs
 
@@ -64,7 +61,7 @@ first.
 
 ### Phase 0 — Pre-flight
 
-1. Verify `specs/_epic/spec.md` exists and passes `spec_lint.py`.
+1. Verify `specs/_epic/spec.md` exists.
 2. Read `epic_status.py --json` to determine state.
 3. If `epic_done` is true, ABORT with: "epic already complete; run
    /finalize".
@@ -107,9 +104,9 @@ For implementation round IR = 1, 2, 3, ... (no cap):
 
 1. **Spawn generator** with prompt: "Implement sprint S per agreed
    contract. Read spec.md, contracts.jsonl[latest agreed for S], and (if
-   IR ≥ 2) `_evals/S{NN}-R{IR-1}-feedback.md` and
-   `_traces/S{NN}-gen-R{IR-1}.jsonl`. Strategic-decide refine vs pivot
-   based on prior round."
+   IR ≥ 2) `_evals/S{NN}-R{IR-1}.json` (the evaluator's raw dual-axis
+   verdict — no MAIN merge) and `_traces/S{NN}-gen-R{IR-1}.jsonl`.
+   Strategic-decide refine vs pivot based on prior round."
 2. Generator writes code, runs inner gate, commits.
 3. SubagentStop hook captures transcript → `_traces/S{NN}-gen-R{IR}.jsonl`.
 
@@ -139,46 +136,16 @@ Read `_evals/S{NN}-R{IR}.json` top-level `verdict`:
   entry to `contracts.jsonl` with `evidence_ref` pointing into the
   transcript slice. Loop back to Phase 0 to find next active sprint (or
   done).
-- **verdict: FAIL** (either axis FAIL) → MAIN deterministically merges
-  findings into `_evals/S{NN}-R{IR}-feedback.md` using the **dual-section
-  no-rerank rule** below. Increment IR, loop back to Phase 2.
-
-#### feedback.md merge rule (dual-section, no cross-axis rerank)
-
-Write `_evals/S{NN}-R{IR}-feedback.md` with **exactly two H2 sections**,
-in this fixed order:
-
-```markdown
-## Contract findings
-
-<root-cause ordered: criterion-fail blocking → criterion-fail hint, ≤5 blocking + ≤5 hint
-from contract_axis.findings[] verbatim>
-
-## Standards findings
-
-<root-cause ordered: matrix → module-verify → stack-convention, ≤5 blocking + ≤5 hint
-from standards_axis.findings[] verbatim>
-
-## Combined verdict
-
-contract_axis: <PASS|FAIL>
-standards_axis: <PASS|FAIL>
-overall: FAIL
-```
-
-**No reranking across the two H2 sections.** Each section is capped
-independently at 5 blocking + 5 hint. If `contract_axis` has 7 blocking
-findings and `standards_axis` has 1, MAIN keeps the top-5 contract +
-the 1 standards — it does NOT drop the standards finding to "make room"
-for a contract one, and it does NOT promote standards to blocking
-because contract is "more critical". The two sections stay visually
-parallel so neither axis masks the other.
-
-If both axes PASS, no feedback.md is written (the loop moves on).
-
-If only one axis FAIL, write feedback.md with the PASSing axis's
-section as `<no findings — axis PASS>` so the generator can see at a
-glance which axis to focus pivots on.
+- **verdict: FAIL** (either axis FAIL) → increment IR, loop back to
+  Phase 2. The next-round generator reads `_evals/S{NN}-R{IR}.json`
+  directly (both `contract_axis.findings[]` and
+  `standards_axis.findings[]` verbatim). **MAIN does not merge, rerank,
+  truncate, or translate the findings.** This mirrors Anthropic's
+  generator-evaluator design (Harness design for long-running
+  application development): "Communication was handled via files: one
+  agent would write a file, another agent would read it" — there is no
+  middleman that could dilute the evaluator's authority by re-ordering
+  or capping its output.
 
 ### Termination
 
@@ -205,8 +172,8 @@ axis** for 3+ rounds:
 - `specs/_epic/_pending/S{NN}-{draft|review|amendment}-v{N}.yaml` —
   ephemeral negotiation artefacts.
 - `specs/_epic/_evals/S{NN}-R{N}.json` — per-round evaluator verdict.
-- `specs/_epic/_evals/S{NN}-R{N}-feedback.md` — MAIN-merged feedback for
-  next-round generator.
+  Next-round generator reads this directly on FAIL; no derived
+  feedback.md exists.
 - `specs/_epic/_traces/S{NN}-{gen|eval}-R{N}.jsonl` — hook-captured
   transcripts.
 - `specs/_epic/progress.tsv` — hook-appended metric rows.

@@ -130,7 +130,7 @@ is false here.
 
 The generator has committed implementation for round IR. Your job: run every verification step, roll up to **two orthogonal axes** (contract + standards), decide PASS or FAIL per-axis, then a combined PASS iff both axes PASS.
 
-**Dual-axis verdict shape (load-bearing).** A single evaluator subagent runs both axes; the output JSON has two top-level keys `contract_axis` + `standards_axis`, each with its own `verdict` + `findings[]`. The top-level `verdict` field is the AND of the two. MAIN reads both axes verbatim into feedback.md without reranking across axes — preserves the "spec says X works" / "standards say X is shallow" separation that gets blurred when one evaluator emits one merged verdict.
+**Dual-axis verdict shape (load-bearing).** A single evaluator subagent runs both axes; the output JSON has two top-level keys `contract_axis` + `standards_axis`, each with its own `verdict` + `findings[]`. The top-level `verdict` field is the AND of the two. The next-round generator reads both axes verbatim from `_evals/S{NN}-R{IR}.json` directly — there is no MAIN merge or intermediate feedback bundle. This preserves the "spec says X works" / "standards say X is shallow" separation that gets blurred when one evaluator emits one merged verdict, and it preserves your authority by ruling out any rerank / truncate / translate step between your output and the generator's input.
 
 - **Contract axis** = does the implementation satisfy the negotiated contract? → `criterion_mapping` rollup over `verification_plan[]` steps (kind `playwright` / `api` / `test` / `manual`). Findings on this axis cite a `vp_id`.
 - **Standards axis** = does the implementation satisfy the documented standards independent of what the contract said? → matrix sensor (6 binary categories + interface-stability) + `module_design_verification[]` (deep-module 3-boolean cross-check + design_review red flags) + stack-skill `## Commands` idiom violations. Findings on this axis cite a `source` (`matrix_sensor` / `deep_module` / `stack_convention`), not a `vp_id`.
@@ -202,8 +202,9 @@ Generator is authorised to write ADRs during implementation
 (see `.claude/agents/generator.md > ## ADR triggers during implementation`).
 Your job at VERIFY is to flag the gap when generator missed one — but
 **you do NOT author the ADR**. Authoring is the next round's
-generator job; this finding is a directive surfaced via
-`feedback.md`.
+generator job; this finding goes into your `standards_axis.findings[]`
+with `source: "missing_adr"`, which the next-round generator reads
+directly from `_evals/S{NN}-R{IR}.json`.
 
 **Three-test gate (read-only application — same gate generator applies)**:
 A decision deserves an ADR only when ALL THREE hold:
