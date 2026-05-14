@@ -15,6 +15,12 @@ A loop either completes (all sprints `phase: completed` in
 `contracts.jsonl`) or it doesn't (operator stopped before completion);
 in the latter case, /finalize refuses to run.
 
+**Run scripts, do not improvise.** Every keep-alive file (ADRs,
+CONTEXT.md, CODEMAP.md) is produced by a script in `scripts/`. The
+script either succeeds with a JSON summary on stdout, or fails with a
+diagnostic on stderr — there is no "fall back to manual edits" path. If
+a script fails, fix the script (or the input it choked on), then re-run.
+
 ## Mandatory before starting
 
 ASSUMPTIONS I'M MAKING:
@@ -32,91 +38,175 @@ ASSUMPTIONS I'M MAKING:
   unfinished).
 - Any sprint has zero entries in contracts.jsonl (loop never started).
 - `specs/_epic/spec.md` doesn't exist (no epic to archive).
+- `specs/epics/<slug>/` already exists (would overwrite a prior archive).
 
 In all these cases, output a clear "/loop must complete first" message.
 
-## Inputs
+## Inputs (read-only until each phase mutates its narrow target)
 
-- `specs/_epic/spec.md` (immutable, will be archived).
-- `specs/_epic/contracts.jsonl` (append-only, will be archived).
-- `specs/_epic/_evals/`, `_traces/`, `progress.tsv` (will be archived).
-- `docs/adr/*.md` with `status: proposed` (will be considered for
-  promotion).
-- `CONTEXT.md` (will be appended to with new domain terms).
-- `CODEMAP.md` (will be regenerated from barrel docstrings).
+- `specs/_epic/spec.md` (immutable; archived in Phase 4).
+- `specs/_epic/contracts.jsonl` (append-only; archived in Phase 4).
+- `specs/_epic/_evals/`, `_traces/`, `progress.tsv` (archived in Phase 4).
+- `docs/adr/*.md` with `status: proposed` (mutated in Phase 1).
+- `CONTEXT.md` (appended in Phase 2; lazy-created if missing).
+- `CODEMAP.md` (regenerated in Phase 3; lazy-created if missing).
 
-## Process
+## Process — every phase is `run script, check exit, react to JSON`
+
+Each script prints a JSON summary on stdout on success and a diagnostic
+on stderr on failure. Always read both. The SKILL is responsible for
+sequencing — the scripts are responsible for the actual mutation.
 
 ### Phase 0 — Pre-flight
 
-1. Run `python .claude/skills/harness-loop/scripts/epic_status.py
-   --is-done`. Exit 0 = epic done; non-zero = refuse with message.
-2. Extract `epic_slug` from `specs/_epic/spec.md`'s H1 line.
-3. Verify `specs/epics/<epic_slug>/` does not yet exist (archive
-   collision).
+```bash
+python .claude/skills/harness-loop/scripts/epic_status.py --is-done
+# exit 0 = ok; exit 1 = refuse
+```
+
+If exit 1, also run the full status view for the user:
+
+```bash
+python .claude/skills/harness-loop/scripts/epic_status.py
+```
+
+…then stop. Do NOT proceed.
+
+Once `--is-done` returns 0, extract the slug:
+
+```bash
+SLUG=$(python .claude/skills/harness-loop/scripts/epic_status.py --json | python -c "import sys, json; print(json.load(sys.stdin)['epic_slug'])")
+```
+
+Then verify archive collision:
+
+```bash
+test ! -e "specs/epics/${SLUG}" || { echo "archive exists; refusing"; exit 1; }
+```
 
 ### Phase 1 — Promote ADRs
 
-For each `docs/adr/NNNN-*.md` with `status: proposed`:
-- Change `status: proposed` → `status: accepted`. Add `accepted_date:
-  <today>`.
-- If the ADR has `supersedes: [old_id]`, retroactively backfill the
-  superseded ADR's frontmatter with `superseded_by: <new_id>`.
-- Regenerate `docs/adr/index.md` from the now-accepted set.
+```bash
+python .claude/skills/finalize-workflow/scripts/finalize_adr.py
+```
 
-(The actual ADR file edits use the `adr-lifecycle` skill's helpers if
-present; otherwise direct frontmatter edits.)
+The script:
+- Sets `status: accepted` + `accepted_date: <today>` for every proposed ADR.
+- Retroactively backfills `superseded_by` on any predecessor listed in
+  the promoted ADR's `supersedes: [...]` (refuses to overwrite an
+  existing pointer; warns to stderr).
+- Regenerates `docs/adr/index.md` sorted by ADR id.
+
+Read the JSON summary; report `promoted` and `backfilled_superseded_by`
+counts to the user. Stop on non-zero exit.
+
+`--check` (dry-run) is available if you want to preview before
+mutating.
 
 ### Phase 2 — Merge domain terms into CONTEXT.md
 
-Run `merge_domain_terms.py` (TODO Phase D, lives in finalize-workflow/
-scripts/):
-- Parse `specs/_epic/spec.md` for domain terms (proper nouns in
-  `## Features`, `## Cross-cutting constraints`).
-- Compare against existing `CONTEXT.md` `## Language` entries.
-- For each NEW term, append a stub entry to CONTEXT.md (lazy-create
-  CONTEXT.md if missing).
-- Idempotent: re-running on the same epic does nothing.
+```bash
+python .claude/skills/finalize-workflow/scripts/merge_domain_terms.py
+```
+
+The script:
+- Parses `specs/_epic/spec.md`'s `### Domain terms` block (under
+  `## Cross-cutting constraints`; format enforced by spec_lint.py L08).
+- Appends each NEW term to `CONTEXT.md`'s `## Language` section. Terms
+  already present (case-insensitive bold-name match) are skipped.
+- Lazy-creates `CONTEXT.md` with a `# Domain Context` / `## Language`
+  scaffold if missing.
+- Idempotent: re-running with the same inputs produces zero new
+  appends.
+
+Read the JSON summary; report `appended` count and the names. Stop on
+non-zero exit (means malformed spec.md — see L08 lint output).
 
 ### Phase 3 — Regenerate CODEMAP.md
 
-Run `regen_codemap.py` (TODO Phase D, lives in finalize-workflow/
-scripts/):
-- Walk barrel files (`__init__.py`, `index.ts`, `mod.rs`, etc. per
-  active stack skill) and extract docstrings.
-- Render to `CODEMAP.md` (lazy-create if missing). Format: one section
-  per top-level module, with sub-modules nested.
+```bash
+python .claude/skills/finalize-workflow/scripts/regen_codemap.py
+```
+
+The script:
+- Walks every `__init__.py` package, emits one section per package with
+  the barrel docstring as the section header.
+- Lists sibling modules with their docstring (Purpose column) and
+  public `def`/`class` signatures (Entry points column).
+- Walks `tests/test_*.py`, emits a "tests — Test suite" section with
+  module-docstring or first `def test_*` name as the Covers column.
+- Refuses to invent: missing barrel docstring → `_(no barrel
+  docstring — add one to surface this module)_`. Missing test docstring
+  → `_(no docstring; first test: ...)_` or `_(no docstring; no test_*
+  function found)_`.
+- Idempotent.
+
+Read the JSON summary's `missing_barrel_docstrings` and
+`missing_module_docstrings` lists; if non-empty, surface them to the
+user as TODOs for the next epic's generator (per generator-handbook's
+barrel-docstring requirement).
+
+If the script exits 1 because there are no Python packages (e.g.,
+non-Python stack), the active stack skill is responsible for providing
+a stack-specific replacement. For now, log "skipped — no Python
+packages found" and continue.
 
 ### Phase 4 — Archive
 
-Run `archive_batch.sh` (TODO Phase D, lives in finalize-workflow/
-scripts/) or equivalent:
-- `mkdir -p specs/epics/<epic_slug>/`
-- `mv specs/_epic/* specs/epics/<epic_slug>/`
-- `rmdir specs/_epic/`
+```bash
+bash .claude/skills/finalize-workflow/scripts/archive_batch.sh "${SLUG}"
+```
 
-### Phase 5 — Single commit
+The script:
+- Moves `specs/_epic/*` (including dotfiles like `_pending/`, `_evals/`,
+  `_traces/`) into `specs/epics/<slug>/`.
+- Uses `find -mindepth 1 -maxdepth 1 -exec mv` (not bash glob) so
+  dotfiles are NOT silently dropped (the regression that hit Apollo;
+  see commit history of handoff D6).
+- Removes the now-empty `specs/_epic/` directory.
+- Refuses to overwrite an existing `specs/epics/<slug>/`.
+
+Stop on non-zero exit.
+
+### Phase 5 — Summary file (optional but recommended)
 
 ```bash
-git add docs/adr/ CONTEXT.md CODEMAP.md specs/epics/<epic_slug>/
-git commit -m "epic: <epic_slug> finalized
+python .claude/skills/finalize-workflow/scripts/summarize_batch.py \
+  --epic-dir "specs/epics/${SLUG}" \
+  --out "specs/epics/${SLUG}/EPIC_SUMMARY.md"
+```
+
+Generates a per-sprint outcome table from `contracts.jsonl` +
+`_evals/`. Recommended for repos where epic count grows beyond a
+handful; safe to skip for one-shot scaffolds.
+
+### Phase 6 — Single commit
+
+```bash
+git add docs/adr/ CONTEXT.md CODEMAP.md "specs/epics/${SLUG}/"
+git commit -m "epic: ${SLUG} finalized
 
 - Promoted N proposed ADRs to accepted
 - Added M new domain terms to CONTEXT.md
-- Regenerated CODEMAP.md from K barrel files
-- Archived specs/_epic/ -> specs/epics/<epic_slug>/
+- Regenerated CODEMAP.md (K packages, L tests)
+- Archived specs/_epic/ -> specs/epics/${SLUG}/
 "
 ```
 
-### Phase 6 — Summary
+Substitute N, M, K, L from the JSON summaries you collected.
+
+### Phase 7 — Operator summary
 
 Output a brief summary:
+
 ```
 finalize complete.
   Epic: <epic_slug>
   Sprints completed: N
-  ADRs promoted: M
+  ADRs promoted: M (P backfilled superseded_by)
   CONTEXT.md terms added: K
+  CODEMAP.md: X packages, Y modules, Z tests
+  Missing barrel docstrings (next epic TODO): [...]
   Archive: specs/epics/<epic_slug>/
 
 Next: start a new epic with /init.
@@ -124,11 +214,14 @@ Next: start a new epic with /init.
 
 ## Outputs
 
-- `docs/adr/NNNN-*.md` updated with `status: accepted`.
+- `docs/adr/NNNN-*.md` updated with `status: accepted` + `accepted_date`.
+- `docs/adr/NNNN-*.md` of superseded predecessors updated with
+  `superseded_by`.
 - `docs/adr/index.md` regenerated.
 - `CONTEXT.md` lazy-created or appended.
 - `CODEMAP.md` regenerated.
 - `specs/epics/<epic_slug>/` — final archive directory.
+- `specs/epics/<epic_slug>/EPIC_SUMMARY.md` — per-sprint outcome table.
 - One git commit.
 
 ## Anti-patterns
@@ -142,8 +235,21 @@ The status reflects the contracts.jsonl state. If contracts.jsonl is
 wrong, fix it; if status is wrong (read bug), fix the script.
 
 **Editing accepted ADRs.** Accepted ADR bodies are immutable. To revise,
-write a new ADR with `supersedes: [old_id]`; /finalize backfills
+write a new ADR with `supersedes: [old_id]`; finalize_adr.py backfills
 `superseded_by` on the predecessor.
+
+**Hand-rolling Domain terms merge.** The `### Domain terms` format is
+strict (spec_lint.py L08) precisely so merge_domain_terms.py can run
+deterministically. If parsing fails, fix the spec, don't paste manually
+— next epic will hit the same failure.
+
+**Hand-writing CODEMAP.md.** The previous regen-by-hand on Apollo
+produced rows that were inferred from filenames rather than real
+docstrings (handoff D1/D2). Always run `regen_codemap.py` and treat
+its output as authoritative. If the diff against an earlier hand-
+written CODEMAP looks worse, the earlier version was guessing —
+adding real docstrings to the source is the fix, not editing CODEMAP.md
+to "look richer".
 
 **Skipping CONTEXT.md merge.** Domain terms accumulate per epic. If you
 skip the merge, future epics' planner won't know existing vocabulary,
@@ -152,13 +258,12 @@ and CONTEXT.md drifts from the actual domain language.
 **Multi-commit.** One commit for the entire finalize. Bisects are
 easier; the commit message lists everything that happened.
 
-## Scripts
+## Scripts (all v3.8, all required for the run)
 
-(Phase D will fill these in. Currently placeholders.)
-
-- `scripts/finalize_adr.py` — promote proposed → accepted, supersedes
-  backfill, index regen.
-- `scripts/merge_domain_terms.py` — extract terms, append to CONTEXT.md.
-- `scripts/regen_codemap.py` — barrel docstring → CODEMAP.md.
-- `scripts/archive_batch.sh` — mv specs/_epic/ → specs/epics/<slug>/.
-- `scripts/summarize_batch.py` — final summary.
+| Script | Phase | Purpose |
+|--------|-------|---------|
+| `scripts/finalize_adr.py` | 1 | Promote proposed → accepted, supersedes backfill, index regen |
+| `scripts/merge_domain_terms.py` | 2 | Parse `### Domain terms` from spec.md, append new entries to CONTEXT.md |
+| `scripts/regen_codemap.py` | 3 | Walk `__init__.py` + module docstrings + public signatures → CODEMAP.md |
+| `scripts/archive_batch.sh` | 4 | `specs/_epic/ → specs/epics/<slug>/` with dotfile-safe move |
+| `scripts/summarize_batch.py` | 5 | Per-sprint outcome table from contracts.jsonl + _evals |

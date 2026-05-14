@@ -10,6 +10,9 @@ Rules (see .claude/schemas/spec.schema.md):
   L05  Sprint deliverables touch >=2 layers OR are explicitly tagged pure-*
   L06  Overall success criteria has >=1 end-to-end behavioral entry
   L07  Archetype is set; Evaluation criteria block has exactly 4 numbered entries
+  L08  If `### Domain terms` appears under `## Cross-cutting constraints`,
+       every bullet matches `- **<term>** — <definition>` and term names
+       are unique within the section
 
 Pure stdlib. Exit 0 on PASS; exit 1 with JSON-on-stderr listing of failures
 on FAIL. Output structure:
@@ -454,6 +457,85 @@ def lint(text: str) -> list[Failure]:
         if sdata["layer_tag"] and sdata["reason_single_layer"]:
             # Both tag and reason set — that's redundant but not an error.
             continue
+
+    # --- L08: Domain terms block format (optional sub-heading) ---
+    if "Cross-cutting constraints" in name_to_section:
+        cc_section = name_to_section["Cross-cutting constraints"]
+        cc_lines = cc_section.body.splitlines()
+        cc_start = cc_section.start
+        dt_idx: int | None = None
+        for j, line in enumerate(cc_lines):
+            if re.match(r"^###\s+Domain\s+terms\s*$", line):
+                dt_idx = j
+                break
+            # Bad heading variants that look like Domain terms but aren't exact.
+            if re.match(r"^###\s+Domain\s+terms\s+\(.+\)\s*$", line):
+                failures.append(
+                    Failure(
+                        rule="L08",
+                        section="Cross-cutting constraints",
+                        line=cc_start + j + 1,
+                        message=(
+                            "Domain terms heading must be exactly "
+                            "`### Domain terms` (no parenthetical "
+                            "suffix). /finalize merge_domain_terms.py "
+                            "matches the heading verbatim."
+                        ),
+                    )
+                )
+                dt_idx = None
+                break
+        if dt_idx is not None:
+            # Collect block until next H2/H3.
+            block: list[tuple[int, str]] = []
+            k = dt_idx + 1
+            while k < len(cc_lines) and not re.match(
+                r"^##\s|^###\s", cc_lines[k]
+            ):
+                block.append((cc_start + k + 1, cc_lines[k]))
+                k += 1
+            seen_terms: dict[str, int] = {}
+            term_bullet_re = re.compile(
+                r"^-\s+\*\*([^*]+?)\*\*\s+(?:—|--)\s+\S"
+            )
+            for abs_line, raw in block:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                if raw.startswith("  ") and not stripped.startswith("-"):
+                    # Continuation of previous bullet; accept silently.
+                    continue
+                m_term = term_bullet_re.match(raw)
+                if not m_term:
+                    failures.append(
+                        Failure(
+                            rule="L08",
+                            section="Cross-cutting constraints",
+                            line=abs_line,
+                            message=(
+                                "Domain terms entry must be `- **<term>** "
+                                "— <definition>` (em-dash or `--`). "
+                                f"Got: {raw!r}"
+                            ),
+                        )
+                    )
+                    continue
+                term = m_term.group(1).strip()
+                if term in seen_terms:
+                    failures.append(
+                        Failure(
+                            rule="L08",
+                            section="Cross-cutting constraints",
+                            line=abs_line,
+                            message=(
+                                f"Domain term '{term}' appears more than "
+                                f"once (first at line {seen_terms[term]})."
+                            ),
+                            extra={"term": term},
+                        )
+                    )
+                else:
+                    seen_terms[term] = abs_line
 
     # --- L06: overall success criteria has >=1 end-to-end behavioral entry ---
     if "Overall success criteria" in name_to_section:

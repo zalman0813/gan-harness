@@ -1,50 +1,37 @@
 #!/usr/bin/env python3
-"""Merge `### Domain terms (draft)` blocks from specs/_batch/prd.md into
-the project root CONTEXT.md `## Language` section.
+"""merge_domain_terms.py — v3.8 finalize Phase 2.
 
-PRD format (per .claude/skills/prd-workflow/references/grill-protocol.md
-§ Output format):
+Parses the `### Domain terms` sub-section of `specs/_epic/spec.md`'s
+`## Cross-cutting constraints` (format enforced by spec_lint.py L08)
+and appends each new term to `CONTEXT.md`'s `## Language` section.
 
-  ## R1 — <r-slug>
-  ...
-  ### Domain terms (draft)
-  **TermName**:
-  <one-sentence definition>
-  _Avoid_: <synonym1>, <synonym2>
+Idempotent: re-running on the same epic produces zero changes (existing
+terms are skipped by case-insensitive bold-name match).
 
-  ## R2 — <r-slug>
-  ### Domain terms (draft)
-  **OtherTerm**:
-  ...
+The spec.md format is strict (single source of truth: spec_lint.py L08):
 
-CONTEXT.md format (per CONTEXT.md § Language already in repo):
+    ### Domain terms
+    - **<term>** — <definition>
+    - **<term-with-context>** — <definition that may continue on the
+      next line as long as the continuation indents with two spaces>
 
-  ## Language
+CONTEXT.md format mirrors what planner-handbook ships:
 
-  **TermName**:
-  <one-sentence definition>
-  _Avoid_: <synonym1>, <synonym2>
+    ## Language
 
-  **OtherTerm**:
-  ...
+    - **<term>** — <definition>
+    - **<term>** — <definition>
 
-Behaviour:
-  - dedupe by **bold term name** across R sections (first occurrence wins)
-  - skip any term whose name already exists in CONTEXT.md (case-insensitive
-    equality on the bold-name slot) — never overwrite an existing entry
-  - lazy-create CONTEXT.md (with H1 + ## Language stub) if missing
-  - lazy-create the `## Language` section if CONTEXT.md exists but lacks it
-  - emit JSON-line summary to stdout: appended count + skipped term names
-
-The script does NOT prompt — the SKILL is responsible for any user
-review before invoking this. This script is the deterministic merger.
+The script does NOT prompt and never invents terms. If spec.md has no
+`### Domain terms` sub-section (or it's empty), exit 0 with appended=[].
 
 Usage:
-  merge_domain_terms.py [--prd specs/_batch/prd.md] [--context CONTEXT.md]
+  merge_domain_terms.py [--spec specs/_epic/spec.md]
+                        [--context CONTEXT.md]
 
 Exit:
-  0 OK
-  1 IO / parse error
+  0 OK (no error; appended may be empty)
+  1 IO error or malformed spec.md (lint L08 violation)
 """
 from __future__ import annotations
 
@@ -54,155 +41,165 @@ import re
 import sys
 from pathlib import Path
 
+# Locate the `## Cross-cutting constraints` section, then within it find
+# `### Domain terms`. We use a state machine rather than one mega-regex
+# because markdown sections can have arbitrary content.
 
-# ### Domain terms (draft)  →  the literal heading we look for under each R
-DOMAIN_HEADING_RE = re.compile(r"^###\s+Domain\s+terms\s+\(draft\)\s*$")
-
-# **TermName**:  →  bold name on its own line ending with a colon
-TERM_NAME_RE = re.compile(r"^\*\*([^*]+?)\*\*:\s*$")
-
-# Section breaks inside prd.md. We stop a Domain-terms block at the next
-# H2 (## ...) or H3 (### ...) heading.
-SECTION_BREAK_RE = re.compile(r"^##\s|^###\s")
+H2_RE = re.compile(r"^##\s+(.+?)\s*$")
+H3_RE = re.compile(r"^###\s+(.+?)\s*$")
+# Term bullet: `- **name** — definition` (em-dash or `--`).
+TERM_BULLET_RE = re.compile(r"^-\s+\*\*([^*]+?)\*\*\s+(?:—|--)\s+(.+?)\s*$")
+# Bullet name on its own line (for existing CONTEXT.md scan).
+EXISTING_TERM_RE = re.compile(r"^-\s+\*\*([^*]+?)\*\*\s+(?:—|--)\s+")
 
 
-def parse_prd_terms(prd_text: str) -> list[tuple[str, list[str]]]:
-    """Walk prd.md, collect every (term_name, term_block_lines) tuple in
-    encounter order across all R sections. Skips literal `_(none)_`
-    placeholder blocks. Within a block the term spans from the bold name
-    line to the next blank-line-terminated paragraph break."""
-    lines = prd_text.splitlines()
-    out: list[tuple[str, list[str]]] = []
+def extract_domain_terms_block(spec_text: str) -> list[str]:
+    """Return the lines belonging to the `### Domain terms` block under
+    `## Cross-cutting constraints`. Empty list if the block is absent.
 
-    i = 0
-    while i < len(lines):
-        if not DOMAIN_HEADING_RE.match(lines[i]):
-            i += 1
+    Refuses to guess: if `### Domain terms` appears OUTSIDE `## Cross-
+    cutting constraints`, we still pick it up (planner may have put it
+    elsewhere) but only the first occurrence wins. Any ambiguity is
+    a lint L08 issue, not this script's concern."""
+    lines = spec_text.splitlines()
+    in_cc = False
+    in_dt = False
+    block: list[str] = []
+    for line in lines:
+        h2 = H2_RE.match(line)
+        if h2 and not line.startswith("###"):
+            in_cc = h2.group(1).strip() == "Cross-cutting constraints"
+            in_dt = False
             continue
-
-        # We're inside a Domain-terms block. Walk until the next H2/H3.
-        i += 1
-        block_lines: list[str] = []
-        while i < len(lines) and not SECTION_BREAK_RE.match(lines[i]):
-            block_lines.append(lines[i])
-            i += 1
-        # block_lines now holds everything under the Domain-terms heading
-        # for this R. Parse it into individual term entries.
-        out.extend(_split_terms(block_lines))
-
-    return out
+        if not in_cc:
+            continue
+        h3 = H3_RE.match(line)
+        if h3:
+            in_dt = h3.group(1).strip() == "Domain terms"
+            continue
+        if in_dt:
+            block.append(line)
+    return block
 
 
-def _split_terms(block_lines: list[str]) -> list[tuple[str, list[str]]]:
-    """Split a Domain-terms block into per-term entries.
+def parse_terms(block_lines: list[str]) -> list[tuple[str, list[str]]]:
+    """Parse the block into (term_name, full_bullet_lines) tuples.
 
-    Each term entry starts at a `**Name**:` line and runs until the next
-    `**Name**:` line or end of block. Trailing blank lines are trimmed."""
+    A bullet starts at `- **name** —` and continues on subsequent lines
+    that are indented with 2+ spaces. Blank lines and stray prose are
+    ignored.
+
+    Returns terms in encounter order; the caller dedups."""
     entries: list[tuple[str, list[str]]] = []
     current_name: str | None = None
     current_buf: list[str] = []
 
     def flush() -> None:
+        nonlocal current_name, current_buf
         if current_name is None:
             return
-        # Trim trailing blank lines
         while current_buf and not current_buf[-1].strip():
             current_buf.pop()
         if current_buf:
             entries.append((current_name, list(current_buf)))
+        current_name = None
+        current_buf = []
 
     for line in block_lines:
-        if line.strip() == "_(none)_":
-            # Skip the placeholder marker entirely.
+        if not line.strip():
+            # Blank line — keep within the current bullet (for spacing)
+            # unless we're not in a bullet, in which case ignore.
+            if current_name is not None:
+                current_buf.append(line)
             continue
-        m = TERM_NAME_RE.match(line)
+        m = TERM_BULLET_RE.match(line)
         if m:
             flush()
             current_name = m.group(1).strip()
             current_buf = [line]
-        elif current_name is not None:
+            continue
+        # Continuation: must indent with 2 spaces.
+        if current_name is not None and line.startswith("  "):
             current_buf.append(line)
-        # else: stray prose before the first term — ignore.
-
+            continue
+        # Anything else is malformed (lint L08 territory) — flush and
+        # ignore the stray line.
+        flush()
     flush()
     return entries
 
 
 def existing_term_names(context_text: str) -> set[str]:
-    """Lower-cased term names already present anywhere in CONTEXT.md."""
+    """Lower-cased bold names present in CONTEXT.md (anywhere)."""
     found: set[str] = set()
     for line in context_text.splitlines():
-        m = TERM_NAME_RE.match(line)
+        m = EXISTING_TERM_RE.match(line)
         if m:
             found.add(m.group(1).strip().lower())
     return found
 
 
-def ensure_language_section(context_text: str) -> tuple[str, int]:
-    """Return (context_text_with_language_section, insertion_index).
-
-    insertion_index = the line index where new term blocks should be
-    appended (i.e. just before the next H2 after `## Language`, or at EOF
-    if `## Language` is the last H2)."""
-    lines = context_text.splitlines()
-
-    # Find ## Language
-    lang_idx = next(
-        (i for i, ln in enumerate(lines) if ln.strip() == "## Language"),
-        None,
-    )
-
-    if lang_idx is None:
-        # Append a fresh `## Language` section at EOF.
-        if lines and lines[-1].strip():
-            lines.append("")
-        lines.append("## Language")
-        lines.append("")
-        return "\n".join(lines) + "\n", len(lines)
-
-    # Find the next H2 (or H1) after lang_idx — insert before it.
-    insert_at = len(lines)
-    for j in range(lang_idx + 1, len(lines)):
-        if lines[j].startswith("## ") or lines[j].startswith("# "):
-            insert_at = j
-            break
-
-    # Trim trailing blanks immediately before insert_at so we don't pile
-    # up blank lines.
-    while insert_at > lang_idx + 1 and not lines[insert_at - 1].strip():
-        insert_at -= 1
-
-    return "\n".join(lines) + ("\n" if not context_text.endswith("\n") else ""), insert_at
-
-
 def build_default_context() -> str:
     return (
-        "# Context\n"
-        "\n"
-        "_Auto-stub created by merge_domain_terms.py on first /finalize._\n"
-        "Edit freely — subsequent /finalize runs only append new Domain "
-        "terms under `## Language`.\n"
+        "# Domain Context\n"
         "\n"
         "## Language\n"
         "\n"
     )
 
 
+def ensure_language_section(context_text: str) -> tuple[str, int]:
+    """Return (normalised_text, insertion_line_index).
+
+    Insertion index = where new bullets should be appended (the line
+    *after* the last existing content under `## Language`, but before
+    the next H2 or EOF)."""
+    lines = context_text.splitlines()
+    lang_idx: int | None = None
+    for i, ln in enumerate(lines):
+        if ln.strip() == "## Language":
+            lang_idx = i
+            break
+
+    if lang_idx is None:
+        # Append a fresh `## Language` block at EOF.
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append("## Language")
+        lines.append("")
+        return "\n".join(lines) + "\n", len(lines)
+
+    # Find next H2 (or H1) after `## Language` -> insert just before it.
+    insert_at = len(lines)
+    for j in range(lang_idx + 1, len(lines)):
+        if lines[j].startswith("## ") or lines[j].startswith("# "):
+            insert_at = j
+            break
+    # Trim trailing blanks immediately before the H2 so we don't pile up.
+    while insert_at > lang_idx + 1 and not lines[insert_at - 1].strip():
+        insert_at -= 1
+    return (
+        "\n".join(lines) + ("\n" if not context_text.endswith("\n") else ""),
+        insert_at,
+    )
+
+
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--prd", default="specs/_batch/prd.md")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--spec", default="specs/_epic/spec.md")
     ap.add_argument("--context", default="CONTEXT.md")
     args = ap.parse_args(argv)
 
-    prd_path = Path(args.prd)
+    spec_path = Path(args.spec)
     ctx_path = Path(args.context)
 
-    if not prd_path.exists():
-        print(f"ERROR: {prd_path} not found", file=sys.stderr)
+    if not spec_path.exists():
+        print(f"ERROR: {spec_path} not found", file=sys.stderr)
         return 1
 
-    prd_text = prd_path.read_text(encoding="utf-8")
-    terms = parse_prd_terms(prd_text)
+    spec_text = spec_path.read_text(encoding="utf-8")
+    block = extract_domain_terms_block(spec_text)
+    terms = parse_terms(block)
 
     if ctx_path.exists():
         ctx_text = ctx_path.read_text(encoding="utf-8")
@@ -211,13 +208,13 @@ def main(argv: list[str]) -> int:
 
     existing = existing_term_names(ctx_text)
 
-    appended: list[str] = []
+    appended_names: list[str] = []
     skipped_existing: list[str] = []
     skipped_dup: list[str] = []
     seen_in_batch: set[str] = set()
-
     new_blocks: list[str] = []
-    for name, block in terms:
+
+    for name, bullet_lines in terms:
         key = name.lower()
         if key in existing:
             skipped_existing.append(name)
@@ -226,12 +223,11 @@ def main(argv: list[str]) -> int:
             skipped_dup.append(name)
             continue
         seen_in_batch.add(key)
-        appended.append(name)
-        new_blocks.append("\n".join(block))
+        appended_names.append(name)
+        new_blocks.append("\n".join(bullet_lines))
 
     if not new_blocks:
-        # Still ensure `## Language` exists if CONTEXT.md was missing —
-        # but only write back if we actually changed anything.
+        # Idempotent no-op: write back only if we lazy-created the file.
         if not ctx_path.exists():
             ctx_path.write_text(ctx_text, encoding="utf-8")
         print(json.dumps({
@@ -244,18 +240,15 @@ def main(argv: list[str]) -> int:
 
     ctx_text, insert_at = ensure_language_section(ctx_text)
     lines = ctx_text.splitlines()
-
-    addition: list[str] = []
-    for block in new_blocks:
-        addition.append("")
-        addition.append(block)
+    addition: list[str] = [""]
+    for block_text in new_blocks:
+        addition.append(block_text)
     addition.append("")
-
     new_lines = lines[:insert_at] + addition + lines[insert_at:]
     ctx_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
     print(json.dumps({
-        "appended": appended,
+        "appended": appended_names,
         "skipped_existing": skipped_existing,
         "skipped_duplicate_in_batch": skipped_dup,
         "context_path": str(ctx_path),

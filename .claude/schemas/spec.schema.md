@@ -132,6 +132,33 @@ Default templates (planner picks one matching `## Archetype`):
 
 Bulleted list. Optional sub-headings allowed (e.g., `### Performance budget`, `### Design language`, `### Non-goals`). Items are constraints that apply to the whole epic, not a single sprint.
 
+One sub-heading is reserved for /finalize consumption:
+
+#### `### Domain terms` (optional)
+
+When the epic introduces domain vocabulary that does NOT yet exist in
+`CONTEXT.md`, list the new terms here. /finalize parses this block and
+appends each new term to `CONTEXT.md`'s `## Language` section
+(idempotently — terms already present are skipped). Format is strict —
+the merge script is regex-only and refuses to guess.
+
+Every entry must follow:
+
+```markdown
+### Domain terms
+- **<term>** — <one-line definition>
+- **<term-with-context>** — <definition that may span multiple lines, as
+  long as continuation lines start with two spaces of indentation>
+```
+
+Rules (enforced by lint L08):
+- Heading is exactly `### Domain terms` (no parenthetical suffix like `(draft)`)
+- Every line under the heading until the next H2/H3 is either a `- **term** — definition` bullet, a 2-space continuation of the previous bullet, or blank
+- `<term>` is the bold key — uniqueness within this section
+- `—` is the em-dash separator (U+2014); the parser also accepts ` -- ` (two hyphens) as a fallback for keyboards that produce it
+
+If the epic introduces no new terms, omit the sub-heading entirely.
+
 ### `## Overall success criteria`
 
 Numbered list, **3-7 items**. Each item MUST be:
@@ -170,6 +197,7 @@ References are **read-only context for downstream agents**. The spec itself does
 | L05 | Sprint deliverables touch ≥2 layers OR are explicitly tagged pure-* |
 | L06 | Overall success criteria has ≥1 end-to-end behavioral entry |
 | L07 | Archetype is set; Evaluation criteria block has exactly 4 numbered entries |
+| L08 | If `### Domain terms` appears under `## Cross-cutting constraints`, every bullet matches `- **<term>** — <definition>` (continuation lines allowed with 2-space indent) and `<term>` is unique within the section |
 
 ---
 

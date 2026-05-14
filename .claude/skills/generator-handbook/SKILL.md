@@ -138,6 +138,19 @@ Anthropic v2 line 50:
 > or pivot to an entirely different aesthetic if the approach wasn't
 > working."
 
+### Data source for prior-round analysis
+
+Read `_evals/S{NN}-R{R-1}.json` for the previous round's full dual-axis
+verdict. Both `contract_axis.findings[]` and `standards_axis.findings[]`
+come through verbatim — no MAIN merge, no top-N cap, no axis rerank.
+That is the entire input for REFINE vs PIVOT and for counting findings.
+
+For 3-round anti-oscillation detection (see below), also read
+`_evals/S{NN}-R{R-2}.json` and `_evals/S{NN}-R{R-3}.json` when they
+exist. Match findings across rounds by their `gap` field (user-facing
+description), not by `evidence` path — the line may shift between
+rounds while the gap persists.
+
 ### REFINE — when scores trend up
 
 Symptoms:
@@ -256,6 +269,58 @@ Before writing the first line of code for a sprint:
 
 If the spec.md sprint is tagged `(pure-frontend)` etc., the cross-layer
 rule doesn't apply — single-layer verification is fine.
+
+## Barrel docstrings (mandatory for every touched package)
+
+When a sprint creates or modifies a Python package — defined as any
+directory containing an `__init__.py` — that `__init__.py` MUST contain
+a module-level docstring describing the package's responsibility in one
+or two sentences. Likewise every `.py` module inside the package needs
+its own module-level docstring.
+
+```python
+# onboarding/__init__.py
+"""Option B onboarding pipeline — snapshot a source table, Bedrock-
+batch-embed the rows, load vectors, and attach the runtime CDC trigger.
+"""
+```
+
+```python
+# onboarding/snapshot.py
+"""Snapshot a source table to Bedrock batch-inference JSONL. Hides
+cursor-batch sizing and the Bedrock input record format."""
+
+def snapshot_table(conn, catalog_row, output_path):
+    ...
+```
+
+### Why this is non-negotiable
+
+`/finalize`'s `regen_codemap.py` (deep-module-handbook companion at
+the epic-close boundary) walks every `__init__.py` to rebuild
+`CODEMAP.md` deterministically. When a barrel docstring is missing, the
+script can't invent one without surprising the operator, so it writes
+`_(no barrel docstring — add one to surface this module)_` instead.
+That cell shows up in the next epic's planner context, advertising that
+nobody owns the module's purpose — which is the wrong default for code
+we just shipped.
+
+The same rule applies to sibling `.py` modules: missing docstring →
+`_(no module docstring)_` in CODEMAP.md. Three rounds of evidence from
+the Apollo epic (handoff D1/D2) showed that absent docstrings cause the
+LLM to back-fill from filenames; barrel + module docstrings are the
+cheapest place to plant the truth.
+
+### What a useful docstring contains
+
+- The **decision the module hides** (one phrase — see deep-module
+  C1 named-hidden-decision).
+- The **public entry-point names**, only if it helps a reader who lands
+  in the file without grep context.
+
+Two sentences max. The docstring is read by the operator AND by
+`regen_codemap.py`'s `short_docstring()`, which truncates at the first
+blank line, so put the headline in the first paragraph.
 
 ## Inner gate (commit-time discipline)
 

@@ -185,6 +185,14 @@ NOT ADR-worthy:
   `### Non-goals`, `### Compliance` (when applicable).
 - This is where ordinary (non-ADR) decisions live: "use UTC for all
   timestamps", "prefer functional components", "max bundle size 500KB".
+- If the epic introduces new domain vocabulary, list it under
+  `### Domain terms` (heading exactly that — no parenthetical suffix
+  like `(draft)` or `(will merge at /finalize)`; /finalize's
+  `merge_domain_terms.py` parser matches the heading literally, and
+  spec_lint.py L08 rejects variants). Format every entry as
+  `- **<term>** — <one-line definition>` with em-dash separator
+  (continuation lines allowed with 2-space indent). Terms here become
+  permanent `CONTEXT.md` ## Language entries at /finalize.
 
 ### Overall success criteria (3-7 entries)
 - Behavioral, end-to-end, user-observable.
