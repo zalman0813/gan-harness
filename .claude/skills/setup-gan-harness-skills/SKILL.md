@@ -36,21 +36,9 @@ not to myself.
 | "Section walk is tedious; I'll bulk-ask everything in one prompt" | No. One `AskUserQuestion` per section, with explainer first. The interactive cadence IS the contract; bulk-ask collapses it. |
 | "Agent frontmatter edit is mechanical; I'll inline the change without a script" | Use `wire_stack_skills.py`. Mechanical edits go through the script so behaviour is reproducible and testable. |
 | "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /init /loop etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents auto-load their own handbooks; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
-| "User asked me to add a principle to `## Principles` section; I'll write it however reads naturally" | NO. Use the Karpathy 5-element format (see § Principle format below). Ad-hoc principle structures rot — they accumulate inconsistencies that make the section unreadable as it grows. The 5 elements (numbered heading / tagline / paragraph / bullets / "The test:" sentence) are non-negotiable. |
-
-## Principle format
-
-When the user asks to add or edit a principle in any project's CLAUDE.md `## Principles` section, follow the Karpathy 5-element format (source: <https://github.com/forrestchang/andrej-karpathy-skills>):
-
-1. `### N. Title` — numbered heading. Increment monotonically; never reuse a number even if a principle is removed (so `git log -S "### 3. "` always finds history).
-2. `**Tagline**` — one line, bold, imperative. Should fit on a single line and convey the rule independently.
-3. **Explanatory paragraph** — rationale + cost of violating + when it applies. 2–4 sentences. Names the concrete consequence the rule prevents.
-4. **4–5 bullets** — concrete actionable directives, each atomic and grep-able. Bullets describe the FORBIDDEN action or the REQUIRED action; not abstract advice.
-5. **`The test: …`** — a yes/no self-check Claude can run while writing code. If you can't write a "The test:" sentence for the principle, the principle isn't operational — refine until you can.
-
-**Anti-rationalization**: any principle missing the "The test:" sentence is a slogan, not a rule. Refuse to write a slogan-only principle; either complete the 5 elements or surface as `open_question` to the user.
-
-**Where this format lives at runtime**: each project's `CLAUDE.md` `## Principles` section opens with a `> Format for adding new principles: ...` block-quote preamble that mirrors this. The preamble is per-project (lives in target's CLAUDE.md, not in the injected template) so principles can grow project-by-project without setup re-injection.
+| "Stack skill mentions MCP tools — I'll write `target/.mcp.json`" | NO. `.mcp.json` loads the MCP server into the **main session**, paying its full tool-description context cost (often 100+ tools per server) on every startup, even when only subagents use them. Use **inline `mcpServers:`** in the relevant subagents' frontmatter — server starts only when that subagent is spawned, main session stays clean. (See Phase 4e2.) |
+| "Adding `mcp__<server>__*` to the subagent's `tools:` allowlist is enough" | NO. `tools:` is the *permission filter*; `mcpServers:` is what makes the *server reachable*. Both must be set together. `tools:` alone leaves the server unconnected; `mcpServers:` alone leaves the tools filtered out by the allowlist. Either way the subagent fails with "No such tool available". |
+| "User-global `~/.claude.json` MCP entry propagates to spawned subagents" | NO. Subagents inherit MCP only from servers loaded by the **session itself** (project `.mcp.json` or inline `mcpServers:` in the agent file). User-global config makes MCP available to the interactive main session but does NOT auto-propagate to spawned subagents — this trap fails silently with "No such tool available" and looks like a syntax bug. |
 
 ## When to use
 
@@ -91,6 +79,12 @@ After successful run:
   produced by chain-called stack-skill-creator
 - `target/.claude/agents/{planner,generator,evaluator}.md` — frontmatter
   `skills:` list extended with each new stack name
+- `target/.claude/agents/{planner,generator}.md` (and optionally
+  `evaluator.md`) — frontmatter `mcpServers:` + `tools:` allowlist
+  extended with inline MCP server definitions IF any built stack skill
+  references `mcp__<server>__` tools (see Phase 4e2). NEVER
+  `target/.mcp.json` — that would force the main session to load every
+  MCP server's tool descriptions on startup.
 - `target/.git/hooks/pre-commit` — the harness gate, the SOLE enforcement
   point for lint/typecheck/test/ac_coverage on every `git commit`
 - `target/specs/_epic/.gitkeep`, `target/specs/epics/.gitkeep`
@@ -271,6 +265,8 @@ Ready to write to <target>:
   README.md           : <new from template / skip — already exists>
   CLAUDE.md           : <inject ### Domain docs block>
   Wire stacks into    : agents/{planner,generator,evaluator}.md `skills:`
+  MCP wiring          : <list of MCP servers + chosen agents, or "none — no stack skill references MCP">
+                        (inline mcpServers: + tools: allowlist; NEVER .mcp.json)
   Pre-commit hook     : .git/hooks/pre-commit
   Empty containers    : specs/_epic/.gitkeep, specs/epics/.gitkeep
 
@@ -405,6 +401,120 @@ The script edits frontmatter `skills:` of `planner.md`, `generator.md`,
 
 If `STACKS_TO_BUILD` is empty (Section D entirely skipped), no-op.
 
+#### 4e2. MCP wiring (if any built stack skill references MCP tools)
+
+Some stack skills instruct subagents to call MCP tools at decision
+time — e.g., `python-agentcore-strands` references
+`mcp__bedrock-agentcore-mcp-server__*` for live AgentCore docs and
+`mcp__strands-agents__*` for Strands docs. When such a stack is in
+`STACKS_TO_BUILD`, the corresponding MCP servers MUST be wired
+**inline into each relevant agent's frontmatter**, NOT via
+`target/.mcp.json`.
+
+**Why inline, not `.mcp.json` (this trap burned a prior run):**
+
+- `target/.mcp.json` at project root loads the MCP server into the
+  **main session**, paying the full tool-description context cost
+  (often 100+ tools per server) on every conversation startup, even
+  when only subagents use the tools.
+- Inline `mcpServers:` in subagent frontmatter connects the server
+  only when that subagent starts, disconnects when it finishes.
+  Main session stays clean.
+- User-global `~/.claude.json` MCP entries do NOT auto-propagate to
+  spawned subagents — relying on it is a trap that fails silently
+  with "No such tool available".
+
+**Subagent MCP requires BOTH fields, not one:**
+
+- `mcpServers:` — makes the server *reachable* from the subagent
+- `tools:` — allowlist filter; MUST include `mcp__<server>__*` (the
+  wildcard is documented syntax) or the calls are filtered out
+
+Either field alone fails. Documented in
+`docs.claude.com/en/docs/claude-code/permissions` ("MCP" section) and
+`docs.claude.com/en/docs/claude-code/sub-agents` ("Available tools"
+and "Scope MCP servers to a subagent" sections).
+
+**How:**
+
+1. For each stack in `STACKS_TO_BUILD`, read
+   `target/.claude/skills/<stack-name>/SKILL.md` and grep for the
+   regex `mcp__([a-z0-9._-]+)__`. Collect the unique captured server
+   names across all built stack skills. No matches → 4e2 is a
+   complete no-op (no writes, nothing in the done report).
+
+2. For each unique MCP server name, look up the canonical inline
+   server config. Well-known servers (extend this table as new ones
+   appear):
+
+   | Server name (key) | Inline config |
+   |---|---|
+   | `bedrock-agentcore-mcp-server` | `type: stdio`, `command: uvx`, `args: ["awslabs.amazon-bedrock-agentcore-mcp-server@latest"]`, `env: {FASTMCP_LOG_LEVEL: ERROR}` |
+   | `strands-agents` | `type: stdio`, `command: uvx`, `args: ["strands-agents-mcp-server"]`, `env: {FASTMCP_LOG_LEVEL: ERROR}` |
+   | `awslabs.aws-documentation-mcp-server` | `type: stdio`, `command: uvx`, `args: ["awslabs.aws-documentation-mcp-server"]`, `env: {FASTMCP_LOG_LEVEL: ERROR}` |
+
+   If the server name is not in the table, AskUserQuestion for the
+   inline config (type / command / args / env). Do NOT improvise.
+
+3. Per MCP server, AskUserQuestion (multiSelect) which agents need
+   it: planner / generator / evaluator. Recommended defaults:
+
+   - **planner**: yes (reads docs during /init grill)
+   - **generator**: yes (reads docs during IMPLEMENT)
+   - **evaluator**: **NO by default**. Evaluator's job is behavioral
+     verification via the inner gate + transcript + verification_plan
+     — it rarely needs live API docs. Skipping evaluator saves a uvx
+     cold start per probe and keeps evaluator's prompt context lean.
+     Add MCP to evaluator only when a specific evaluator workflow
+     genuinely requires it.
+
+   `codebase-fact-finder.md` never gets MCP wiring — it's a
+   blindfold researcher, stack-agnostic by design.
+
+4. For each chosen agent, edit its frontmatter to:
+
+   - Append `mcp__<server>__*` (one per chosen server) to the
+     `tools:` allowlist line, comma-separated. Use the **wildcard
+     form** — per docs, `mcp__<server>__*` is equivalent to
+     enumerating every tool. Reserve per-tool listing for genuine
+     selective scoping (rare).
+   - Append an inline server definition to the `mcpServers:` list,
+     preserving any existing entries (do NOT overwrite). The list
+     is a YAML sequence where each item is a single-key map keyed
+     by server name, with the canonical config from step 2.
+
+   Example (`generator.md` frontmatter after wiring two servers):
+
+   ```yaml
+   tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch,
+          mcp__bedrock-agentcore-mcp-server__*, mcp__strands-agents__*
+   mcpServers:
+     - bedrock-agentcore-mcp-server:
+         type: stdio
+         command: uvx
+         args: ["awslabs.amazon-bedrock-agentcore-mcp-server@latest"]
+         env:
+           FASTMCP_LOG_LEVEL: ERROR
+     - strands-agents:
+         type: stdio
+         command: uvx
+         args: ["strands-agents-mcp-server"]
+         env:
+           FASTMCP_LOG_LEVEL: ERROR
+   ```
+
+5. **NEVER write `target/.mcp.json` in this phase.** If you find
+   yourself reaching for it, stop and re-read the "Why inline"
+   block above.
+
+6. The Phase 5 done report MUST remind the user that the **current**
+   Claude Code session won't see the new inline MCP servers —
+   spawned subagents only pick up `mcpServers:` declarations at
+   session start. The user needs to close this session and re-launch
+   `claude` from the target directory before `/init`.
+
+If no stack skill referenced MCP → 4e2 is a complete no-op.
+
 #### 4f. Pre-commit hook (the harness gate's only enforcement point)
 
 Install the project's `.git/hooks/pre-commit` so every `git commit`
@@ -447,6 +557,7 @@ Wrote README.md                       <✓ / skipped — existed>
 Updated <CLAUDE.md|AGENTS.md>         ✓ (### Domain docs block)
 Built stack skills                    <list or "none">
 Wired stacks into agent frontmatter   <✓ / skipped — no stacks>
+MCP wiring (inline mcpServers:)       <list of server→agents pairs, or "none — no stack skill referenced MCP">
 Installed git pre-commit hook         ✓ (.git/hooks/pre-commit)
 Sentinels                             specs/{_epic,epics}/.gitkeep
 
@@ -454,6 +565,11 @@ Lazy (will be created when first needed):
   CONTEXT.md      ← first /finalize archive merge
   CODEMAP.md      ← first /finalize regen
   docs/adr/       ← first /init ADR proposal
+
+⚠ If MCP was wired in 4e2: the CURRENT Claude Code session won't see
+the new inline MCP servers. Close this session, then in the target
+directory run `claude` again before `/init`. Spawned subagents only
+inherit `mcpServers:` declarations that existed at session start.
 
 Next: /init  (start your first epic)
 ═══════════════════════════════════════════════════════════════
@@ -481,6 +597,28 @@ Next: /init  (start your first epic)
   explainer first. The walk IS the UX contract.
 - **Inventing a stack when detection finds nothing.** Skip wiring;
   surface to user. A wrong stack skill drifts forever.
+- **Writing `target/.mcp.json` to make MCP available to subagents.**
+  `.mcp.json` loads the server into the **main session** (paying its
+  full tool-description context cost on every startup); subagents
+  inherit it only as a side effect. Inline `mcpServers:` in each
+  subagent's own frontmatter is the right path — scoped, no
+  main-session pollution, automatic connect/disconnect lifecycle.
+- **Wiring MCP via only one of `tools:` or `mcpServers:`.** Both are
+  required. `mcpServers:` makes the server reachable; `tools:`
+  allowlist must include `mcp__<server>__*` to allow the call past
+  the filter. Either alone fails silently with "No such tool
+  available" — looks like a permission/syntax bug but is really a
+  missing-half-of-the-pair bug.
+- **Listing every MCP tool by name in `tools:` instead of using the
+  `__*` wildcard.** Per `docs.claude.com` permissions docs, three
+  forms are documented and equivalent: `mcp__<server>`,
+  `mcp__<server>__*`, `mcp__<server>__<tool>`. Use the wildcard for
+  the broad case; reserve per-tool listing for genuine selective
+  scoping (rare).
+- **Defaulting MCP to evaluator.** Evaluator does behavioral
+  verification (inner gate + transcript + verification_plan), not
+  live API doc lookup. Skip evaluator by default; only add when a
+  specific evaluator workflow genuinely needs the docs.
 
 ## Done when
 
@@ -492,6 +630,7 @@ Next: /init  (start your first epic)
 - [ ] 4c README.md present (template-rendered or pre-existing)
 - [ ] 4d CLAUDE.md or AGENTS.md has `### Domain docs` block (no YAML frontmatter added)
 - [ ] 4e stack names wired into planner/generator/evaluator frontmatter
+- [ ] 4e2 if any built stack skill referenced `mcp__<server>__` tools: inline `mcpServers:` blocks + `mcp__<server>__*` allowlist entries wired into chosen agents' frontmatter; `target/.mcp.json` NOT written; user reminded to restart session
 - [ ] 4f `.git/hooks/pre-commit` installed + executable
 - [ ] 4g `specs/_epic/.gitkeep` + `specs/epics/.gitkeep` present
 - [ ] Final report printed; `/init` suggested
