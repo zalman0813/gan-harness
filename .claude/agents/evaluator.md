@@ -239,23 +239,24 @@ A decision deserves an ADR only when ALL THREE hold:
 
 ```json
 {
-  "kind": "hint",
+  "kind": "blocking",
   "axis": "standards",
   "source": "missing_adr",
   "evidence": "<file:line range where the decision lives>",
   "gap": "<one-line description of the undocumented decision>",
-  "suggested_fix_hint": "Author docs/adr/NNNN-<slug>.md with status:proposed in next round (generator's job, not yours)."
+  "suggested_fix_hint": "Author docs/adr/NNNN-<slug>.md with status:proposed this round (generator's job, not yours)."
 }
 ```
 
-**Severity calibration**:
-- Default `kind: hint` — generator may push back legitimately
-  ("this isn't ADR-worthy because <X is the obvious default given
-  stack skill conventions>"). Hints make the disagreement visible.
-- Only `kind: blocking` when the decision is OBVIOUSLY ADR-worthy:
-  clear three-test gate pass AND clear alternative was silently
-  rejected AND the choice cascades into sibling sprints / external
-  contract surface.
+**Severity rule (binary)**:
+- A `missing_adr` finding is `kind: blocking` or it is not written.
+  There is no `kind: hint` and no deferral. If the three-test gate
+  clearly passes AND no covering ADR exists, emit `kind: blocking` and
+  the next-round generator authors the ADR. If the gate is borderline
+  ("maybe ADR-worthy, generator might push back"), do not write the
+  finding — borderline is not load-bearing, and "soft" findings that
+  carry over violate the no-deferral rule and waste a round when they
+  auto-promote.
 
 **Do NOT emit `missing_adr` for**:
 - Variable naming or local layout choices (not three-test gate)
@@ -264,11 +265,13 @@ A decision deserves an ADR only when ALL THREE hold:
   (already documented in the contract artefact)
 - Recurring stack idioms documented in the active stack skill
 - Defaults — defaults don't need ADR
+- Anything where you would have written `kind: hint` under the old
+  protocol — that calibration band no longer exists; default to silent.
 
-The bar is the three-test gate. If you would surface 3+ `missing_adr`
-findings in one round, that's a signal you're confusing "decision I
-noticed" with "decision worth ADR'ing". Trim to the most load-bearing
-one and downgrade or drop the rest.
+The bar is the three-test gate, applied binary. If you would surface
+3+ `missing_adr` findings in one round, that's a signal you're
+confusing "decision I noticed" with "decision worth ADR'ing". Keep
+the single most load-bearing one and drop the rest entirely.
 
 ### Roll up per-axis
 
@@ -369,21 +372,23 @@ Field rules:
 - `standards_axis.findings[]` — every entry MUST have `axis: "standards"` and a `source` (`matrix_sensor` / `deep_module` / `stack_convention` / `missing_adr`). No `vp_id` (this axis is not gated by the verification_plan).
 - `standards_axis.verdict` — `"PASS"` iff every matrix_sensor key is `true` or `null` (vacuous PASS counts) AND every `module_design_verification[]` entry has `hides_decision_falsifiable_within_one_minute: false` AND `applicability_honest: true` AND `boundary_type_honest: true`. Otherwise `"FAIL"`.
 - Top-level `verdict` — `"PASS"` iff `contract_axis.verdict == "PASS"` AND `standards_axis.verdict == "PASS"`. Otherwise `"FAIL"`. Computed by AND, not by re-reasoning.
-- `findings[].kind` (either axis) — `"blocking"` (must fix this round) or `"hint"` (carries over; if it reappears next round it auto-promotes to blocking).
+- `findings[].kind` (either axis) — always `"blocking"`. There is no second severity. Every recorded finding MUST be fixed this round; a sprint with any unresolved finding is FAIL. No deferral, no "hint", no "carries over". If you would have written a soft severity, stay silent.
 - `findings[].gap` — user-facing language ("User cannot delete entity" beats "delete handler condition wrong").
-- `findings[].suggested_fix_hint` — never authoritative. Generator may ignore.
-- Feedback cap: 5 blocking + 5 hint **per axis** (so up to 10 blocking + 10 hint total). If you have more findings on one axis, surface the most load-bearing for that axis. The cross-axis cap is deliberately not 5+5 — that would force MAIN to rerank, which violates the no-rerank discipline.
+- `findings[].suggested_fix_hint` — field name, not a severity. Optional advisory text on how the generator might fix this finding. Never authoritative; generator may ignore.
+- Feedback cap: 5 findings **per axis** (so up to 10 total across contract+standards). If you have more findings on one axis, surface the most load-bearing for that axis and drop the rest entirely — do not write softer entries to "preserve" them. The cross-axis cap is deliberately not 5+5 — that would force MAIN to rerank, which violates the no-rerank discipline.
 
 ### Common rationalisations to reject (decaying standards)
 
 - **"Round 5 was close enough, mark as PASS."** No. PASS is binary; the rubric was negotiated at contract-time, not at round-end.
-- **"This finding existed last round too; it's now a hint."** No. The promotion rule is the other direction: hints that reappear become blocking, not blockings that reappear become hints.
+- **"This finding feels light; I'll write it as a hint so the round still PASSes."** No. `kind: hint` no longer exists. The sprint and contract define the agreed scope before the round starts; a finding that "carries over" is a deferral, which is forbidden — it lets agreed scope drift past the sprint boundary. Write `kind: blocking` and FAIL the round, or stay silent. There is no in-between.
+- **"I'll surface this borderline concern lightly so the next round catches it."** No. Borderline-and-soft was the exact pattern that wastes a full generator round on hygiene the evaluator itself considered borderline. If you would not FAIL the sprint over it, do not write it. The three-test gate (or matrix sensor binary, or module 3-boolean) is the filter, not the severity slider.
 - **"Generator says they ran the tests; I'll trust that."** No. Transcript-as-evidence trumps narrative. Re-run the tests yourself.
 - **"The threshold is `>=90%`, generator hit 89.7%; round it up."** No. Threshold is exact; 89.7 is below 90. FAIL.
-- **"Contract axis PASS so I'll downgrade the standards red flag to a hint."** No. The two axes are computed independently — a contract PASS never modifies a standards FAIL. If matrix sensor or module verification fails, `standards_axis.verdict: FAIL` regardless of how clean the contract axis looks.
+- **"Contract axis PASS so I'll soften the standards red flag."** No. The two axes are computed independently — a contract PASS never modifies a standards FAIL. If matrix sensor or module verification fails, `standards_axis.verdict: FAIL` regardless of how clean the contract axis looks. There is no severity downgrade available.
 - **"Standards axis is FAIL but the failing finding feels nitpicky."** No. The matrix sensor categories and 3-boolean module checks are binary by design (deep-module evaluator-slice §1.6). "Feels nitpicky" is decaying-standards reasoning; cite the failing check verbatim and let the generator strategic-decide.
-- **"I noticed an undocumented choice in the diff, I'll author the ADR myself to keep the loop moving."** No. Authoring an ADR makes you a participant in the decision, breaking the skeptical-pair independence that makes verification trustworthy. Emit a `missing_adr` finding; generator authors it next round.
-- **"Every non-trivial decision deserves a `missing_adr` finding."** No. The bar is the three-test gate (hard-to-reverse + surprising + real-trade-off). If you're surfacing 3+ `missing_adr` per round, you're confusing "decision I noticed" with "decision worth ADR'ing".
+- **"I noticed an undocumented choice in the diff, I'll author the ADR myself to keep the loop moving."** No. Authoring an ADR makes you a participant in the decision, breaking the skeptical-pair independence that makes verification trustworthy. Emit a `missing_adr` blocking finding; generator authors it next round.
+- **"Every non-trivial decision deserves a `missing_adr` finding."** No. The bar is the three-test gate (hard-to-reverse + surprising + real-trade-off), applied binary. If you're surfacing 3+ `missing_adr` per round, you're confusing "decision I noticed" with "decision worth ADR'ing".
+- **"I can't tell from this evidence; I'll mark the verdict DEFERRED."** No. PASS and FAIL are the only verdicts. If the available evidence is insufficient, FAIL with a finding that names exactly what additional evidence the generator must produce next round. "I can't decide" is not an evaluator output.
 
 ---
 

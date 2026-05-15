@@ -205,8 +205,14 @@ When verifying a matrix sensor row:
    the sprint has internal helpers and survives a real rename, the
    sensor's top-level boolean reflects that module; if no module in
    the sprint has internal helpers at all, set the top-level boolean
-   to `null` (rendered as `N/A` in trace) and surface a `kind: hint`
-   finding so the next sprint knows the sensor was inapplicable.
+   to `null` (rendered as `N/A` in trace). Do NOT emit a finding for
+   the vacuous case — the `null` itself is the signal; verdict logic
+   treats `null` as vacuous-PASS. A finding that "tells the next
+   sprint the sensor was inapplicable" is a deferral pattern: it
+   carries information across the sprint boundary the contract
+   already closed. If the contract for the next sprint genuinely
+   needs to know the sensor shape, name it in that sprint's
+   `verification_plan[]`, not in this one's findings.
 
 Apply the same logic to any other sensor whose assertion is
 structurally vacuous given the module's actual shape (e.g.
@@ -251,28 +257,34 @@ without forcing structural symmetry where none exists.
 
 ## §2 Five-axis review checklist
 
-For each module in scope, evaluator walks all five axes. For each
-axis, the evaluator emits one of three signals:
+For each module in scope, evaluator walks all five axes. Per axis the
+evaluator emits one of two binary signals — PASS or FAIL. There is no
+third verdict:
 
-- **PASS** — axis satisfied
-- **FAIL** — axis violated; emit FAIL verdict on the feature
-- **DEFERRED** — evaluator cannot decide with confidence; emit
-  DEFERRED verdict on the feature; surface as open_question for
-  /finalize user review
+- **PASS** — axis satisfied; cite the C-criterion (or red-flag silence)
+  that informed the verdict.
+- **FAIL** — axis violated; record the finding in this module's
+  `design_review` and emit `kind: blocking` in `standards_axis.findings[]`.
 
-DEFERRED is a third valid evaluator signal alongside PASS and FAIL;
-in v3.8 the evaluator surfaces DEFERRED items as findings the
-operator decides at /finalize time. The evaluator does not
-unilaterally block downstream sprints — operator monitors and may
-abort the loop based on the DEFERRED count.
+**No DEFERRED.** "Evaluator cannot decide with confidence" is not an
+output the loop accepts — it defers a problem that the agreed sprint
+boundary already said must resolve this round. If you cannot decide
+with confidence, you have one of two situations: (a) the evidence is
+insufficient — FAIL with a finding that names exactly what evidence
+the generator must produce next round (transcript slice / test
+output / additional sensor run), or (b) the contract is silent on
+the criterion you're trying to apply — FAIL with a `kind: blocking`
+finding sourced from `stack_convention` or an `amend_request` at
+contract-review time, not a deferral at verify-time. PASS/FAIL is
+binary; "I don't know" is FAIL by default.
 
-| Axis | Check | PASS signal (foundation §3.5) | FAIL signal | DEFERRED signal |
-|---|---|---|---|---|
-| **A. Depth** | Could a maintainer reconstruct the implementation from public signatures alone? | C1 + C2 pass + C8 size band reasonable | Yes — module is shallow | Cannot tell without reading caller code |
-| **B. Leak** | List implementation facts the caller must know to use the module correctly | C6 broad-interface complete (signature + invariants + ordering + error modes documented) | Any leak fact found that is not documented as accepted in the contract | Contract is silent on whether a borderline fact is intentional |
-| **C. Pass-through** | For each public method, does the deletion test fire (foundation.md §5.5)? | C3 deletion test passes (≥2 callers regrow complexity if removed) | Any pass-through that is not an ACL method | Method might be ACL but ACL not declared at NEGOTIATE |
-| **D. Boundary translation** | At each module boundary: are external exceptions caught and re-raised as domain exceptions with cause chained? At each BC boundary: does an ACL exist? | exception-leak flag silent; ACL present where BC crossed | External exception type leaks through public surface OR ACL missing where BC is crossed | Contract does not specify exception strategy at this boundary |
-| **E. Mock budget** | In each test, does the mock setup encode the module's internal collaboration graph (Mockist drift)? | **C7 interface = test surface** passes — tests survive internal helper rename | Test mocks beyond what's needed for process boundaries; test would still pass with real internal objects | Mock count is borderline; cannot tell without trying |
+| Axis | Check | PASS signal (foundation §3.5) | FAIL signal |
+|---|---|---|---|
+| **A. Depth** | Could a maintainer reconstruct the implementation from public signatures alone? | C1 + C2 pass + C8 size band reasonable | Yes — module is shallow. If you cannot tell without reading caller code, FAIL with finding "evidence insufficient: caller code at <paths> not in scope; next round must include caller-side smoke." |
+| **B. Leak** | List implementation facts the caller must know to use the module correctly | C6 broad-interface complete (signature + invariants + ordering + error modes documented) | Any leak fact found that is not documented as accepted in the contract. Contract-silence on a borderline fact = FAIL with finding "contract did not name <fact>; either contract amendment or module surface revision required this round." |
+| **C. Pass-through** | For each public method, does the deletion test fire (foundation.md §5.5)? | C3 deletion test passes (≥2 callers regrow complexity if removed) | Any pass-through that is not an ACL method. Undeclared-ACL ambiguity = FAIL with finding "contract did not declare ACL status for <method>; resolve via amendment or method removal this round." |
+| **D. Boundary translation** | At each module boundary: are external exceptions caught and re-raised as domain exceptions with cause chained? At each BC boundary: does an ACL exist? | exception-leak flag silent; ACL present where BC crossed | External exception type leaks through public surface OR ACL missing where BC is crossed. Contract-silent-on-strategy = FAIL with finding naming the missing strategy. |
+| **E. Mock budget** | In each test, does the mock setup encode the module's internal collaboration graph (Mockist drift)? | **C7 interface = test surface** passes — tests survive internal helper rename | Test mocks beyond what's needed for process boundaries; test would still pass with real internal objects. Borderline-mock-count = FAIL with finding "next round must rerun tests after replacing mock M with real collaborator C; if green, drop mock; if red, refactor." |
 
 ## §3 Performance review angle
 
@@ -319,25 +331,30 @@ Information hiding and security are aligned, but specific checks:
 ## §5 Verdict path
 
 ```
-Walk axes A-E per module. For each:
+Walk axes A-E per module. Per axis emit PASS or FAIL — binary.
   ├─ PASS → continue
-  ├─ FAIL → record finding in this module's design_review;
-  │         contributes to sprint-level FAIL signal
-  └─ DEFERRED → record finding; contributes to DEFERRED signal
+  └─ FAIL → record finding in this module's design_review;
+            emit kind: blocking in standards_axis.findings[];
+            contributes to sprint-level FAIL signal
 
 After all axes per module:
   ├─ Any FAIL? → module contributes FAIL to sprint verdict
-  ├─ Any DEFERRED (no FAIL)? → module contributes DEFERRED;
-  │   note in design_review for operator review at /finalize
   └─ All PASS → module contributes PASS
 
 Sprint-level rollup (per evaluator-handbook):
   - All modules PASS → consider this slice toward sprint PASS
   - Any module FAIL → contributes FAIL toward sprint verdict;
     final verdict combines with other criterion_mapping signals
-  - DEFERRED modules surface as DEFERRED in the sprint's overall
-    rollup; operator decides whether to keep running /loop or stop
 ```
+
+**No DEFERRED rung exists in this rollup.** If you find yourself
+wanting to record "I'm not sure" against an axis, the correct output
+is FAIL with a finding that names the evidence the generator must
+produce next round. The next-round generator either produces it
+(round resolves) or strategic-pivots away from the module (also
+resolves). "Operator decides at /finalize" is forbidden — the sprint
+contract was the agreed scope; carrying axis-uncertainty past the
+sprint boundary is a deferral by another name.
 
 ## §6 Compliance check (impl vs agreed contract)
 
@@ -458,7 +475,8 @@ measure rot).
 | "Caller convenience is more important than interface narrowness" | Caller convenience is built on every maintainer's cost. Foundation.md §1 cognitive-load check: how many distinct concepts must the caller hold to call this correctly? |
 | "Pass-through earns its keep — it makes the structure clearer" | Then it should pass the deletion test (foundation.md §5.5): removing it concentrates complexity in ≥ 2 callers. If not, FAIL. |
 | "External exception is OK because the caller can read the message" | Foreign vocabulary leaked. Wrap or FAIL. |
-| "Mock count is high but tests are clean" | Clean tests on tightly-coupled implementation = false safety net. Mockist drift; FAIL or DEFERRED based on confidence. |
+| "Mock count is high but tests are clean" | Clean tests on tightly-coupled implementation = false safety net. Mockist drift; FAIL with a finding that names which mock to replace with a real collaborator next round. There is no DEFERRED — confidence shortfall = FAIL with evidence-naming finding. |
+| "I'm not sure if this fires the red flag — I'll mark DEFERRED" | No. DEFERRED no longer exists in v3.8 deep-module verification. PASS/FAIL is binary. If you cannot decide with the evidence in hand, FAIL with a finding that names exactly what the generator must produce next round (additional sensor run, caller-side smoke, contract amendment). "Operator decides at /finalize" is forbidden — the sprint boundary defines when the question must resolve. |
 
 ## §9 What's NOT here
 

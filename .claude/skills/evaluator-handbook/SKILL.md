@@ -202,22 +202,32 @@ Required fields per finding:
   "vp_id": "vp-02",
   "evidence": "src/auth.py:42 OR _traces/S01-gen-R1.jsonl:L1247-L1289",
   "gap": "<behavioral description, user-facing language>",
-  "suggested_fix_hint": "<optional, hint only — never authoritative>"
+  "suggested_fix_hint": "<optional advisory text — never authoritative>"
 }
 ```
 
-`kind` is one of:
-- `blocking` — generator must fix this round; sprint cannot complete
-- `hint` — won't block this round but will accumulate; if it appears
-  again next round it becomes blocking
+`kind` is always `blocking`. There is no second severity. If a concern
+is worth recording in `findings[]`, the generator must fix it this
+round; sprint cannot complete otherwise. If a concern is not worth
+blocking on, it does not get written — silence is the only alternative
+to `blocking`.
+
+**No deferral.** The spec defines the sprint scope and the contract
+defines its done state; both are agreed before the round starts. A
+finding that "carries to next round" is a deferral, which is forbidden:
+it lets the agreed scope drift past the sprint boundary. The evaluator
+either commits to "this must be fixed now" (`blocking`) or to "this is
+not worth recording" (silence). No middle ground.
 
 `gap` is the **authoritative output**. Write it as user-observable
 behaviour. "User cannot delete entity by clicking and pressing Delete"
 beats "Delete handler condition wrong".
 
-`suggested_fix_hint` is **never authoritative**. Generator may take it,
-ignore it, pivot entirely. Hints are for accelerating obvious fixes; for
-genuine pivots, hints are noise.
+`suggested_fix_hint` is a separate field name (not a `kind` value) —
+optional advisory text on how the generator might fix the finding. It
+is **never authoritative**: generator may take it, ignore it, pivot
+entirely. Use it to accelerate obvious fixes; for genuine pivots, leave
+it empty so the generator's strategic-decision has space to operate.
 
 ## Output JSON shape
 
@@ -272,8 +282,25 @@ features implemented". The transcript slice says they only ran tests on
 2 of 5 features. Trust the transcript, not the message.
 
 **Over-specifying suggested_fix_hint.** Don't write the fix for the
-generator. Hints are accelerators, not solutions. The generator's
-strategic-decision (refine vs pivot) needs space to operate.
+generator. `suggested_fix_hint` accelerates obvious fixes, not solves
+them. The generator's strategic-decision (refine vs pivot) needs space
+to operate.
+
+**Deferring a finding to "next round".** Forbidden. The sprint and
+contract define the scope agreed before the round; if you see a real
+problem now, it is `kind: blocking` now. There is no soft severity,
+no "carries over", no "operator decides at /finalize". Either the
+finding is worth blocking on (write it) or it is not (stay silent).
+"I'll mention this lightly and let the next round catch it" is the
+exact pattern that wastes a generator round on hygiene the evaluator
+itself considered borderline.
+
+**Inventing a third verdict.** PASS or FAIL. Never DEFERRED, never
+INCONCLUSIVE, never NEEDS_REVIEW. If the available evidence is
+insufficient to verdict, FAIL with a finding that names what
+additional evidence the generator must produce next round — the
+generator then produces it. "I can't decide" is not an evaluator
+output.
 
 **Too few findings (false PASS).** When you find one issue, look for
 related ones. A failed delete handler likely means: (a) test missing, (b)
