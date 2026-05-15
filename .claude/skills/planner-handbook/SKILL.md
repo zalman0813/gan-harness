@@ -46,8 +46,10 @@ goal is to extract enough context that downstream agents don't need you again.
 5. **Brownfield or greenfield?**
    - Brownfield = modifies existing codebase → fact-finder dispatch needed.
    - Greenfield = builds new app from zero → no fact-finder.
-   - This affects the "References" section + whether you spawn fact-finder
-     before drafting.
+   - This affects the "References" section + whether you emit
+     `_research/_questions.json` for the MAIN session to dispatch
+     fact-finders (you can't dispatch them yourself — see "Fact-finder
+     dispatch" below).
 
 ### When to stop grilling
 
@@ -97,28 +99,64 @@ Pick one matching `## Archetype`. Reword for the epic but keep exactly 4.
 
 ## Fact-finder dispatch (brownfield only)
 
-When the epic touches existing code, dispatch fact-finder subagents
-**before** drafting spec.md so research informs the draft.
+When the epic touches existing code, you need `codebase-fact-finder`
+research **before** locking the grill. But you cannot dispatch the
+fact-finder yourself: you are a subagent, subagents cannot spawn
+subagents (runtime nesting limit), and your tools list excludes
+`Agent`. The MAIN session does the dispatch in Phase 1.5 of
+`init-workflow`. Your job is to author the question list and signal
+how many answers are still missing.
 
-### Pattern
+### Pattern (your side)
 
-1. Sketch 3-8 questions that, if answered, would let you draft the spec
-   without further investigation. Examples:
+1. Sketch 3-8 blindfold-style questions that, if answered, would let
+   you draft the spec without further investigation. Examples:
    - "What is the current shape of the User model? Fields, types, FK?"
    - "Is there an existing auth flow we should integrate with, or is this a
      parallel auth path?"
    - "Which test runners are configured in the current repo?"
-2. Spawn fact-finder subagents in parallel, one per question, with explicit
-   blindfold (each fact-finder doesn't see your spec draft or other
-   questions). Each writes to `specs/_epic/_research/<query-id>.md`.
-3. Wait for all to return. Read findings.
-4. Draft spec.md, citing findings under `## References`.
+2. Before writing, glob `specs/_epic/_research/*.md` and read every
+   existing finding — MAIN session may have populated some on a prior
+   round. Drop any question whose answer is already there.
+3. Write the **still-open** question list to
+   `specs/_epic/_research/_questions.json`:
+   ```json
+   {
+     "round": <R>,
+     "questions": [
+       {
+         "id": "user-model-shape",
+         "question": "What is the current shape of the User model? List fields, types, FKs.",
+         "rationale": "Spec needs to know if we extend or replace; FKs affect token storage."
+       }
+     ]
+   }
+   ```
+   `questions: []` means MAIN session has nothing to dispatch — that is
+   your "research done" signal.
+4. In `_grill.html`, render any toggle that depends on an unanswered
+   question as `[research-pending: <question-id>]` so the user (and
+   MAIN session) can see what's blocking what.
+5. Return `research_pending=<K>` in your `GRILL READY:` line, where K
+   matches `len(questions[])` in the JSON file you just wrote.
+
+MAIN session then dispatches K `codebase-fact-finder` subagents in
+parallel; on the next round you re-read `_research/*.md` and refine
+the grill. The cycle ends when you return `research_pending=0`.
 
 ### Anti-patterns
-- Asking fact-finder to recommend design ("how should we do auth?"). They
-  document facts; design is your job.
-- Embedding goal-language in the question ("we want to add SSO, find what
-  we need"). Pure facts: "What auth modules currently exist?"
+- **Trying to call the `Agent` tool yourself.** You don't have it,
+  and even if you did, subagent→subagent nesting is forbidden.
+- **Skipping `_questions.json` because you "have a guess".** Brownfield
+  always needs research; guessing reintroduces the planner-bias the
+  blindfold pattern is designed to eliminate.
+- **Re-listing answered questions.** Read `_research/*.md` first; only
+  open questions go into `_questions.json`. Otherwise MAIN session
+  re-dispatches fact-finders that already returned, wasting tokens.
+- **Asking fact-finder to recommend design** ("how should we do auth?").
+  They document facts; design is your job.
+- **Embedding goal-language in the question** ("we want to add SSO, find
+  what we need"). Pure facts: "What auth modules currently exist?"
 
 ## ADR three-test gate
 
