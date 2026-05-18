@@ -1,6 +1,6 @@
 ---
 name: planner-handbook
-description: Methodology handbook for the planner agent — grill protocol, archetype selection, ADR three-test gate application, fact-finder dispatch, spec.md authoring patterns. Auto-loaded by .claude/agents/planner.md. Use whenever the planner is producing or revising a spec.
+description: Methodology handbook for the planner agent — grill protocol, archetype selection, ADR three-test gate application, fact-finder dispatch, spec.md authoring patterns. The planner agent must invoke this skill via the Skill tool at the start of /init, before grilling or producing/revising spec.md — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
 disable-model-invocation: false
 ---
 

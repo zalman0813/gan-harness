@@ -249,9 +249,38 @@ def main() -> int:
         action="store_true",
         help="Exit 0 if epic done, 1 otherwise; no output",
     )
+    parser.add_argument(
+        "--set-context",
+        nargs=2,
+        metavar=("FEATURE", "ROUND"),
+        help="Write <epic_dir>/_traces/current-context.json {feature, round} "
+             "so the SubagentStop hook keys traces + progress.tsv rows to "
+             "sprint/round. Call immediately before spawning generator / "
+             "evaluator.",
+    )
     args = parser.parse_args()
 
     epic_dir = Path(args.epic_dir)
+
+    if args.set_context:
+        feature, round_raw = args.set_context
+        try:
+            round_int = int(round_raw)
+        except ValueError:
+            print(
+                f"epic_status: --set-context ROUND must be an int, got "
+                f"{round_raw!r}",
+                file=sys.stderr,
+            )
+            return 2
+        ctx_dir = epic_dir / "_traces"
+        ctx_dir.mkdir(parents=True, exist_ok=True)
+        (ctx_dir / "current-context.json").write_text(
+            json.dumps({"feature": feature, "round": round_int}),
+            encoding="utf-8",
+        )
+        return 0
+
     spec_path = epic_dir / "spec.md"
     contracts_path = epic_dir / "contracts.jsonl"
     evals_dir = epic_dir / "_evals"

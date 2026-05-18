@@ -81,6 +81,8 @@ def _summarize_tool_input(tool_name: str, inp: dict) -> str:
         return f"Grep '{inp.get('pattern', '?')}' in {inp.get('path', '.')}"
     if tool_name == "Glob":
         return f"Glob '{inp.get('pattern', '?')}'"
+    if tool_name == "Skill":
+        return f"Skill: {inp.get('skill', '?')}"
     if tool_name.startswith("mcp__"):
         return tool_name.split("__", 2)[-1] if tool_name.count("__") >= 2 else tool_name
     return tool_name
@@ -145,9 +147,14 @@ def _compute_stats(steps: list) -> dict:
     files_read: set[str] = set()
     files_written: set[str] = set()
     commands_run: list[str] = []
+    skills_invoked: list[str] = []
     for s in steps:
         summary = s["summary"]
-        if s["phase"] == "read" and summary.startswith("Read "):
+        if summary.startswith("Skill: "):
+            sk = summary[len("Skill: "):].strip()
+            if sk and sk not in skills_invoked:
+                skills_invoked.append(sk)
+        elif s["phase"] == "read" and summary.startswith("Read "):
             files_read.add(summary[5:].split("[")[0].strip())
         elif s["phase"] == "write":
             path = summary.split(" ", 1)[1] if " " in summary else ""
@@ -162,6 +169,7 @@ def _compute_stats(steps: list) -> dict:
         "files_read": sorted(files_read),
         "files_written": sorted(files_written),
         "commands": commands_run,
+        "skills_invoked": skills_invoked,
     }
 
 
@@ -186,27 +194,13 @@ def _render_trace_markdown(agent_type: str, feature: str, round_num: int,
     for phase, count in sorted(stats["phase_counts"].items(), key=lambda x: -x[1]):
         lines.append(f"| {phase} | {count} |")
     lines.append("")
-    audit = stats.get("stack_audit") or {}
-    if audit:
-        lines += ["## Audit — stack discovery", ""]
-        if not audit.get("required"):
-            lines += [f"_skipped: {audit.get('reason', 'n/a')}_", ""]
-        else:
-            mark = "PASS" if audit["satisfied"] else "FAIL"
-            lines += [
-                f"Verdict: **{mark}**",
-                f"Stacks named in spec.md: "
-                f"{', '.join(audit['stacks_named']) or '(none)'}",
-                f"Expected reads (stack skills on disk): "
-                f"{', '.join(audit['expected_stack_skills']) or '(none)'}",
-                f"Stack SKILL.md Read by agent: "
-                f"{', '.join(audit['stack_skills_read']) or '(none)'}",
-            ]
-            if audit["missing_stack_skills"]:
-                lines.append(
-                    f"Missing reads: {', '.join(audit['missing_stack_skills'])}"
-                )
-            lines.append("")
+    skills_invoked = stats.get("skills_invoked") or []
+    lines += ["## Skills invoked", ""]
+    if skills_invoked:
+        lines += [f"- {s}" for s in skills_invoked]
+    else:
+        lines.append("_(none)_")
+    lines.append("")
     if stats["files_read"]:
         lines += ["## Files read", ""] + [f"- {f}" for f in stats["files_read"]] + [""]
     if stats["files_written"]:
@@ -268,161 +262,13 @@ def _git_head_short(project_dir: str) -> str:
         return ""
 
 
-# ---------------------------------------------------------------------------
-# Stack-discovery audit
-#
-# Observable check: did the agent Read every stack named in spec.md's
-# `## Tech stack` section? Used to verify the stack-discovery prompt
-# instruction actually fires at runtime (otherwise stack-aware behavior
-# becomes unprovable in head-to-head experiments).
-# ---------------------------------------------------------------------------
-
-import re as _re
-
-
-def _parse_tech_stack(spec_text: str) -> list[str]:
-    """Extract candidate stack identifiers from spec.md `## Tech stack`.
-
-    Matches lines like `- Backend: python-stdlib` and returns the value
-    after the colon (e.g. ['python-stdlib', 'pytest']). Returns [] if the
-    section is missing or empty.
-    """
-    section = _re.search(
-        r"^##\s+Tech stack\s*$(.*?)(?=^##\s+)",
-        spec_text,
-        _re.MULTILINE | _re.DOTALL,
-    )
-    if not section:
-        return []
-    stacks: list[str] = []
-    for line in section.group(1).splitlines():
-        m = _re.match(r"^\s*-\s*[^:]+:\s*(\S+)", line)
-        if m:
-            stacks.append(m.group(1).strip())
-    return stacks
-
-
-def _infer_worktree_dir(stats: dict, fallback: Path) -> Path:
-    """Best-effort guess at the subagent's actual working dir.
-
-    Native subagents inherit CLAUDE_PROJECT_DIR from the parent session,
-    which is the main repo root; but the subagent may have been told to
-    write to a worktree. Inspect files_written / files_read for any path
-    ending in `/specs/_epic/spec.md` (or `/specs/_epic/contracts.jsonl`)
-    and use its prefix as the working dir. Falls back to `fallback`
-    (= CLAUDE_PROJECT_DIR) when no signal is present.
-    """
-    candidates: list[str] = []
-    candidates += list(stats.get("files_written") or [])
-    candidates += list(stats.get("files_read") or [])
-    for p in candidates:
-        for marker in ("/specs/_epic/spec.md",
-                       "/specs/_epic/contracts.jsonl"):
-            if p.endswith(marker):
-                cand = Path(p[: -len(marker)])
-                if (cand / "specs" / "_epic").is_dir():
-                    return cand
-    return fallback
-
-
-def _audit_stack_discovery(stats: dict, project_dir: Path) -> dict:
-    """Verify the agent Read each stack SKILL.md named in spec.md.
-
-    Returns a dict consumed by trace markdown + progress.tsv. `satisfied`
-    is True iff every stack named in spec.md has a matching
-    `.claude/skills/<stack>/SKILL.md` in the agent's files_read set, OR
-    spec.md / Tech stack is absent (audit not required).
-    """
-    # Native head-to-head: parent session's CLAUDE_PROJECT_DIR is the main
-    # repo, but the subagent may have been steered to a worktree. Try to
-    # locate the real spec.md from files_written/files_read before falling
-    # back to the parent dir.
-    project_dir = _infer_worktree_dir(stats, project_dir)
-    spec = project_dir / "specs" / "_epic" / "spec.md"
-    if not spec.is_file():
-        return {"required": False, "satisfied": True,
-                "reason": "no specs/_epic/spec.md"}
-    try:
-        spec_text = spec.read_text(encoding="utf-8")
-    except OSError:
-        return {"required": False, "satisfied": True,
-                "reason": "spec.md unreadable"}
-    stacks_named = _parse_tech_stack(spec_text)
-    if not stacks_named:
-        return {"required": False, "satisfied": True,
-                "reason": "no `## Tech stack` entries"}
-    # Audit only those names that actually have a stack skill on disk —
-    # `## Tech stack` may also list test runners / libraries / Python
-    # versions that legitimately have no SKILL.md. Those are not
-    # expected reads.
-    expected = [
-        s for s in stacks_named
-        if (project_dir / ".claude" / "skills" / s / "SKILL.md").is_file()
-    ]
-    if not expected:
-        return {"required": False, "satisfied": True,
-                "reason": "no matching stack skill on disk",
-                "stacks_named": stacks_named}
-    stack_skills_read = [
-        f for f in stats["files_read"]
-        if "/.claude/skills/" in f and f.endswith("/SKILL.md")
-    ]
-    missing = [
-        s for s in expected
-        if not any(f"/.claude/skills/{s}/SKILL.md" in f for f in stack_skills_read)
-    ]
-    return {
-        "required": True,
-        "stacks_named": stacks_named,
-        "expected_stack_skills": expected,
-        "stack_skills_read": stack_skills_read,
-        "missing_stack_skills": missing,
-        "satisfied": len(missing) == 0,
-    }
-
-
-def _infer_round_kind(stats: dict) -> str:
-    """Detect whether this invocation is a fresh R1 / mode-switch round or
-    an R>1 incremental amend, based on files_written patterns.
-
-    Returns 'R1' (treat audit miss as FAIL — first time the role sees the
-    sprint) or 'Rgt1' (R>1 amend in NEGOTIATE/REVIEW mode — treat audit
-    miss as SKIP-Rgt1 informational, since incremental work doesn't
-    require re-Read of stack SKILL.md to address amendments).
-    """
-    for w in stats.get("files_written") or []:
-        m = _re.search(r"_pending/S\d+-(?:draft|review)-v(\d+)\.yaml", w)
-        if m and int(m.group(1)) >= 2:
-            return "Rgt1"
-    return "R1"
-
-
-def _format_stack_audit_cell(audit: dict, round_kind: str = "R1") -> str:
-    """Render the audit dict into a single TSV-safe cell string.
-
-    R1 + mode-switch (impl / verify) miss => `FAIL:N/M` (real gap).
-    R>1 amend miss => `SKIP-Rgt1:N/M` (informational; task-focused
-    increment doesn't require re-Read).
-    """
-    if not audit:
-        return ""
-    if not audit.get("required"):
-        return f"skip:{audit.get('reason', 'n/a')}"
-    expected = len(audit.get("expected_stack_skills", []))
-    read = expected - len(audit.get("missing_stack_skills", []))
-    if audit.get("satisfied"):
-        return f"PASS:{read}/{expected}"
-    state = "SKIP-Rgt1" if round_kind == "Rgt1" else "FAIL"
-    return f"{state}:{read}/{expected}"
-
-
 def _append_progress_row(progress_tsv: Path, agent_type: str, feature: str,
                          round_num: int, stats: dict, project_dir: str,
                          raw_agent_type: str) -> None:
     progress_tsv.parent.mkdir(parents=True, exist_ok=True)
     header = (
         "ts\tfeature\tround\tagent\tagent_variant\ttools\tfiles_w"
-        "\terrors\tverdict\tstack_audit\tcommit\tnote\n"
+        "\terrors\tverdict\tcommit\tnote\n"
     )
     if not progress_tsv.exists():
         progress_tsv.write_text(header)
@@ -431,15 +277,11 @@ def _append_progress_row(progress_tsv: Path, agent_type: str, feature: str,
     verdict, note = ("", "")
     if agent_type == "evaluator":
         verdict, note = _read_evaluator_verdict(project_dir, feature, round_num)
-    audit_cell = _format_stack_audit_cell(
-        stats.get("stack_audit") or {},
-        _infer_round_kind(stats),
-    )
     variant = raw_agent_type if raw_agent_type != agent_type else ""
     row = (
         f"{ts}\t{feature}\t{round_num}\t{agent_type}\t{variant}"
         f"\t{stats['total_steps']}\t{len(stats['files_written'])}"
-        f"\t{stats['error_count']}\t{verdict}\t{audit_cell}\t{commit}\t{note}\n"
+        f"\t{stats['error_count']}\t{verdict}\t{commit}\t{note}\n"
     )
     with progress_tsv.open("a") as f:
         f.write(row)
@@ -647,7 +489,6 @@ def main() -> int:
     prefix = _PREFIX[agent_type]
     trace = _parse_transcript(transcript)
     stats = _compute_stats(trace["steps"])
-    stats["stack_audit"] = _audit_stack_discovery(stats, project_dir)
     stats["raw_agent_type"] = raw_agent_type
 
     if feature:

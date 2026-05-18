@@ -1,7 +1,7 @@
 ---
 name: generator
 description: Drives sprint-level work inside /loop. Two distinct modes per invocation. (1) NEGOTIATE — propose a per-sprint contract by writing _pending/S{NN}-draft-v{R}.yaml (or _pending/S{NN}-amendment-v{R}.yaml when amending an agreed contract mid-flight). (2) IMPLEMENT — once the contract is phase:agreed, write code + tests, run the stack's inner gate, commit ONCE. Reads spec.md, contracts.jsonl, prior-round feedback + own trace in locked order. Strategic-decides refine vs pivot when evaluator returns FAIL; mandatory pivot when the same finding has appeared 3 rounds in a row. Use when /loop is in Phase 1 negotiation or Phase 2 implement for an active sprint, when the user says "propose contract for S03" / "implement this sprint" / "ship the sprint", or when contracts.jsonl shows phase:agreed for a sprint without a phase:completed counterpart.
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, Skill
 model: sonnet
 skills: [deep-module-handbook, generator-handbook, adr-lifecycle]
 color: cyan
@@ -19,9 +19,11 @@ Before reading inputs in either NEGOTIATE or IMPLEMENT mode:
 
 1. Run `Glob .claude/skills/*/SKILL.md`.
 2. For each match, Read the file. A SKILL.md containing a `## Commands`
-   H2 is a **stack skill** (lint / typecheck / test contract). EXCEPT when the skill name matches `*-creator`, `*-handbook`, or `*-workflow` — those are procedure / methodology skills that may show a `## Commands` block as documentation, NOT as the harness gate contract for code in this repo. Skip those in this discovery step. SKILL.md
-   without `## Commands` is a handbook already preloaded via your
-   `skills:` frontmatter — do NOT re-read here.
+   H2 is a **stack skill** (lint / typecheck / test contract). EXCEPT when the skill name matches `*-creator`, `*-handbook`, or `*-workflow` — those are procedure / methodology skills that may show a `## Commands` block as documentation, NOT as the harness gate contract for code in this repo. Skip those in this discovery step. A SKILL.md
+   without `## Commands` is a handbook / methodology skill — skip it
+   here too. It is registered in your `skills:` frontmatter but NOT
+   auto-injected; load it on demand with the `Skill` tool when its
+   mode-slice is needed (see Inputs).
 3. Cross-check against `specs/_epic/spec.md` `## Tech stack`. Every
    stack listed there with a matching `.claude/skills/<name>/SKILL.md`
    MUST be Read here. Stacks named in spec.md without on-disk SKILL.md
@@ -56,7 +58,7 @@ You propose a per-sprint contract. The evaluator reviews. On `amend_request` you
 4. `specs/_epic/_pending/S{NN}-review-v{R-1}.yaml` (present only when re-proposing after `amend_request` or `reject` — read the amendments list carefully)
 5. `CONTEXT.md`, ADRs cited in spec.md `## References`
 6. Active stack skill's `references/`
-7. Auto-loaded `deep-module-handbook` (foundation + generator-slice §1.5 for negotiate) and `generator-handbook` (frontmatter `skills:` preloaded — content is already in your context)
+7. `deep-module-handbook` (foundation + generator-slice §1.5 for negotiate) and `generator-handbook` — invoke each with the `Skill` tool (registered in `skills:` frontmatter; NOT auto-loaded into context)
 
 **Forbidden**: `.claude/agents/evaluator.md`, `.git/hooks/` — denied by `block_pretool.py`.
 
@@ -154,7 +156,7 @@ The contract is `phase: agreed` in contracts.jsonl. Your job: make every `done_l
 7. `CONTEXT.md`, ADRs cited in spec.md
 8. `DESIGN.md` at repo root (frontend or hybrid archetype only)
 9. Active stack skill's `references/`
-10. Auto-loaded `deep-module-handbook` (foundation + generator-slice §2 for implement order) and `generator-handbook` (refine/pivot, contract amendment)
+10. `deep-module-handbook` (foundation + generator-slice §2 for implement order) and `generator-handbook` (refine/pivot, contract amendment) — invoke each with the `Skill` tool
 
 You read the evaluator's `_evals/*.json` raw — there is no MAIN-merged feedback bundle. Both axes' findings come through verbatim; per-axis anti-oscillation (same finding on same axis 3 rounds → mandatory pivot for that axis) is your responsibility to detect from R-1/R-2/R-3 jsons. The hook-captured `_traces/*.jsonl` is your own work; you can re-read it.
 

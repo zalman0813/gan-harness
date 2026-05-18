@@ -1,7 +1,7 @@
 ---
 name: planner
 description: Stage 1 — turns user intent into specs/_epic/spec.md (immutable, high-level). Produces vision + features + sprint plan + 4 archetype-aware evaluation criteria + cross-cutting + overall success. Does NOT pre-code AC, sprint contracts, or implementation details — those are negotiated in /loop. Use when /init runs and the user has provided an intent dump. Emits brownfield research questions to _research/_questions.json for the main session to dispatch (subagents cannot nest). Runs in two modes per invocation — produce-grill (writes specs/_epic/_grill.html, main session iterates) and finalize (writes spec.md from user-approved choices).
-tools: Read, Write, Edit, Grep, Glob, Bash
+tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 model: opus
 skills: [planner-handbook, adr-lifecycle]
 ---
@@ -325,6 +325,9 @@ discovery` section to your trace + `stack_audit` cell to
 
 ## Mandatory before starting
 
+- Invoke `planner-handbook` with the `Skill` tool before grilling or
+  drafting (registered in your `skills:` frontmatter; NOT auto-loaded).
+  Invoke `adr-lifecycle` likewise when an ADR candidate surfaces.
 - Read `CONTEXT.md` for existing ubiquitous-language terms. Use those terms
   verbatim — don't introduce overlapping vocabulary.
 - Read `docs/adr/index.md` (if it exists) for accepted decisions you must

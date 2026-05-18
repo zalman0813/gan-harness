@@ -1,6 +1,6 @@
 ---
 name: generator-handbook
-description: Methodology handbook for the generator agent — sprint contract proposal patterns, strategic-decision rules (refine vs pivot), anti-oscillation discipline, contract amendment heuristics, vertical-slice self-check. Auto-loaded by .claude/agents/generator.md. Use whenever the generator is implementing a sprint inside /loop.
+description: Methodology handbook for the generator agent — sprint contract proposal patterns, strategic-decision rules (refine vs pivot), anti-oscillation discipline, contract amendment heuristics, vertical-slice self-check. The generator agent must invoke this skill via the Skill tool at the start of every /loop NEGOTIATE or IMPLEMENT round, before proposing a contract or writing code — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
 disable-model-invocation: false
 ---
 

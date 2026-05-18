@@ -1,6 +1,6 @@
 ---
 name: evaluator-handbook
-description: Methodology handbook for the evaluator agent — contract review heuristics, behavioral verification patterns, criterion rollup mechanics, threshold check, finding format, transcript-as-evidence reading. Auto-loaded by .claude/agents/evaluator.md. Use whenever evaluator is reviewing a contract draft or running QA on a generator commit.
+description: Methodology handbook for the evaluator agent — contract review heuristics, behavioral verification patterns, criterion rollup mechanics, threshold check, finding format, transcript-as-evidence reading. The evaluator agent must invoke this skill via the Skill tool at the start of every REVIEW_CONTRACT or VERIFY round, before reading the draft or the diff — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
 disable-model-invocation: false
 ---
 

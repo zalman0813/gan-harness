@@ -53,9 +53,12 @@ If `specs/_epic/spec.md` is missing, ABORT. /init must run first.
 - Hooks:
   - `block_pretool.py` PreToolUse — enforces spec.md immutability,
     contracts.jsonl append-only, agent-private path blindfolds.
-  - `log_subagent_stop.py` SubagentStop — captures `transcript_path` per
-    subagent stop, writes `_traces/S{NN}-{gen|eval}-R{N}.jsonl` with line
-    range markers, appends row to `progress.tsv`.
+  - `log_subagent_stop.py` SubagentStop — parses the subagent
+    `transcript_path`, writes the per-round trace and appends a row to
+    `progress.tsv`. It keys both to S{NN}/R{N} **only** when the driver
+    has written `_traces/current-context.json` (via `epic_status.py
+    --set-context`) before the spawn; otherwise they land as
+    `PENDING`/Round 0 and cannot be analysed per sprint/round.
 
 ## Process
 
@@ -79,6 +82,9 @@ not replace them.
 
 For round R = 1, 2, 3, ... (no cap):
 
+0. **Set trace context** (first action this round, before any spawn): run
+   `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {R}`.
+   Skipping ⇒ this round's trace + progress row land as PENDING/Round 0.
 1. **Spawn generator** with prompt: "Propose contract for sprint S.
    Read spec.md and recent contracts.jsonl. Use propose_contract tool to
    write `_pending/S{NN}-draft-v{R}.yaml`."
@@ -102,6 +108,9 @@ For round R = 1, 2, 3, ... (no cap):
 
 For implementation round IR = 1, 2, 3, ... (no cap):
 
+0. **Set trace context** (first action this round, before the spawn): run
+   `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {IR}`.
+   Skipping ⇒ this round's trace + progress row land as PENDING/Round 0.
 1. **Spawn generator** with prompt: "Implement sprint S per agreed
    contract. Read spec.md, contracts.jsonl[latest agreed for S], and (if
    IR ≥ 2) `_evals/S{NN}-R{IR-1}.json` (the evaluator's raw dual-axis
@@ -112,6 +121,9 @@ For implementation round IR = 1, 2, 3, ... (no cap):
 
 ### Phase 3 — Evaluate (per sprint S, after generator commit)
 
+0. **Set trace context** (before the spawn): run
+   `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {IR}`.
+   Skipping ⇒ the evaluator trace + progress row land as PENDING/Round 0.
 1. **Spawn evaluator** (fresh ctx) with prompt: "Verify sprint S round
    IR. Read in locked order: spec.md → contracts.jsonl[latest agreed for
    S] → `_traces/S{NN}-gen-R{IR}.jsonl[start:end]` → git diff. Run
