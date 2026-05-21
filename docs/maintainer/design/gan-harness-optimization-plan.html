@@ -1,0 +1,1736 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gan-harness 優化全案 — 2026-05-20</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3347;
+    --text: #e2e4ef;
+    --text-muted: #8b90aa;
+    --accent: #6c8fff;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --orange: #fb923c;
+    --tag-bg: #1e2235;
+    --decision-bg: #1c1a2e;
+    --decision-border: #6c8fff55;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 20px 0;
+  }
+  .main { flex: 1; padding: 32px 40px; max-width: 900px; }
+
+  /* Sidebar nav */
+  .sidebar-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0 20px 8px;
+  }
+  .nav-section { margin-bottom: 4px; }
+  .nav-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 12px 20px 4px;
+  }
+  .nav-item {
+    display: block;
+    padding: 6px 20px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 13px;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--surface2); }
+
+  /* Decision panel in sidebar */
+  .decision-panel {
+    margin: 16px 12px 0;
+    background: var(--decision-bg);
+    border: 1px solid var(--decision-border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .decision-panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .decision-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 12px;
+  }
+  .decision-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+  .decision-dot.decided { background: var(--green); }
+  .decision-dot.pending { background: var(--yellow); animation: pulse 2s infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .decision-label { color: var(--text-muted); }
+  .decision-value { color: var(--text); font-weight: 600; font-size: 11px; }
+
+  /* Header */
+  .page-header { margin-bottom: 40px; }
+  .page-title {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .page-subtitle { color: var(--text-muted); font-size: 14px; }
+  .page-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .meta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .meta-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-green { background: var(--green); }
+  .dot-yellow { background: var(--yellow); }
+  .dot-red { background: var(--red); }
+
+  /* Sections */
+  .section { margin-bottom: 48px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .section-title { font-size: 18px; font-weight: 700; }
+  .section-desc { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: #3e4460; }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-id {
+    font-family: 'SF Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .card-title { font-weight: 600; font-size: 14px; flex: 1; }
+  .card-badges { display: flex; gap: 6px; align-items: center; }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+  }
+  .badge-priority-high { background: #ff445520; color: #ff6b6b; border: 1px solid #ff445540; }
+  .badge-priority-med { background: #fb923c20; color: var(--orange); border: 1px solid #fb923c40; }
+  .badge-priority-low { background: #fbbf2420; color: var(--yellow); border: 1px solid #fbbf2440; }
+  .badge-effort-s { background: #34d39920; color: var(--green); border: 1px solid #34d39940; }
+  .badge-effort-m { background: #6c8fff20; color: var(--accent); border: 1px solid #6c8fff40; }
+  .badge-effort-l { background: #a78bfa20; color: var(--accent2); border: 1px solid #a78bfa40; }
+  .badge-phase { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+  .chevron {
+    color: var(--text-muted);
+    font-size: 10px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .card.open .chevron { transform: rotate(90deg); }
+  .card-body { display: none; padding: 0 16px 16px; }
+  .card.open .card-body { display: block; }
+
+  /* Card body content */
+  .problem-box {
+    background: #ff444515;
+    border: 1px solid #ff444530;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .problem-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--red); margin-bottom: 4px; }
+  .solution-box {
+    background: #34d39912;
+    border: 1px solid #34d39928;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .solution-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--green); margin-bottom: 4px; }
+  .impl-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .impl-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: 'SF Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    margin: 2px;
+  }
+  .tag { color: var(--text-muted); font-size: 12px; }
+  ul.detail-list { padding-left: 18px; }
+  ul.detail-list li { margin-bottom: 4px; font-size: 13px; color: var(--text); }
+  ul.detail-list li::marker { color: var(--text-muted); }
+  code {
+    font-family: 'SF Mono', monospace;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 12px;
+    color: var(--accent2);
+  }
+
+  /* Decision toggle */
+  .decision-block {
+    background: var(--decision-bg);
+    border: 1px solid var(--decision-border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 14px;
+  }
+  .decision-block-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .decision-block-title::before {
+    content: '⬡';
+    font-size: 13px;
+  }
+  .radio-group { display: flex; flex-direction: column; gap: 6px; }
+  .radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--surface);
+  }
+  .radio-option:hover { border-color: var(--accent); background: #6c8fff08; }
+  .radio-option input[type=radio] { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+  .radio-option.selected { border-color: var(--accent); background: #6c8fff12; }
+  .radio-option label { cursor: pointer; }
+  .radio-option label strong { display: block; font-size: 13px; color: var(--text); }
+  .radio-option label span { font-size: 12px; color: var(--text-muted); }
+  .radio-rec {
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--accent);
+    color: white;
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Divider */
+  hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  /* Phase roadmap */
+  .roadmap { display: flex; gap: 0; margin-bottom: 32px; overflow-x: auto; padding-bottom: 4px; }
+  .phase-block {
+    flex: 1;
+    min-width: 160px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .phase-block:first-child { border-radius: 8px 0 0 8px; }
+  .phase-block:last-child { border-radius: 0 8px 8px 0; }
+  .phase-block:not(:last-child)::after {
+    content: '›';
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 18px;
+    z-index: 1;
+  }
+  .phase-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .phase-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  .phase-items { font-size: 11px; color: var(--text-muted); }
+  .phase-block.ph1 { border-top: 2px solid var(--green); }
+  .phase-block.ph2 { border-top: 2px solid var(--accent); }
+  .phase-block.ph3 { border-top: 2px solid var(--accent2); }
+  .phase-block.ph4 { border-top: 2px solid var(--orange); }
+
+  /* Summary table */
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .summary-table tr:last-child td { border-bottom: none; }
+  .summary-table tr:hover td { background: var(--surface); }
+
+  /* Status in table */
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .sc-decide { background: #fbbf2420; color: var(--yellow); border: 1px solid #fbbf2440; }
+  .sc-done { background: #34d39920; color: var(--green); border: 1px solid #34d39940; }
+  .sc-ship { background: #6c8fff20; color: var(--accent); border: 1px solid #6c8fff40; }
+
+  /* Scroll highlight */
+  :target { scroll-margin-top: 24px; }
+  .highlight-border { border-color: var(--accent) !important; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .layout { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: relative; }
+    .main { padding: 20px; }
+  }
+
+  /* Tooltip */
+  .tooltip-wrap { position: relative; display: inline; }
+  .tooltip-wrap:hover .tooltip-box { display: block; }
+  .tooltip-box {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2a2e45;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 5px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text);
+    z-index: 10;
+    margin-bottom: 4px;
+  }
+
+  /* Print */
+  @media print {
+    .sidebar { display: none; }
+    .card-body { display: block !important; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-title">gan-harness 優化全案</div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">概覽</div>
+    <a class="nav-item active" onclick="scrollTo('overview')">🗺 路線圖</a>
+    <a class="nav-item" onclick="scrollTo('summary')">📊 一覽表</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Phase 1 — 堵漏洞</div>
+    <a class="nav-item" onclick="scrollTo('fix-A')">A · 關閉 3 個後門</a>
+    <a class="nav-item" onclick="scrollTo('fix-B')">B · Anchor 多層強制</a>
+    <a class="nav-item" onclick="scrollTo('fix-C')">C · Per-sprint grill</a>
+    <a class="nav-item" onclick="scrollTo('fix-D')">D · CC H3 白名單</a>
+    <a class="nav-item" onclick="scrollTo('fix-E')">E · References 限制</a>
+    <a class="nav-item" onclick="scrollTo('fix-F')">F · Research 追溯</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Phase 2 — Research Pipeline</div>
+    <a class="nav-item" onclick="scrollTo('opt-R1')">R1 · Planner 拆分</a>
+    <a class="nav-item" onclick="scrollTo('opt-R2')">R2 · question_lint.py</a>
+    <a class="nav-item" onclick="scrollTo('opt-R3')">R3 · 四段式 staged review</a>
+    <a class="nav-item" onclick="scrollTo('opt-R4')">R4 · Research backlinks</a>
+    <a class="nav-item" onclick="scrollTo('opt-R5')">R5 · Interpretation toggle</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Phase 3 — Anti-Scheming</div>
+    <a class="nav-item" onclick="scrollTo('opt-S1')">S1 · Trace-grounded retry</a>
+    <a class="nav-item" onclick="scrollTo('opt-S2')">S2 · 行為一致性比對</a>
+    <a class="nav-item" onclick="scrollTo('opt-S3')">S3 · Escalation gate</a>
+    <a class="nav-item" onclick="scrollTo('opt-S4')">S4 · Retry 收縮約束</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Phase 4 — Notification</div>
+    <a class="nav-item" onclick="scrollTo('hook-design')">Hook 設計</a>
+    <a class="nav-item" onclick="scrollTo('msg-backend')">Message backend</a>
+  </div>
+
+  <!-- Decision status panel -->
+  <div class="decision-panel">
+    <div class="decision-panel-title">決策狀態</div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D1"></div>
+      <div>
+        <div class="decision-label">D1 · Anchor 嚴格度</div>
+        <div class="decision-value" id="val-D1">待決定</div>
+      </div>
+    </div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D2"></div>
+      <div>
+        <div class="decision-label">D2 · Backfill 範圍</div>
+        <div class="decision-value" id="val-D2">待決定</div>
+      </div>
+    </div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D3"></div>
+      <div>
+        <div class="decision-label">D3 · Pilot vs All-in</div>
+        <div class="decision-value" id="val-D3">待決定</div>
+      </div>
+    </div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D4"></div>
+      <div>
+        <div class="decision-label">D4 · Subagent 數量</div>
+        <div class="decision-value" id="val-D4">待決定</div>
+      </div>
+    </div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D5"></div>
+      <div>
+        <div class="decision-label">D5 · Hook 類型</div>
+        <div class="decision-value" id="val-D5">待決定</div>
+      </div>
+    </div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D6"></div>
+      <div>
+        <div class="decision-label">D6 · Notify backend</div>
+        <div class="decision-value" id="val-D6">待決定</div>
+      </div>
+    </div>
+    <div class="decision-item">
+      <div class="decision-dot pending" id="dot-D7"></div>
+      <div>
+        <div class="decision-label">D7 · Escalation 門檻</div>
+        <div class="decision-value" id="val-D7">待決定</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- Header -->
+  <div class="page-header" id="overview">
+    <div class="page-title">gan-harness 優化全案</div>
+    <div class="page-subtitle">整合 Spec 合規修補、CRISPY Research Pipeline、Anti-Scheming、Escalation Notification</div>
+    <div class="page-meta">
+      <span class="meta-badge"><span class="dot dot-green"></span>15 個優化項目</span>
+      <span class="meta-badge"><span class="dot dot-yellow"></span>7 個待決策</span>
+      <span class="meta-badge"><span class="dot dot-red"></span>S08 in-flight 需注意</span>
+      <span class="meta-badge">2026-05-20</span>
+    </div>
+  </div>
+
+  <!-- Roadmap -->
+  <div class="roadmap">
+    <div class="phase-block ph1">
+      <div class="phase-label">Phase 1</div>
+      <div class="phase-title">堵漏洞</div>
+      <div class="phase-items">A B C D E F<br>低風險 · 先出</div>
+    </div>
+    <div class="phase-block ph2">
+      <div class="phase-label">Phase 2</div>
+      <div class="phase-title">Research Pipeline</div>
+      <div class="phase-items">R1 R2 R3 R4 R5<br>CRISPY 架構</div>
+    </div>
+    <div class="phase-block ph3">
+      <div class="phase-label">Phase 3</div>
+      <div class="phase-title">Anti-Scheming</div>
+      <div class="phase-items">S1 S2 S3 S4<br>Loop 行為強化</div>
+    </div>
+    <div class="phase-block ph4">
+      <div class="phase-label">Phase 4</div>
+      <div class="phase-title">Notification</div>
+      <div class="phase-items">Hook + Message<br>串接 pipeline</div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  PHASE 1: Spec Compliance Fixes                              -->
+  <!-- ============================================================ -->
+  <div class="section" id="phase1">
+    <div class="section-header">
+      <div class="section-icon" style="background:#34d39920">🔒</div>
+      <div>
+        <div class="section-title">Phase 1 — Spec 合規修補（堵漏洞）</div>
+        <div class="section-desc">最小改動、最高槓桿。刪除後門 + 加 lint 規則，不改流程架構。</div>
+      </div>
+    </div>
+
+    <!-- A -->
+    <div class="card" id="fix-A">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">A</span>
+        <span class="card-title">關閉 Generator / Evaluator 的 3 個 Spec 修改後門</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">P0</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 1</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          Generator 有 3 條路可以繞過 spec.md 不可變原則，悄悄修改 spec 邊界：<br>
+          (1) <code>_pending/*-amendment-v*.yaml</code> 帶 <code>reason: spec gap exposed</code><br>
+          (2) <code>generator.md:198–249</code> 允許 generator 自行起草 ADR<br>
+          (3) evaluator <code>standards_axis.findings[].source: missing_adr</code> 觸發 generator 寫 ADR<br>
+          這些路徑讓 generator 在 loop 中悄悄擴展實作範圍，脫離 spec.md 錨定。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          結構性刪除，不靠自律：<br>
+          • 刪除 amendment YAML 的 <code>spec gap exposed</code> reason（generator 不得以此 reason 提案）<br>
+          • 刪除 <code>generator.md:198–249</code> ADR 自寫邏輯<br>
+          • 從 evaluator 的 <code>allowed sources</code> 移除 <code>missing_adr</code><br>
+          ADR 只能由 planner（/init 時）或 operator 授權的人工 ADR 起草。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/agents/generator.md:159</span>
+          <span class="file-chip">.claude/agents/generator.md:198-249</span>
+          <span class="file-chip">.claude/agents/evaluator.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="card" id="fix-B">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">B</span>
+        <span class="card-title">VP Anchor 多層強制（4 層 enforcement）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">P0</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 1</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          Verification Plan（VP）的每條斷言可以引用不存在於 spec.md 的 design doc 內容。<br>
+          例：S08-draft-v2.yaml 裡出現 H-H3、K-H2 等 <code>CONFORMANCE.md</code> 代碼，data-testid 合約，ETag bump，這些都沒有 spec.md user story 的錨定。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法 — 4 層防禦</div>
+          <ul class="detail-list">
+            <li><strong>L1 lint（spec_lint.py）</strong> — 每條 VP 步驟必須有 <code>anchor:</code> 欄位，缺席 → lint 失敗</li>
+            <li><strong>L2 evaluator REVIEW_CONTRACT</strong> — 驗證 <code>anchor:</code> 的文字是否真的出現在 spec.md</li>
+            <li><strong>L3 forbidden-token list</strong> — VP 不得出現 design doc 特定 pattern（如 CONFORMANCE 代碼格式 X-Y#）</li>
+            <li><strong>L4 evaluator VERIFY</strong> — 執行時比對 anchor 覆蓋率，低於門檻 → FAIL</li>
+          </ul>
+        </div>
+
+        <!-- Decision D1 -->
+        <div class="decision-block" id="D1">
+          <div class="decision-block-title">決策 D1 — Anchor 覆蓋率門檻</div>
+          <div class="radio-group" id="rg-D1">
+            <label class="radio-option" onclick="decide('D1', '60%', this)">
+              <input type="radio" name="D1" value="60">
+              <label>
+                <strong>60% verbatim token 覆蓋</strong>
+                <span>寬鬆。允許 VP 用自己的語言描述，只要 6 成用語出自 spec.md。適合 spec.md 用語較模糊的 epic。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D1', '80%（推薦）', this)">
+              <input type="radio" name="D1" value="80">
+              <label>
+                <strong>80% verbatim token 覆蓋 <span class="radio-rec">推薦</span></strong>
+                <span>平衡點。VP 核心斷言必須引用 spec.md 原文，允許少量技術實作措辭。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D1', '100%', this)">
+              <input type="radio" name="D1" value="100">
+              <label>
+                <strong>100% verbatim quote（最嚴）</strong>
+                <span>每條 VP 斷言必須是 spec.md 句子的直接引用。最能防超譯，但 spec.md 寫法必須夠精確，否則會卡住正常工作。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+        <div class="impl-box" style="margin-top:12px">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/scripts/spec_lint.py</span>
+          <span class="file-chip">.claude/agents/evaluator.md</span>
+          <span class="file-chip">.claude/schemas/contract.schema.json</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="card" id="fix-C">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">C</span>
+        <span class="card-title">Per-sprint 使用者故事 Grill（→ Stage 1.4）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-med">P1</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          現有 <code>_grill.html</code> 只有全局決策的 9 個 toggle group，沒有 per-sprint section。<br>
+          使用者在看到 spec.md 前，無法確認每個 sprint 的 user story 和成功標準是否正確。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          不是膨脹現有 <code>_grill.html</code>，而是把 per-sprint grill 放在 Phase 2（R3）的 <strong>Stage 1.4 structure outline</strong> 裡。<br>
+          每個 sprint 有獨立 toggle section：<br>
+          • User story（Cohn pattern）確認<br>
+          • Smoke check（一行可觀察動詞）確認<br>
+          • Depends-on 正確性確認<br>
+          通過 ✓ 才鎖定，否則 structure-author 必須修改後再提。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案（Phase 2 實施）</div>
+          <span class="file-chip">.claude/skills/init-workflow/SKILL.md</span>
+          <span class="file-chip">.claude/agents/planner.md （或新 structure-author）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div class="card" id="fix-D">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">D</span>
+        <span class="card-title">## Cross-cutting constraints H3 白名單 + spec_lint L09</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">P0</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 1</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          planner 在 spec.md 的 <code>## Cross-cutting constraints</code> 底下自由插入 H3 小節（如 <code>CONFORMANCE-K divergence</code>、<code>Session-history phasing</code>），這些是 planner 自己決定的 carve-out，使用者從未核准過。<br>
+          目前 spec_lint.py 沒有規則約束此區塊的內容。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          <code>## Cross-cutting constraints</code> 底下只允許以下 5 種 H3：<br>
+          <code>Non-goals</code> / <code>Performance budget</code> / <code>Design language</code> / <code>Compliance</code> / <code>Domain terms</code><br><br>
+          任何其他 H3（包含 CONFORMANCE 相關、phasing 相關）→ lint L09 失敗 → spec-finalizer 必須移除或改寫。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/scripts/spec_lint.py (新增 L09)</span>
+          <span class="file-chip">.claude/agents/planner.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- E -->
+    <div class="card" id="fix-E">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">E</span>
+        <span class="card-title">References 限制 + 外部路徑 lint L10</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-med">P1</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 1</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          spec.md 可以在正文任何地方引用外部文件路徑（如 <code>design/CONFORMANCE.md</code>）。<br>
+          這讓 generator 看見 spec.md 就「合理推論」設計文件的細節是隱性需求，導致 VP 超譯。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          <strong>L10 lint 規則</strong>：spec.md 正文中出現的任何外部文件路徑，必須也列在 <code>## References</code> section。<br>
+          <code>## References</code> 裡的 entry 是使用者明確核准的參考，不在此的路徑 = 不應出現在 spec 正文。<br>
+          planner 不得自動把 intent dump 之外的文件加進 References。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/scripts/spec_lint.py (新增 L10)</span>
+          <span class="file-chip">.claude/agents/planner.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- F -->
+    <div class="card" id="fix-F">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">F</span>
+        <span class="card-title">Research → Grill 追溯性（Backlink）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-med">P1</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          <code>_research/*.md</code> 有 4 個 fact-finder 結果，但只有 2 個被引用在 spec.md <code>## References</code>。<br>
+          planner 閱讀 research 後做了設計決策，但沒有在 grill / spec 裡標記「這個決策來自哪個 research」。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法（對應 Opt-R4）</div>
+          design-author 和 spec-finalizer 在每個借自 research 的斷言後加 <code>[source: research/&lt;id&gt;]</code> token。<br>
+          新 lint 規則 L11：spec.md 中凡是有此 token，<code>_research/&lt;id&gt;.md</code> 必須真實存在。<br>
+          grill Stage 1.3 裡，每個 research finding 旁顯示 planner 的詮釋（→ Opt-R5 Confirm toggle）。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/scripts/spec_lint.py (新增 L11)</span>
+          <span class="file-chip">.claude/agents/planner.md (或 design-author)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  PHASE 2: Research Pipeline                                   -->
+  <!-- ============================================================ -->
+  <div class="section" id="phase2">
+    <div class="section-header">
+      <div class="section-icon" style="background:#6c8fff20">🔬</div>
+      <div>
+        <div class="section-title">Phase 2 — Research Pipeline 優化（CRISPY 架構）</div>
+        <div class="section-desc">解決 planner 同時持有「目標」和「問題空間」導致研究結果帶偏見的根本問題。</div>
+      </div>
+    </div>
+
+    <!-- R1 -->
+    <div class="card" id="opt-R1">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">R1</span>
+        <span class="card-title">Planner 拆分成 3 個 Subagent</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">核心</span>
+          <span class="badge badge-effort-l">大</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          現有 <code>planner.md</code> 有 85+ 條規則（超過 Dexter 的 150–200 token 指令預算），<br>
+          且 planner 在生成問題時同時持有自己的 spec 草稿 → 問題帶有解法偏見（Gap A + Gap C）。<br>
+          結果：research finding 確認的是 planner 的假設，而非真實未知數。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          拆成三個各 ~40 條指令的 subagent：<br>
+          <ul class="detail-list">
+            <li><strong>question-author</strong> — 輸入：intent dump only（無草稿 spec）。輸出：<code>_questions.json</code>。無解法偏見。</li>
+            <li><strong>design-author</strong> — 輸入：intent + <code>_research/*.md</code>。輸出：<code>_design.md</code>（200 行）。</li>
+            <li><strong>spec-finalizer</strong> — 輸入：使用者核准的 design + structure outline。輸出：<code>spec.md</code>。強制 lint。</li>
+          </ul>
+        </div>
+
+        <!-- Decision D4 -->
+        <div class="decision-block" id="D4">
+          <div class="decision-block-title">決策 D4 — Subagent 數量策略</div>
+          <div class="radio-group" id="rg-D4">
+            <label class="radio-option" onclick="decide('D4', '拆成 3 個', this)">
+              <input type="radio" name="D4" value="split3">
+              <label>
+                <strong>拆成 3 個 subagent（Opt-R1 完整實施）</strong>
+                <span>最徹底解決 Gap A（問題生成污染）。需要新建 question-author.md、design-author.md，修改 init-workflow。工作量大，效果最好。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D4', '保留單一 planner + 嚴格模式', this)">
+              <input type="radio" name="D4" value="strict1">
+              <label>
+                <strong>保留單一 planner.md + 嚴格模式邊界 <span class="radio-rec">推薦先做</span></strong>
+                <span>在 planner.md 內加入「Phase 1A（問題生成）禁止讀取已生成 spec 草稿」的 gate。減少工作量，可先驗證改善效果再決定是否全拆。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D4', '先 Pilot 再決定', this)">
+              <input type="radio" name="D4" value="pilot">
+              <label>
+                <strong>先 Pilot 觀察再決定</strong>
+                <span>在新 epic 上先測試嚴格模式邊界版本，若問題依然明顯再全拆。保留最大彈性。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+        <div class="impl-box" style="margin-top:12px">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/agents/planner.md</span>
+          <span class="file-chip">.claude/agents/question-author.md（新）</span>
+          <span class="file-chip">.claude/agents/design-author.md（新）</span>
+          <span class="file-chip">.claude/agents/spec-finalizer.md（新）</span>
+          <span class="file-chip">.claude/skills/init-workflow/SKILL.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- R2 -->
+    <div class="card" id="opt-R2">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">R2</span>
+        <span class="card-title">question_lint.py — 問題品質確定性 Gate</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">P0</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          目前 <code>_questions.json</code> 由 planner 自由生成，沒有格式或品質 gate。<br>
+          帶有目標語言（we want / should we / is it correct to）的問題 → 讓 fact-finder 回答意見而非事實。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法 — 4 條 lint 規則</div>
+          <ul class="detail-list">
+            <li><strong>Q01 no-goal-language</strong>：拒絕 <code>we want</code>/<code>we need</code>/<code>we plan</code>/<code>should we</code>/<code>is it correct to</code></li>
+            <li><strong>Q02 no-design-asking</strong>：拒絕 <code>recommend</code>/<code>suggest</code>/<code>propose</code>/<code>design</code>/<code>should…use</code></li>
+            <li><strong>Q03 fact-form-required</strong>：必須以 What / Which / How many / Where / Does / Is 開頭</li>
+            <li><strong>Q04 no-solution-leak</strong>：不得出現從 intent dump 提取的使用者功能關鍵字</li>
+          </ul>
+          MAIN session 在 lint 違規時拒絕 fact-finder dispatch → question-author 必須重寫。純 control-flow，無 prompt 信任。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/scripts/question_lint.py（新建）</span>
+          <span class="file-chip">.claude/skills/init-workflow/SKILL.md（Phase 1.5 加 gate）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- R3 -->
+    <div class="card" id="opt-R3">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">R3</span>
+        <span class="card-title">四段式 Staged Review（統一架構）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">核心架構</span>
+          <span class="badge badge-effort-l">大</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          現有 <code>_grill.html</code> 是一個 817 行的單一 artifact，使用者要讀完整份才能核准。<br>
+          這是 Dexter 的「不要讓使用者讀 1000 行計劃」反模式。且沒有 per-sprint section（concern #1）。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法 — 5 個階段，資訊量遞增</div>
+          <pre style="font-family:monospace;font-size:12px;color:var(--text-muted);background:var(--bg);padding:10px;border-radius:6px;overflow-x:auto">
+Stage 1.1  question-author   →  _questions.json          ← 可選：使用者 review 問題
+Stage 1.2  fact-finder × N   →  _research/&lt;id&gt;.md        ← 盲目抽樣（保留現有）
+Stage 1.3  design-author     →  _design.md ~200行        ← 主要對齊點（使用者）
+Stage 1.4  structure-author  →  _structure.md ~2頁       ← 每個 sprint user story grill
+Stage 1.5  spec-finalizer    →  spec.md                  ← 使用者 spot-check only
+          </pre>
+          每個 stage 有獨立 toggle artifact 或 markdown-with-toggles，逐步確認而非全或無。
+        </div>
+
+        <!-- Decision D3 -->
+        <div class="decision-block" id="D3">
+          <div class="decision-block-title">決策 D3 — Pilot vs All-in</div>
+          <div class="radio-group" id="rg-D3">
+            <label class="radio-option" onclick="decide('D3', 'Pilot 先測新 epic', this)">
+              <input type="radio" name="D3" value="pilot">
+              <label>
+                <strong>Pilot — 新 epic 上先試</strong>
+                <span>在下一個全新 epic 上套用 R3 的 staged review，驗證效果後再決定是否回遷。現有 Apollo epic（S08 in-flight）完全不動。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D3', 'All-in 直接重構', this)">
+              <input type="radio" name="D3" value="allin">
+              <label>
+                <strong>All-in — 直接重構現有 planner.md</strong>
+                <span>現有 Apollo epic 的 S08 之後的 sprint 就開始使用新架構。需注意 S08 in-flight 的合約相容性。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+        <div class="impl-box" style="margin-top:12px">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/SKILL.md</span>
+          <span class="file-chip">.claude/agents/design-author.md（新）</span>
+          <span class="file-chip">.claude/agents/structure-author.md（新）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- R4 -->
+    <div class="card" id="opt-R4">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">R4</span>
+        <span class="card-title">Research Backlinks [source: research/&lt;id&gt;]</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-med">P1</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          4 個 fact-finder 結果（<code>_research/*.md</code>），只有 2 個被追溯到 spec.md。<br>
+          設計決策和 research 結果之間的連結是隱性的，使用者和未來 reviewer 無法驗證。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          design-author 和 spec-finalizer 必須在每個來自 research 的斷言後加：<br>
+          <code>[source: research/&lt;id&gt;]</code><br>
+          新 lint 規則 <strong>L11</strong>：token 存在 → 對應 <code>_research/&lt;id&gt;.md</code> 必須存在，否則 lint 失敗。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/scripts/spec_lint.py (L11)</span>
+          <span class="file-chip">.claude/agents/design-author.md</span>
+          <span class="file-chip">.claude/agents/spec-finalizer.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- R5 -->
+    <div class="card" id="opt-R5">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">R5</span>
+        <span class="card-title">"Confirm interpretation" Toggle per Research Finding</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-low">P2</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 2</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          即使 fact-finder 回傳了正確事實，design-author 的詮釋仍可能錯誤。<br>
+          目前使用者只能在 grill 最後看到整體 design，無法針對單個 research finding 的詮釋提出異議。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法（Dexter 的「給 agent 機會展示哪裡錯」）</div>
+          Stage 1.3 的 <code>_design.md</code> grill 中，每個 <code>_research/&lt;id&gt;.md</code> 旁邊顯示 design-author 的詮釋，附 3 路 toggle：<br>
+          <ul class="detail-list">
+            <li>✓ 詮釋正確</li>
+            <li>✗ 詮釋錯誤（自由文字更正）</li>
+            <li>? 需要更多 research（自動注入後續問題 → 重新 dispatch fact-finder）</li>
+          </ul>
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/init-workflow/SKILL.md</span>
+          <span class="file-chip">_design.md grill template（新）</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  PHASE 3: Anti-Scheming                                      -->
+  <!-- ============================================================ -->
+  <div class="section" id="phase3">
+    <div class="section-header">
+      <div class="section-icon" style="background:#a78bfa20">🛡</div>
+      <div>
+        <div class="section-title">Phase 3 — Anti-Scheming / Loop 行為強化</div>
+        <div class="section-desc">解決 generator 被觀察時乖、不被觀察時走捷徑、retry 重複同樣錯誤的問題。</div>
+      </div>
+    </div>
+
+    <!-- S1 -->
+    <div class="card" id="opt-S1">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">S1</span>
+        <span class="card-title">Trace-grounded Retry — 把 trace 片段注入 retry 上下文</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">P0</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 3</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題（Context Asymmetry）</div>
+          Generator retry 失敗的根本原因：<br>
+          Retry 的上下文 = {contract} + {spec.md 片段} + {evaluator finding 文字描述}<br>
+          <strong>缺少</strong>：實際 trace（哪一行做了什麼）、error snippet、為什麼這樣設計的背景。<br>
+          所以 retry 等同於用同樣輸入做同樣事 → 同樣錯誤。<br>
+          Main session 能快速 debug，是因為它可以讀完整 trace。Generator 拿不到。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          Evaluator finding 加入 <code>evidence_trace</code> 欄位：<br>
+          <pre style="font-family:monospace;font-size:12px;color:var(--text-muted);background:var(--bg);padding:10px;border-radius:6px">
+{
+  "finding_id": "VP-03-missing-auth-check",
+  "description": "...",
+  "evidence_trace": {
+    "file": "_traces/S08-gen-trace-R2.md",
+    "step_range": "42-55",
+    "snippet": "Edit src/auth.ts ... Error: 401 not raised"
+  }
+}
+          </pre>
+          Generator retry 時，harness-loop 必須先注入 <code>evidence_trace</code> 內容，generator 讀完再動手。<br>
+          這讓 retry 擁有和 main session 一樣的 trace 視角。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/agents/evaluator.md</span>
+          <span class="file-chip">.claude/schemas/eval.schema.json</span>
+          <span class="file-chip">.claude/skills/harness-loop/SKILL.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- S2 -->
+    <div class="card" id="opt-S2">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">S2</span>
+        <span class="card-title">行為一致性比對（宣告 vs 實際）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-low">P2</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 3</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題（Fabricated Reasoning）</div>
+          Generator 在 NEGOTIATE 階段宣告 <code>done_looks_like[]</code>，<br>
+          在 IMPLEMENT 階段實際做了不同的事（走捷徑通過 gate），<br>
+          但 evaluator 只看最終 diff，不比對宣告和實際的差異。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          Evaluator VERIFY 加入額外步驟（結構性比對，不依賴語意理解）：<br>
+          <ul class="detail-list">
+            <li>讀 <code>contract.done_looks_like[]</code>（NEGOTIATE 的宣告）</li>
+            <li>讀 <code>_traces/</code> 裡的實際 files_written + commands_run</li>
+            <li>找：宣告了但沒做 / 做了但沒宣告 → 各自列為 finding</li>
+          </ul>
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/agents/evaluator.md</span>
+          <span class="file-chip">.claude/skills/evaluator-handbook/SKILL.md</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- S3 -->
+    <div class="card" id="opt-S3">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">S3</span>
+        <span class="card-title">Escalation Gate — 同 finding 連續失敗 → HALT + 通知</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">P0</span>
+          <span class="badge badge-effort-m">中</span>
+          <span class="badge badge-phase">Phase 3</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題</div>
+          目前 harness-loop 沒有 escalation 機制（SKILL.md 第 17 行明確說「There is no escalate」）。<br>
+          同一個 finding 在 evaluator 連續回傳 N 輪，loop 仍舊繼續送 generator retry，形成浪費。<br>
+          Main session 有能力快速 debug 卻完全沒介入機會。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法</div>
+          <strong>Loop 終止行為</strong>：harness-loop SKILL 偵測到同一 <code>finding_id</code> 出現 ≥ N 輪 → 寫 <code>_pending/S{NN}-escalation.md</code> → SKILL return（loop 終止）→ main session 立刻回到互動模式，你可以直接打字 debug。<br><br>
+          Escalation file 包含：sprint 號、finding 摘要、最近 trace 路徑、失敗輪數。
+        </div>
+
+        <!-- Decision D7 -->
+        <div class="decision-block" id="D7">
+          <div class="decision-block-title">決策 D7 — Escalation 門檻（幾輪相同 finding）</div>
+          <div class="radio-group" id="rg-D7">
+            <label class="radio-option" onclick="decide('D7', '≥ 2 輪', this)">
+              <input type="radio" name="D7" value="2">
+              <label>
+                <strong>≥ 2 輪相同 finding → 立刻 escalate</strong>
+                <span>積極介入。Generator 有一次機會，第二次失敗就升交人工。適合 context 注入後效果還是不佳的情況。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D7', '≥ 3 輪（推薦）', this)">
+              <input type="radio" name="D7" value="3">
+              <label>
+                <strong>≥ 3 輪相同 finding → escalate <span class="radio-rec">推薦</span></strong>
+                <span>給 generator 兩次嘗試機會（含 trace-grounded retry），第三次才升交。與現有 mandatory pivot 規則一致。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+        <div class="impl-box" style="margin-top:12px">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/harness-loop/SKILL.md</span>
+          <span class="file-chip">escalation.md template（新）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- S4 -->
+    <div class="card" id="opt-S4">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">S4</span>
+        <span class="card-title">Retry 約束收縮（Anti-shortcut Ratchet）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-med">P1</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 3</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">問題（In-context Scheming）</div>
+          研究顯示（arxiv 2603.01608）：鼓勵 agent goal-directedness 可讓 scheming 從 3% 跳到 59%。<br>
+          Generator 在自主 loop 模式下，知道沒有人實時監看 → 優化「通過 gate」而非「做對」。<br>
+          Retry 的上下文和第一次幾乎相同 → 同樣的捷徑思維。
+        </div>
+        <div class="solution-box">
+          <div class="solution-label">解法 — 模擬「被觀察」的效果</div>
+          正常輪（Round 1）：generator 有完整自由度。<br>
+          Retry 輪（Round ≥ 2）：harness-loop 自動在 system prompt 注入額外約束：<br>
+          <pre style="font-family:monospace;font-size:12px;color:var(--text-muted);background:var(--bg);padding:10px;border-radius:6px">
+# Retry constraints (round {N})
+- You MUST quote the exact spec.md sentence that authorises each change
+  before making that change.
+- You MUST read the evidence_trace before touching any file in the finding.
+- You may NOT create new files not listed in done_looks_like[].
+          </pre>
+          這壓縮了 generator 在 retry 時的「捷徑搜索空間」。
+        </div>
+        <div class="impl-box">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/skills/harness-loop/SKILL.md</span>
+          <span class="file-chip">.claude/agents/generator.md</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  PHASE 4: Notification                                        -->
+  <!-- ============================================================ -->
+  <div class="section" id="phase4">
+    <div class="section-header">
+      <div class="section-icon" style="background:#fb923c20">🔔</div>
+      <div>
+        <div class="section-title">Phase 4 — Escalation Notification</div>
+        <div class="section-desc">Loop 暫停時通知你介入，未來可串接任何 messaging backend。</div>
+      </div>
+    </div>
+
+    <!-- Hook design -->
+    <div class="card" id="hook-design">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">H1</span>
+        <span class="card-title">Hook 設計 — Stop event vs PostToolUse[Write]</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-med">P1</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 4</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="solution-box">
+          <div class="solution-label">現有 Hook 事件</div>
+          <ul class="detail-list">
+            <li><code>PreToolUse</code> — 工具呼叫前（目前用於 block_pretool.py）</li>
+            <li><code>PostToolUse</code> — 工具呼叫後（目前用於 validate_plan.py）</li>
+            <li><code>SubagentStop</code> — 每個 subagent 結束（目前用於 log_subagent_stop.py）</li>
+            <li><code>Stop</code> — <strong>main session 本輪結束</strong>（目前未使用）← 新增在此</li>
+          </ul>
+        </div>
+
+        <!-- Decision D5 -->
+        <div class="decision-block" id="D5">
+          <div class="decision-block-title">決策 D5 — Hook 類型選擇</div>
+          <div class="radio-group" id="rg-D5">
+            <label class="radio-option" onclick="decide('D5', 'Stop hook（推薦）', this)">
+              <input type="radio" name="D5" value="stop">
+              <label>
+                <strong>Stop hook → notify_on_stop.py <span class="radio-rec">推薦</span></strong>
+                <span>Main session 本輪對話結束時觸發。偵測最近 5 分鐘內是否有新的 *-escalation.md → 有則通知，無則靜默。通知邏輯集中一處，未來換 backend 只改此腳本。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D5', 'PostToolUse[Write]', this)">
+              <input type="radio" name="D5" value="posttool">
+              <label>
+                <strong>PostToolUse[Write] 即時觸發</strong>
+                <span>Escalation 檔案落地的瞬間通知，延遲最低。但每次 Write 呼叫都執行（需快速 exit），matcher 過濾成本略高。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D5', 'Stop + PostToolUse 雙保險', this)">
+              <input type="radio" name="D5" value="both">
+              <label>
+                <strong>兩者都掛（雙保險）</strong>
+                <span>PostToolUse 即時觸發，Stop 作為 fallback。可能收到兩次通知，需在腳本內 dedup（記錄最後通知時間）。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+        <div class="impl-box" style="margin-top:12px">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/hooks/notify_on_stop.py（新建）</span>
+          <span class="file-chip">.claude/settings.json（加 Stop hook entry）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message backend -->
+    <div class="card" id="msg-backend">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">H2</span>
+        <span class="card-title">Notification Backend 擴展路徑</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-low">P2</span>
+          <span class="badge badge-effort-s">小</span>
+          <span class="badge badge-phase">Phase 4</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="solution-box">
+          <div class="solution-label">設計：環境變數切換 Backend</div>
+          <pre style="font-family:monospace;font-size:12px;color:var(--text-muted);background:var(--bg);padding:10px;border-radius:6px">
+# .env 或 settings.local.json
+NOTIFY_BACKEND=macos        # macos | webhook | slack | line | discord
+NOTIFY_WEBHOOK_URL=https://...
+NOTIFY_SLACK_TOKEN=xoxb-...
+NOTIFY_CHANNEL=#gan-loop
+          </pre>
+        </div>
+
+        <!-- Decision D6 -->
+        <div class="decision-block" id="D6">
+          <div class="decision-block-title">決策 D6 — 優先串接哪個 Messaging Backend</div>
+          <div class="radio-group" id="rg-D6">
+            <label class="radio-option" onclick="decide('D6', 'macOS 本地通知（先做）', this)">
+              <input type="radio" name="D6" value="macos">
+              <label>
+                <strong>macOS notification（先做）</strong>
+                <span>用 osascript，零依賴，馬上可用。作為其他 backend 的 fallback。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D6', 'Webhook → Slack', this)">
+              <input type="radio" name="D6" value="slack">
+              <label>
+                <strong>Webhook → Slack</strong>
+                <span>適合團隊共用 loop，通知送到指定 channel，附 sprint 號 + trace link。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D6', 'LINE Notify / LINE Bot', this)">
+              <input type="radio" name="D6" value="line">
+              <label>
+                <strong>LINE Notify / LINE Bot</strong>
+                <span>個人手機即時收到。需申請 LINE Notify token 或架設 LINE Bot。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D6', '先 macOS，未來 webhook', this)">
+              <input type="radio" name="D6" value="macos-first">
+              <label>
+                <strong>先 macOS，預留 webhook 介面 <span class="radio-rec">推薦</span></strong>
+                <span>現在馬上可用，腳本架構設計好 backend 切換介面，之後 1 行 env 就能換。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+        <div class="impl-box" style="margin-top:12px">
+          <div class="impl-label">改動檔案</div>
+          <span class="file-chip">.claude/hooks/notify_on_stop.py</span>
+          <span class="file-chip">.env.example（新建，放通知設定範本）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backfill decision -->
+    <div class="card" id="backfill">
+      <div class="card-header" onclick="toggle(this)">
+        <span class="card-id">⚠</span>
+        <span class="card-title">緊急決策 D2 — Backfill 範圍（S08 in-flight）</span>
+        <div class="card-badges">
+          <span class="badge badge-priority-high">必決</span>
+          <span class="badge badge-effort-s">影響大</span>
+        </div>
+        <span class="chevron">›</span>
+      </div>
+      <div class="card-body">
+        <div class="problem-box">
+          <div class="problem-label">背景</div>
+          S01–S07 已完成，S08 目前 in-flight（contracts.jsonl 有 agreed entry）。<br>
+          spec.md 裡有 3 段 planner 自行插入的 carve-out（你從未核准）：<br>
+          <code>## Cross-cutting constraints &gt; CONFORMANCE-K divergence</code>、<code>Session-history phasing</code>…<br>
+          若要套用 Phase 1 的 D 修補（spec_lint L09），現有 spec.md 會<strong>立刻 lint 失敗</strong>。
+        </div>
+
+        <div class="decision-block" id="D2">
+          <div class="decision-block-title">決策 D2 — Backfill 策略</div>
+          <div class="radio-group" id="rg-D2">
+            <label class="radio-option" onclick="decide('D2', 'S01-S07 保持原樣，S08 結束後才動', this)">
+              <input type="radio" name="D2" value="notouch">
+              <label>
+                <strong>S01–S07 完全不動，等 S08 完成再改</strong>
+                <span>最安全。現有 contracts 不受影響，S08 用現有規則跑完。Phase 1 的 lint 規則在 S08 完成後才啟用。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D2', '立刻刪除 3 個 carve-out + 重談 S08', this)">
+              <input type="radio" name="D2" value="rewrite">
+              <label>
+                <strong>立刻刪除 spec.md 的 3 個 carve-out + 讓 S08 在新規則下重談合約</strong>
+                <span>最乾淨，但 S08 的現有 agreed contract 會失效，需要 evaluator 重審。S08 的工作量增加。</span>
+              </label>
+            </label>
+            <label class="radio-option" onclick="decide('D2', '先刪 carve-out，S08 contract 保持 agreed 不重談', this)">
+              <input type="radio" name="D2" value="partial">
+              <label>
+                <strong>刪 spec.md carve-out，但 S08 現有 agreed contract 繼續有效（不重談）</strong>
+                <span>折衷。Spec 乾淨了，S08 現有工作不浪費，但 S08 的 VP 仍有可能引用已刪除的 carve-out 內容（需手動審查 S08 VP 一次）。</span>
+              </label>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  SUMMARY TABLE                                                -->
+  <!-- ============================================================ -->
+  <div class="section" id="summary">
+    <div class="section-header">
+      <div class="section-icon" style="background:#6c8fff20">📊</div>
+      <div>
+        <div class="section-title">優化項目一覽表</div>
+        <div class="section-desc">依 Phase + 優先度排序</div>
+      </div>
+    </div>
+
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>名稱</th>
+          <th>Phase</th>
+          <th>Priority</th>
+          <th>工作量</th>
+          <th>狀態</th>
+          <th>關鍵決策</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>A</strong></td>
+          <td>關閉 3 個 spec 修改後門</td>
+          <td>1</td>
+          <td><span class="badge badge-priority-high">P0</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>B</strong></td>
+          <td>VP Anchor 4 層強制</td>
+          <td>1</td>
+          <td><span class="badge badge-priority-high">P0</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-decide">D1 待決</span></td>
+          <td>D1 Anchor 門檻</td>
+        </tr>
+        <tr>
+          <td><strong>D</strong></td>
+          <td>CC H3 白名單 + L09</td>
+          <td>1</td>
+          <td><span class="badge badge-priority-high">P0</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-decide">D2 待決</span></td>
+          <td>D2 Backfill</td>
+        </tr>
+        <tr>
+          <td><strong>S1</strong></td>
+          <td>Trace-grounded retry</td>
+          <td>3</td>
+          <td><span class="badge badge-priority-high">P0</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>S3</strong></td>
+          <td>Escalation gate</td>
+          <td>3</td>
+          <td><span class="badge badge-priority-high">P0</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-decide">D7 待決</span></td>
+          <td>D7 門檻</td>
+        </tr>
+        <tr>
+          <td><strong>E</strong></td>
+          <td>References 限制 + L10</td>
+          <td>1</td>
+          <td><span class="badge badge-priority-med">P1</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>S4</strong></td>
+          <td>Retry 約束收縮</td>
+          <td>3</td>
+          <td><span class="badge badge-priority-med">P1</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>H1</strong></td>
+          <td>Stop hook 設計</td>
+          <td>4</td>
+          <td><span class="badge badge-priority-med">P1</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-decide">D5 待決</span></td>
+          <td>D5 Hook 類型</td>
+        </tr>
+        <tr>
+          <td><strong>R2</strong></td>
+          <td>question_lint.py</td>
+          <td>2</td>
+          <td><span class="badge badge-priority-high">P0</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>R4</strong></td>
+          <td>Research backlinks</td>
+          <td>2</td>
+          <td><span class="badge badge-priority-med">P1</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>C</strong></td>
+          <td>Per-sprint grill</td>
+          <td>1→2</td>
+          <td><span class="badge badge-priority-med">P1</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-decide">D3/D4 待決</span></td>
+          <td>D3 Pilot, D4 Subagent</td>
+        </tr>
+        <tr>
+          <td><strong>F</strong></td>
+          <td>Research 追溯 Backlink</td>
+          <td>1→2</td>
+          <td><span class="badge badge-priority-med">P1</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-decide">D3 待決</span></td>
+          <td>D3 Pilot</td>
+        </tr>
+        <tr>
+          <td><strong>H2</strong></td>
+          <td>Notification backend</td>
+          <td>4</td>
+          <td><span class="badge badge-priority-low">P2</span></td>
+          <td><span class="badge badge-effort-s">小</span></td>
+          <td><span class="status-chip sc-decide">D6 待決</span></td>
+          <td>D6 Backend</td>
+        </tr>
+        <tr>
+          <td><strong>R1</strong></td>
+          <td>Planner 拆成 3 subagent</td>
+          <td>2</td>
+          <td><span class="badge badge-priority-high">核心</span></td>
+          <td><span class="badge badge-effort-l">大</span></td>
+          <td><span class="status-chip sc-decide">D4 待決</span></td>
+          <td>D4 Subagent count</td>
+        </tr>
+        <tr>
+          <td><strong>R3</strong></td>
+          <td>四段式 staged review</td>
+          <td>2</td>
+          <td><span class="badge badge-priority-high">核心架構</span></td>
+          <td><span class="badge badge-effort-l">大</span></td>
+          <td><span class="status-chip sc-decide">D3/D4 待決</span></td>
+          <td>D3+D4</td>
+        </tr>
+        <tr>
+          <td><strong>S2</strong></td>
+          <td>行為一致性比對</td>
+          <td>3</td>
+          <td><span class="badge badge-priority-low">P2</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-ship">可出</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>R5</strong></td>
+          <td>Interpretation toggle</td>
+          <td>2</td>
+          <td><span class="badge badge-priority-low">P2</span></td>
+          <td><span class="badge badge-effort-m">中</span></td>
+          <td><span class="status-chip sc-decide">D3 待決</span></td>
+          <td>D3 Pilot</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 推薦的 PR 切分 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon" style="background:#34d39920">🚀</div>
+      <div>
+        <div class="section-title">推薦 PR 切分（決策完成後）</div>
+        <div class="section-desc">依風險從低到高，讓每個 PR 都可獨立 review + rollback</div>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:12px">
+      <div class="impl-box">
+        <div class="impl-label">PR 1 — 堵漏洞（最小改動，零架構變動）</div>
+        A + D + E + S4（generator 後門刪除 + spec_lint L09/L10 + retry 收縮約束）<br>
+        <span class="tag">可在 D2 決定後立刻出</span>
+      </div>
+      <div class="impl-box">
+        <div class="impl-label">PR 2 — Loop 強化（不改 init 架構）</div>
+        B + S1 + S3 + H1（Anchor lint + trace-grounded retry + escalation gate + Stop hook）<br>
+        <span class="tag">需要 D1、D5、D7 決定</span>
+      </div>
+      <div class="impl-box">
+        <div class="impl-label">PR 3 — Research Pipeline（架構性）</div>
+        R1 + R2 + R3 + R4 + C + F（planner 拆分 / staged review / question lint / backlinks）<br>
+        <span class="tag">需要 D3、D4 決定 + PR 1 合併後才開始</span>
+      </div>
+      <div class="impl-box">
+        <div class="impl-label">PR 4 — 進階功能</div>
+        S2 + R5 + H2（行為一致性 / interpretation toggle / messaging backend）<br>
+        <span class="tag">需要 D6 決定 + PR 2/3 穩定後</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+  // Toggle card open/close
+  function toggle(header) {
+    const card = header.parentElement;
+    card.classList.toggle('open');
+  }
+
+  // Scroll to section
+  function scrollTo(id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Update active nav
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  }
+
+  // Handle decision
+  function decide(id, value, optionEl) {
+    const dot = document.getElementById('dot-' + id);
+    const val = document.getElementById('val-' + id);
+    if (dot) { dot.classList.remove('pending'); dot.classList.add('decided'); }
+    if (val) val.textContent = value;
+    // Highlight selected radio option
+    const rg = document.getElementById('rg-' + id);
+    if (rg) {
+      rg.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+      optionEl.classList.add('selected');
+    }
+    // Check if all decided
+    checkAllDecided();
+  }
+
+  function checkAllDecided() {
+    const pending = document.querySelectorAll('.decision-dot.pending').length;
+    // Could show a "all decided" banner here
+  }
+
+  // Auto-open cards with decisions on load
+  window.addEventListener('load', () => {
+    // Open the backfill card by default since it's urgent
+    const backfillCard = document.getElementById('backfill');
+    if (backfillCard) backfillCard.classList.add('open');
+  });
+
+  // Highlight nav on scroll
+  window.addEventListener('scroll', () => {
+    const sections = ['overview','summary','fix-A','fix-B','fix-C','fix-D','fix-E','fix-F',
+      'opt-R1','opt-R2','opt-R3','opt-R4','opt-R5',
+      'opt-S1','opt-S2','opt-S3','opt-S4',
+      'hook-design','msg-backend'];
+    let current = '';
+    for (const id of sections) {
+      const el = document.getElementById(id);
+      if (el && el.getBoundingClientRect().top < 120) current = id;
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 ---
 name: generator-handbook
-description: Methodology handbook for the generator agent — sprint contract proposal patterns, strategic-decision rules (refine vs pivot), anti-oscillation discipline, contract amendment heuristics, vertical-slice self-check. The generator agent must invoke this skill via the Skill tool at the start of every /loop NEGOTIATE or IMPLEMENT round, before proposing a contract or writing code — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
+description: Methodology handbook for the generator agent — sprint contract proposal patterns, obeying evaluator next_action (refine | restart_sprint | escalate_to_user), contract amendment heuristics, ADR sole-author patterns, vertical-slice self-check. The generator agent must invoke this skill via the Skill tool at the start of every /loop NEGOTIATE or IMPLEMENT round, before proposing a contract or writing code — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
 disable-model-invocation: false
 ---
 
@@ -8,8 +8,8 @@ disable-model-invocation: false
 
 The generator agent's identity and principles live in
 `.claude/agents/generator.md`. This handbook holds the **methodology**: how
-to propose contracts, when to refine vs pivot, what amendment looks like in
-practice.
+to propose contracts, how to obey evaluator's `next_action` directive,
+what amendment looks like in practice.
 
 ## Two phases per sprint: NEGOTIATE then IMPLEMENT
 
@@ -129,77 +129,86 @@ Be honest about thresholds. Hedging now means the evaluator will catch
 real bugs at QA time and you'll cycle anyway. `>=80%` for a critical flow
 is generator hedging; the evaluator will amend back to `all`.
 
-## Strategic decision after evaluator FAIL
+## Obeying evaluator's next_action
 
-Anthropic v2 line 50:
+You do NOT strategic-decide between refine and pivot. The evaluator
+emits `next_action` in `_evals/S{NN}-R{R-1}.json`; you obey it.
 
-> "I also instructed the generator to make a strategic decision after each
-> evaluation: refine the current direction if scores were trending well,
-> or pivot to an entirely different aesthetic if the approach wasn't
-> working."
+### Data source
 
-### Data source for prior-round analysis
+Read `_evals/S{NN}-R{R-1}.json`. Top-level fields you act on:
 
-Read `_evals/S{NN}-R{R-1}.json` for the previous round's full dual-axis
-verdict. Both `contract_axis.findings[]` and `standards_axis.findings[]`
-come through verbatim — no MAIN merge, no top-N cap, no axis rerank.
-That is the entire input for REFINE vs PIVOT and for counting findings.
+- `next_action` — load-bearing directive. One of `proceed` / `refine` /
+  `restart_sprint` / `escalate_to_user`.
+- `contract_axis.findings[]` and `standards_axis.findings[]` — verbatim
+  diagnostic info to consume per the directive.
 
-For 3-round anti-oscillation detection (see below), also read
-`_evals/S{NN}-R{R-2}.json` and `_evals/S{NN}-R{R-3}.json` when they
-exist. Match findings across rounds by their `gap` field (user-facing
-description), not by `evidence` path — the line may shift between
-rounds while the gap persists.
+No MAIN merge, no top-N cap, no axis rerank.
 
-### REFINE — when scores trend up
+### `next_action: refine`
 
-Symptoms:
-- Round R-1 had 4 findings, round R has 2 findings, all of round R findings
-  are subsets or refinements of R-1 findings
-- Same approach is converging
-- The current architecture/design is sound, just incomplete
+Keep the same approach. Walk each finding's `gap` field and
+`evidence` line range; fix the specific issues named. Preamble in your
+trace:
 
-Action: keep the same approach, address the specific findings.
+> "REFINE R{R}: addressing finding '<id>' from R{R-1}. Keeping approach
+> <approach-name>."
 
-### PIVOT — when scores stagnant or declining
+### `next_action: restart_sprint`
 
-Symptoms:
-- Round R-1 had 4 findings, round R has 5 (regression)
-- Same finding appearing 3 rounds in a row **on the same axis** (mandatory pivot for that axis)
-- New findings keep appearing in different parts of the system as you fix
-  one — sign of a systemic mismatch with the contract
+Discard the prior round's implementation entirely. Steps:
 
-Action: write a one-line decision preamble in your trace:
+1. Read `_traces/S{NN}-gen-R{R-1}.jsonl` to enumerate files touched.
+2. Revert those files to the sprint-start state (use `git checkout
+   <sprint-start-sha> -- <path>` for tracked files; delete newly
+   created files).
+3. Re-design with a different strategy (different module shape,
+   different adapter, different approach to the same `done_looks_like`).
+4. Re-implement from scratch.
 
-> "PIVOT (standards-axis): same finding 'todo.py applicability_honest:false
-> — DTO label but contains business rules' appeared in R1, R2, R3.
-> Abandoning DTO labelling. Treating todo.py as business-logic module
-> and re-justifying its hides_decision."
+Preamble in your trace:
 
-Then implement the new approach from scratch (within the same contract).
-A pivot may be scoped to one axis if the other axis is PASS — refining
-the contract-axis fixes while pivoting the standards-axis approach is
-legitimate.
+> "RESTART R{R}: evaluator ordered restart_sprint. Discarding prior
+> approach <name>. New approach: <new-name>. Sprint-start sha: <sha>."
 
-### Anti-oscillation: hard rule (per-axis)
+Do NOT carry over the prior round's design assumptions — that defeats
+the restart. If you find yourself reusing >50% of the prior round's
+code, you haven't actually restarted.
 
-If the same finding appears in 3 rounds in a row **on the same axis**,
-you MUST pivot for that axis. You may not refine round 4 on the same
-approach for that axis. This is the only hard rule on strategic
-decisions; everything else is judgment.
+### `next_action: escalate_to_user`
 
-The trigger is per-axis-per-finding, NOT cross-axis:
-- A finding tagged `axis: "contract"` in R1, R2, R3 → mandatory pivot
-  for contract-axis.
-- A finding tagged `axis: "standards"` in R1, R2, R3 → mandatory pivot
-  for standards-axis.
-- A finding that appears contract-axis R1, standards-axis R2,
-  contract-axis R3 → NOT a 3-round match (different axes). The trigger
-  does not fire.
+STOP. Do NOT touch code. Write `specs/_epic/_pending/S{NN}-failure-R{R-1}.md`:
 
-Findings are matched by their `gap` field (user-facing description),
-not by `evidence` path (the line may shift between rounds while the
-gap persists).
+```markdown
+# S{NN} Failure Report (R{R-1})
+
+## Approaches tried
+- R1: <approach name + one-line description>
+- R2: <approach name + one-line description>
+- R3: ...
+
+## Blocking finding (from _evals/S{NN}-R{R-1}.json)
+<copy the blocking finding verbatim — gap + evidence>
+
+## Why this can't be fixed in-loop
+<2-3 sentences explaining why refine and restart_sprint won't help —
+typically: spec gap requiring epic re-open, or fundamental
+incompatibility between spec and current architecture>
+
+## Suggested next step
+<one-line: e.g., "Operator decides whether to re-open epic and amend
+spec.md ## Cross-cutting constraints > Domain terms" or "Operator
+splits this sprint into two">
+```
+
+Return the IMPLEMENT escalate output line. Do NOT proceed.
+
+### If you disagree with `next_action`
+
+Surface in the escalate failure report (`escalate_to_user` path). Do
+not silently refine after evaluator ordered restart, or restart after
+evaluator ordered refine. The evaluator owns this decision; if you
+think it's wrong, the operator decides — not you.
 
 ## Contract amendment patterns
 
@@ -360,9 +369,11 @@ amend such that your implementation no longer fits.
 test. Inner gate may pass on literal coverage; evaluator's behavioral
 verification trips it. Don't ship stubs.
 
-**Refining indefinitely.** The "anti-oscillation" rule exists because
-generators get stuck in local minima. 3 rounds same finding **on the
-same axis** = pivot for that axis.
+**Overriding evaluator's next_action.** Evaluator owns the pivot
+decision. If you silently refine when evaluator said restart_sprint,
+or restart when evaluator said refine, you're breaking the harness
+authority chain. If you disagree, surface in the escalate failure
+report — operator decides, not you.
 
 **Submitting a contract you intend to amend.** Negotiate honestly the
 first time. Frequent amendments = the contract was wrong; rare

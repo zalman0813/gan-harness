@@ -75,12 +75,18 @@ Rules:
 
 ### `## Sprint plan`
 
-Each sprint is an `### S{NN} — <name>` H3 block with three required sub-fields:
+Each sprint is an `### S{NN} — <name>` H3 block with five required bullets in this exact order:
 
 ```markdown
 ### S01 — Project foundation + dashboard
 - Delivers: F01
 - Depends on: (none)
+- User story: As a project owner, I can create and manage projects so that I can organise my work.
+- Success (user POV):
+  - user creates a new project from the dashboard with a name and description
+  - user sees the project appear as a card immediately after creation
+  - user can reload the page and the project persists
+  - system shows an inline error if the name is empty
 - Smoke check: User can navigate to the dashboard, create a project, and see it persist after page reload.
 ```
 
@@ -88,6 +94,8 @@ Rules:
 - `S` followed by 2 digit zero-padded id, monotonically increasing
 - `Delivers:` lists ≥1 F-id; the union of all sprint Delivers MUST exactly cover all F-ids in `## Features` (lint L01)
 - `Depends on:` is `(none)` or a comma-separated list of S-ids that must complete before this sprint starts
+- `User story:` follows the Cohn pattern `As a <role>, I can <action> so that <outcome>.` (lint L09)
+- `Success (user POV):` followed by **3-5** sub-bullets, each starting with `user` or `system`, in user language only (no technical tokens — no endpoint paths starting `/`, no `data-testid`, no `ETag`, no HTTP status codes like `200`/`404`, no schema field names with `_id` suffix) (lint L09)
 - `Smoke check:` MUST start with a user-observable verb phrase: `user can`, `user sees`, `system shows`, `user receives`, `user navigates`, etc. (lint L04)
 - Smoke check MUST NOT be `code compiles`, `tests pass`, `lint clean` (those are mechanical, not user-observable) (lint L04)
 - A sprint that only delivers single-layer features (UI-only, backend-only, lib-only) MUST be tagged with one of `(pure-frontend)`, `(pure-backend)`, `(pure-lib)`, `(pure-cli)`, `(pure-data)` after the sprint name, OR provide `Reason for single-layer:` line. Otherwise the sprint must touch ≥2 layers (lint L05)
@@ -130,7 +138,15 @@ Default templates (planner picks one matching `## Archetype`):
 
 ### `## Cross-cutting constraints`
 
-Bulleted list. Optional sub-headings allowed (e.g., `### Performance budget`, `### Design language`, `### Non-goals`). Items are constraints that apply to the whole epic, not a single sprint.
+Bulleted list. H3 sub-sections are restricted to a closed whitelist (lint L10):
+
+- `### Non-goals` — explicit user-declared exclusions (no internal inferences)
+- `### Performance budget` — user-declared performance requirement
+- `### Design language` — user-declared visual / UX direction
+- `### Compliance` — user-declared regulatory or policy constraint
+- `### Domain terms` — terminology mapping (format spec below)
+
+Any other H3 (e.g., `### Session-history phasing`, `### CONFORMANCE-K divergence`, `### Implementation staging`) is a technical carve-out and is rejected by L10. Such concerns belong in /loop contract negotiation, not in spec.md.
 
 One sub-heading is reserved for /finalize consumption:
 
@@ -192,12 +208,15 @@ References are **read-only context for downstream agents**. The spec itself does
 |---|---|
 | L01 | All H2 sections present in correct order; every F-id covered by exactly one sprint Delivers |
 | L02 | Feature names contain no phase markers |
-| L03 | Every sprint has Delivers + Depends on + Smoke check |
+| L03 | Every sprint has Delivers + Depends on + User story + Success (user POV) + Smoke check, in that exact bullet order |
 | L04 | Smoke check starts with user-observable verb; not mechanical |
 | L05 | Sprint deliverables touch ≥2 layers OR are explicitly tagged pure-* |
 | L06 | Overall success criteria has ≥1 end-to-end behavioral entry |
 | L07 | Archetype is set; Evaluation criteria block has exactly 4 numbered entries |
 | L08 | If `### Domain terms` appears under `## Cross-cutting constraints`, every bullet matches `- **<term>** — <definition>` (continuation lines allowed with 2-space indent) and `<term>` is unique within the section |
+| L09 | Each sprint's `User story:` matches the Cohn pattern `As a <role>, I can <action> so that <outcome>.`; each sprint's `Success (user POV):` has 3-5 sub-bullets, each starts with `user` or `system`, and no sub-bullet contains technical tokens (endpoint paths starting `/`, `data-testid`, `ETag`, HTTP status codes like `200`/`404`, `_id`-suffixed identifiers) |
+| L10 | `## Cross-cutting constraints` H3 sub-sections are restricted to the whitelist `### Non-goals` / `### Performance budget` / `### Design language` / `### Compliance` / `### Domain terms`. Any other H3 is rejected. |
+| L11 | Every external file path referenced anywhere in spec.md (matched as `[*](path)`, `@path`, or backticked path with `/` or `.md`/`.py`/`.ts` suffix) appears under `## References`. |
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: planner-handbook
-description: Methodology handbook for the planner agent — grill protocol, archetype selection, ADR three-test gate application, fact-finder dispatch, spec.md authoring patterns. The planner agent must invoke this skill via the Skill tool at the start of /init, before grilling or producing/revising spec.md — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
+description: Methodology handbook for the planner agent — grill protocol, archetype selection, per-sprint User story + Success (user POV) bullet authoring, Cross-cutting H3 whitelist, spec.md authoring patterns. The planner agent must invoke this skill via the Skill tool at the start of /init, before grilling or producing/revising spec.md — registered in the agent skills frontmatter but NOT auto-injected, so load it first.
 disable-model-invocation: false
 ---
 
@@ -8,7 +8,7 @@ disable-model-invocation: false
 
 The planner agent's identity and principles live in `.claude/agents/planner.md`.
 This handbook holds the **methodology**: grill protocol, archetype templates,
-ADR three-test gate examples, and authoring heuristics.
+per-sprint User story + Success (user POV) authoring, and authoring heuristics.
 
 ## Grill protocol
 
@@ -44,12 +44,24 @@ goal is to extract enough context that downstream agents don't need you again.
      surface or use `hybrid`.
 
 5. **Brownfield or greenfield?**
-   - Brownfield = modifies existing codebase → fact-finder dispatch needed.
-   - Greenfield = builds new app from zero → no fact-finder.
-   - This affects the "References" section + whether you emit
-     `_research/_questions.json` for the MAIN session to dispatch
-     fact-finders (you can't dispatch them yourself — see "Fact-finder
-     dispatch" below).
+   - Brownfield = modifies existing codebase → flag in grill so MAIN
+     session sets up per-sprint research gate at /loop start.
+   - Greenfield = builds new app from zero → no research gate.
+   - You do NOT author research questions; the MAIN session drafts them
+     at /loop start based on spec.md sprint plan + intent. Your job at
+     /init is only to flag brownfield vs greenfield so /loop knows
+     whether to run the research gate.
+
+6. **Per-sprint user story + 3-5 Success (user POV) bullets**
+   - For each sprint you propose, draft a Cohn-pattern user story
+     (`As a <role>, I can <action> so that <outcome>.`) and 3-5
+     observable behaviour bullets in **user language only** — no
+     endpoint paths, schema keys, ETag, data-testid, return codes.
+   - These become the anchor source for generator's verification_plan
+     in /loop. Vague bullets → vague contract → over-interpretation.
+   - Bad: "User can reset password" (one bullet, too coarse)
+   - Good: 4 bullets covering happy path + invalid email handled +
+     expired link rejected + reset confirmation visible.
 
 ### When to stop grilling
 
@@ -97,102 +109,14 @@ Pick one matching `## Archetype`. Reword for the epic but keep exactly 4.
   + 2 cross-cutting (Robustness + Craft are nearly always universal).
 - Document the mix in `## Cross-cutting constraints` with rationale.
 
-## Fact-finder dispatch (brownfield only)
+## ADRs are not yours
 
-When the epic touches existing code, you need `codebase-fact-finder`
-research **before** locking the grill. But you cannot dispatch the
-fact-finder yourself: you are a subagent, subagents cannot spawn
-subagents (runtime nesting limit), and your tools list excludes
-`Agent`. The MAIN session does the dispatch in Phase 1.5 of
-`init-workflow`. Your job is to author the question list and signal
-how many answers are still missing.
-
-### Pattern (your side)
-
-1. Sketch 3-8 blindfold-style questions that, if answered, would let
-   you draft the spec without further investigation. Examples:
-   - "What is the current shape of the User model? Fields, types, FK?"
-   - "Is there an existing auth flow we should integrate with, or is this a
-     parallel auth path?"
-   - "Which test runners are configured in the current repo?"
-2. Before writing, glob `specs/_epic/_research/*.md` and read every
-   existing finding — MAIN session may have populated some on a prior
-   round. Drop any question whose answer is already there.
-3. Write the **still-open** question list to
-   `specs/_epic/_research/_questions.json`:
-   ```json
-   {
-     "round": <R>,
-     "questions": [
-       {
-         "id": "user-model-shape",
-         "question": "What is the current shape of the User model? List fields, types, FKs.",
-         "rationale": "Spec needs to know if we extend or replace; FKs affect token storage."
-       }
-     ]
-   }
-   ```
-   `questions: []` means MAIN session has nothing to dispatch — that is
-   your "research done" signal.
-4. In `_grill.html`, render any toggle that depends on an unanswered
-   question as `[research-pending: <question-id>]` so the user (and
-   MAIN session) can see what's blocking what.
-5. Return `research_pending=<K>` in your `GRILL READY:` line, where K
-   matches `len(questions[])` in the JSON file you just wrote.
-
-MAIN session then dispatches K `codebase-fact-finder` subagents in
-parallel; on the next round you re-read `_research/*.md` and refine
-the grill. The cycle ends when you return `research_pending=0`.
-
-### Anti-patterns
-- **Trying to call the `Agent` tool yourself.** You don't have it,
-  and even if you did, subagent→subagent nesting is forbidden.
-- **Skipping `_questions.json` because you "have a guess".** Brownfield
-  always needs research; guessing reintroduces the planner-bias the
-  blindfold pattern is designed to eliminate.
-- **Re-listing answered questions.** Read `_research/*.md` first; only
-  open questions go into `_questions.json`. Otherwise MAIN session
-  re-dispatches fact-finders that already returned, wasting tokens.
-- **Asking fact-finder to recommend design** ("how should we do auth?").
-  They document facts; design is your job.
-- **Embedding goal-language in the question** ("we want to add SSO, find
-  what we need"). Pure facts: "What auth modules currently exist?"
-
-## ADR three-test gate
-
-A design choice deserves an ADR only when ALL THREE hold:
-
-1. **Hard to reverse** — flipping the decision later requires touching ≥3
-   modules or breaks an external contract. Library choice, persistence
-   format, network protocol qualify; variable naming or function
-   organisation does not.
-2. **Surprising** — relative to defaults / consensus / user expectation. If
-   a senior engineer would default to the same choice without thinking,
-   it's not ADR-worthy.
-3. **Real trade-off** — there's a documented opposing option with concrete
-   pros. "We picked PostgreSQL because everyone uses it" fails this gate
-   (consensus); "We picked PostgreSQL over SQLite because we expect
-   multi-writer load" passes (real trade-off).
-
-### Examples
-
-ADR-worthy:
-- Choosing event sourcing over CRUD for the order domain
-- Switching from REST to gRPC for the inter-service API
-- Adopting hexagonal architecture across the new module
-
-NOT ADR-worthy:
-- Naming the module `users` vs `user_management`
-- Using FastAPI (the user already said it's the stack)
-- Adding a logger (basic ops hygiene)
-
-### Process
-- Apply gate. If yes: write `docs/adr/NNNN-<slug>.md` with
-  `status: proposed`, MADR format. Refer to `adr-lifecycle` skill for
-  schema.
-- Cite the ADR in spec.md `## References`.
-- Default count for typical epic: 0-1 proposed ADRs. ≥3 ADRs from /init is
-  a smell — the spec is becoming an architecture document.
+You do NOT author ADRs. Generator is the sole ADR author at IMPLEMENT
+time (see `.claude/agents/generator.md` > `## ADR triggers during
+implementation`). If a decision surfaces during grill that feels
+architecturally weighty, treat it as a Cross-cutting `### Domain terms`
+glossary entry (terminology) or as a Sprint plan user story
+(capability) — not as an ADR proposal.
 
 ## Spec.md authoring heuristics
 
@@ -212,25 +136,42 @@ NOT ADR-worthy:
 
 ### Sprint plan (3-12 sprints typical)
 - Each sprint delivers ≥1 feature; covers ≥1 user-observable behaviour.
-- `Smoke check:` one sentence with user-observable verb prefix.
-- `Depends on:` for sequencing only when there's a real dependency. Avoid
-  artificial sequencing — parallelisable sprints should declare `(none)`.
+- Each sprint MUST have, in this exact bullet order:
+  - `Delivers:` features list
+  - `Depends on:` (none) or S{NN}[, S{NN}...] (only when there's a real
+    dependency; parallelisable sprints declare `(none)`)
+  - `User story:` Cohn pattern — `As a <role>, I can <action> so that
+    <outcome>.`
+  - `Success (user POV):` 3-5 sub-bullets each starting with `user` or
+    `system`, in user language only — no technical tokens (endpoint
+    paths, schema keys, `data-testid`, `ETag`, status codes)
+  - `Smoke check:` one sentence with user-observable verb prefix
 - Sprint that touches a single layer needs explicit `(pure-frontend)` /
   `(pure-backend)` / `(pure-lib)` / `(pure-cli)` / `(pure-data)` tag.
+- These bullets are the **anchor source** for generator's
+  verification_plan in /loop. Vague POV bullets → vague contract →
+  over-interpretation. Granularity here directly determines /loop's
+  output quality.
 
-### Cross-cutting constraints
-- Sub-sections allowed: `### Performance budget`, `### Design language`,
-  `### Non-goals`, `### Compliance` (when applicable).
-- This is where ordinary (non-ADR) decisions live: "use UTC for all
-  timestamps", "prefer functional components", "max bundle size 500KB".
-- If the epic introduces new domain vocabulary, list it under
-  `### Domain terms` (heading exactly that — no parenthetical suffix
-  like `(draft)` or `(will merge at /finalize)`; /finalize's
-  `merge_domain_terms.py` parser matches the heading literally, and
-  spec_lint.py L08 rejects variants). Format every entry as
+### Cross-cutting constraints (H3 whitelist — lint L10)
+- Allowed H3 sub-sections (exhaustive): `### Non-goals`,
+  `### Performance budget`, `### Design language`, `### Compliance`,
+  `### Domain terms`. Any other H3 is a technical carve-out and
+  rejected by L10.
+- `### Non-goals`: explicit user-declared exclusions (no internal
+  inferences). User said "we won't do X" → goes here.
+- `### Performance budget`: user-declared performance requirement.
+- `### Design language`: user-declared visual / UX direction.
+- `### Compliance`: user-declared regulatory or policy constraint.
+- `### Domain terms`: terminology mapping. Format each entry as
   `- **<term>** — <one-line definition>` with em-dash separator
-  (continuation lines allowed with 2-space indent). Terms here become
-  permanent `CONTEXT.md` ## Language entries at /finalize.
+  (continuation lines allowed with 2-space indent). Heading must be
+  exactly `### Domain terms` (no parenthetical suffix). Terms here
+  become permanent `CONTEXT.md` ## Language entries at /finalize.
+- **Do NOT** create sections like `### Session-history phasing`,
+  `### CONFORMANCE-K divergence`, `### Implementation staging`. These
+  are technical carve-outs that belong in /loop contract negotiation,
+  not in spec.md.
 
 ### Overall success criteria (3-7 entries)
 - Behavioral, end-to-end, user-observable.

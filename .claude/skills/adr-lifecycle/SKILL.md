@@ -1,11 +1,11 @@
 ---
 name: adr-lifecycle
-description: ADR proposed→accepted lifecycle (MADR + supersedes retroactive backfill). The three-test gate, frontmatter spec, body convention, and lifecycle scripts. Loaded by planner during /init AND by generator during /loop sprint implementation — both agents may author ADRs (Position B). Evaluator reads ADRs for VERIFY context and may emit `missing_adr` standards-axis findings, but does not author.
+description: ADR proposed→accepted lifecycle (MADR + supersedes retroactive backfill). The three-test gate, frontmatter spec, body convention, and lifecycle scripts. Loaded by generator during /loop sprint implementation — generator is the sole ADR author in v3.8. Planner does NOT author ADRs (planner produces a high-level spec without architectural decisions). Evaluator reads ADRs for VERIFY context and may emit `missing_adr` standards-axis findings, but does not author. `block_pretool.py` enforces this: planner and evaluator are denied writes to `docs/adr/*`.
 ---
 
 # ADR Lifecycle
 
-**Multi-author authorship (Position B)**: gan-harness allows ADRs to be authored by either the planner (during /init, spec-level decisions) or the generator (during /loop, implementation-time decisions). Both apply the same three-test gate. The evaluator surfaces gaps via `missing_adr` standards-axis findings but does not author. /finalize promotes all `proposed` ADRs to `accepted` regardless of author.
+**Single-author authorship (generator-only)**: in v3.8, ADRs are authored only by the generator (during /loop IMPLEMENT, when an architectural decision passes the three-test gate). Planner does NOT author ADRs — planner produces a high-level spec without architectural decisions, so the spec stays immutable through /loop. Evaluator surfaces gaps via `missing_adr` standards-axis findings but does not author. `block_pretool.py` enforces this: writes to `docs/adr/*` are denied for planner / evaluator / codebase-fact-finder; only generator (and untyped MAIN-session writes for /finalize promotion) are allowed. /finalize promotes all `proposed` ADRs to `accepted`.
 
 ADRs are always created as `status: proposed`. /finalize promotes them to `accepted` and retroactively backfills `superseded_by` on any predecessors. Bodies are immutable from creation; only frontmatter `status` and `superseded_by` are ever mutated.
 
@@ -55,9 +55,7 @@ proposed_date: 2026-05-08     # ISO date when the ADR was first written
 accepted_date: null           # filled at /finalize on promotion (omit at write time)
 supersedes: []                # explicit predecessor ids (e.g., ["ADR-0030"]); empty list if none
 superseded_by: null           # filled retroactively when a future ADR supersedes this (omit at write time)
-authors:                       # who authored this ADR — multi-author allowed (Position B)
-  - planner                    # for /init-time decisions (planner agent)
-  # OR
+authors:                       # who authored this ADR — generator-only in v3.8
   - generator-S{NN}-R{IR}      # for /loop-time decisions (generator agent at specific sprint+round)
   # OR
   - maintainer                 # for human-authored ADRs (seed ADRs, retros)
@@ -89,20 +87,19 @@ The body is **immutable from creation**. To revise, write a new ADR that superse
 
 ## Lifecycle
 
-### 1. Created (planner during /init OR generator during /loop)
+### 1. Created (generator during /loop IMPLEMENT only)
 
-Two authoring entry points (Position B):
+Single authoring entry point in v3.8:
 
-- **Planner at /init**: cross-sprint / spec-level decisions surfaced
-  during grill. The ADR candidate appears in `_grill.html`'s ADR
-  toggle group; if user accepts, planner writes the file at finalize.
-  `authors: [planner]`.
-- **Generator at /loop sprint IMPLEMENT**: impl-time decisions that
-  surface when actually writing code (lazy/eager, sync/async, error
-  model, cache placement, etc.). Generator writes the ADR file in the
-  same commit as the implementation. `authors: [generator-S{NN}-R{IR}]`.
+- **Generator at /loop sprint IMPLEMENT**: every architectural decision
+  surfaces here, whether spec-level (would have been planner's call in
+  prior versions) or impl-time (lazy/eager, sync/async, error model,
+  cache placement, etc.). Generator writes the ADR file in the same
+  commit as the implementation. `authors: [generator-S{NN}-R{IR}]`.
+- `block_pretool.py` denies ADR writes from planner / evaluator /
+  codebase-fact-finder.
 
-Both authors apply the same three-test gate before writing.
+Generator applies the three-test gate before writing.
 
 - Filename: `docs/adr/NNNN-<kebab-slug>.md` (NNNN = next free integer, zero-padded to 4 — author reads `docs/adr/index.md` or `ls docs/adr/` first to find the next free id)
 - Frontmatter: `status: proposed`, `proposed_date: <today>`, `authors: [<role>]`, `epic_slug: <slug>`

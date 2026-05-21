@@ -160,7 +160,7 @@ Use this template (substitute `<stack-name>`, `<Stack Name>`, and stack-specific
 ```markdown
 ---
 name: <stack-name>
-description: <Stack Name> stack skill — <one-line what it is (language, framework, SDK, package manager)>. Invoke this skill (Skill tool) before implementing or modifying any <concrete tech / framework / language / SDK nouns the sprint task would name — NOT a directory path> work this sprint. A sprint not involving <that tech> does not need it. Carries the harness gate commands (<lint / typecheck / test cmds>), <Stack Name> idioms & anti-patterns, and the docs strategy.
+description: <Stack Name> stack skill — <one-line what it is (language, framework, SDK, package manager)>. Invoke this skill (Skill tool) before proposing a contract for, or implementing, any <concrete tech / framework / language / SDK nouns the sprint task would name — NOT a directory path> work this sprint. Reading it at contract time is required to write a sound verification_plan (its gate commands + verification kinds), not only at implement time. A sprint not involving <that tech> does not need it. Carries the harness gate commands (<lint / typecheck / test cmds>), <Stack Name> idioms & anti-patterns, and the docs strategy.
 ---
 
 # <Stack Name> Stack Skill

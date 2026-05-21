@@ -44,8 +44,8 @@ the user-facing behaviour. Unit-test-only contracts are weak signal.
 
 Read each `kind: test` step's path. If the test file uses heavy mocking
 of internal collaborators, the test asserts against the mock, not against
-behaviour. Anthropic v2's lesson: agents who write their own tests skew
-positive — mock honesty is your defense.
+behaviour. Agents who write their own tests skew positive — mock honesty
+is your defense.
 
 Heuristic: if `verification_plan` has only `kind: test` entries (no
 playwright, no api), and you have any reason to suspect mock-heavy tests,
@@ -188,7 +188,7 @@ criterion-level observations).
 Bad finding (vague):
 > tests fail
 
-Better finding (Anthropic v2 example):
+Better finding (cite specific file + line + condition):
 > **FAIL** — Delete key handler at `LevelEditor.tsx:892` requires both
 > `selection` and `selectedEntityId` to be set, but clicking an entity
 > only sets `selectedEntityId`. Condition should be `selection ||
@@ -225,39 +225,51 @@ beats "Delete handler condition wrong".
 
 `suggested_fix_hint` is a separate field name (not a `kind` value) —
 optional advisory text on how the generator might fix the finding. It
-is **never authoritative**: generator may take it, ignore it, pivot
-entirely. Use it to accelerate obvious fixes; for genuine pivots, leave
-it empty so the generator's strategic-decision has space to operate.
+is **never authoritative**: generator obeys `next_action` (refine /
+restart_sprint / escalate_to_user); `suggested_fix_hint` only
+accelerates the `refine` path. Leave it empty when you set
+`next_action: restart_sprint` — the hint there would be misleading
+since the prior approach is being discarded.
 
 ## Output JSON shape
+
+This snippet shows the contract-axis findings shape only; the full
+dual-axis envelope (`contract_axis` + `standards_axis` + top-level
+`verdict` + `next_action`) lives in `.claude/agents/evaluator.md`.
 
 ```json
 {
   "sprint": "S01",
   "round": 2,
   "contract_id": "C-S01-v1",
-  "criteria": [
-    { "name": "Design quality",  "passed": true,  "evidence": ["vp-01 PASS"] },
-    { "name": "Originality",     "passed": true,  "evidence": ["vp-01 PASS"] },
-    { "name": "Craft",           "passed": false, "evidence": ["vp-03 FAIL: missing test for delete path"] },
-    { "name": "Functionality",   "passed": false, "evidence": ["vp-01 FAIL at step 7"] }
-  ],
-  "findings": [
-    {
-      "kind": "blocking",
-      "vp_id": "vp-01",
-      "evidence": "_traces/S01-gen-R2.jsonl:L1247 — Playwright step 7 timeout",
-      "gap": "User clicks 'Delete' on a project but no confirmation modal appears; deletion silently fails",
-      "suggested_fix_hint": "Wire up the existing ConfirmModal component to the delete button"
-    },
-    {
-      "kind": "blocking",
-      "vp_id": "vp-03",
-      "evidence": "tests/test_project.py:42 — no test for delete_project",
-      "gap": "delete_project handler has no test coverage; we cannot prove the audit log entry is written",
-      "suggested_fix_hint": "Add test_delete_project_writes_audit"
-    }
-  ],
+  "next_action": "refine",
+  "contract_axis": {
+    "criteria": [
+      { "name": "Design quality",  "passed": true,  "evidence": ["vp-01 PASS"] },
+      { "name": "Originality",     "passed": true,  "evidence": ["vp-01 PASS"] },
+      { "name": "Craft",           "passed": false, "evidence": ["vp-03 FAIL: missing test for delete path"] },
+      { "name": "Functionality",   "passed": false, "evidence": ["vp-01 FAIL at step 7"] }
+    ],
+    "findings": [
+      {
+        "kind": "blocking",
+        "axis": "contract",
+        "vp_id": "vp-01",
+        "evidence": "_traces/S01-gen-R2.jsonl:L1247 — Playwright step 7 timeout",
+        "gap": "User clicks 'Delete' on a project but no confirmation modal appears; deletion silently fails",
+        "suggested_fix_hint": "Wire up the existing ConfirmModal component to the delete button"
+      },
+      {
+        "kind": "blocking",
+        "axis": "contract",
+        "vp_id": "vp-03",
+        "evidence": "tests/test_project.py:42 — no test for delete_project",
+        "gap": "delete_project handler has no test coverage; we cannot prove the audit log entry is written",
+        "suggested_fix_hint": "Add test_delete_project_writes_audit"
+      }
+    ],
+    "verdict": "FAIL"
+  },
   "verdict": "FAIL"
 }
 ```
@@ -282,9 +294,15 @@ features implemented". The transcript slice says they only ran tests on
 2 of 5 features. Trust the transcript, not the message.
 
 **Over-specifying suggested_fix_hint.** Don't write the fix for the
-generator. `suggested_fix_hint` accelerates obvious fixes, not solves
-them. The generator's strategic-decision (refine vs pivot) needs space
-to operate.
+generator. `suggested_fix_hint` accelerates obvious fixes for the
+`refine` path; it is never authoritative and is irrelevant when you
+set `next_action: restart_sprint` or `escalate_to_user`.
+
+**Defaulting to `refine` when generator is stuck.** Modern Opus /
+Sonnet models are extremely willing to discard prior work and re-design
+from scratch. Sunk-cost on the generator's prior implementation is not
+a tiebreaker. When in doubt between `refine` and `restart_sprint`,
+choose `restart_sprint`.
 
 **Deferring a finding to "next round".** Forbidden. The sprint and
 contract define the scope agreed before the round; if you see a real

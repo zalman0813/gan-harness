@@ -5,7 +5,8 @@ Rules (see .claude/schemas/spec.schema.md):
   L01  All required H2 sections present in correct order;
        every F-id covered by exactly one sprint Delivers
   L02  Feature names contain no phase markers
-  L03  Every sprint has Delivers + Depends on + Smoke check
+  L03  Every sprint has Delivers + Depends on + User story + Success (user POV)
+       + Smoke check (in that exact bullet order)
   L04  Smoke check starts with user-observable verb; not mechanical
   L05  Sprint deliverables touch >=2 layers OR are explicitly tagged pure-*
   L06  Overall success criteria has >=1 end-to-end behavioral entry
@@ -13,14 +14,17 @@ Rules (see .claude/schemas/spec.schema.md):
   L08  If `### Domain terms` appears under `## Cross-cutting constraints`,
        every bullet matches `- **<term>** — <definition>` and term names
        are unique within the section
+  L09  Each sprint's User story matches the Cohn pattern; each sprint's
+       Success (user POV) has 3-5 sub-bullets, each starts with `user` or
+       `system`, and no sub-bullet contains technical tokens
+  L10  Cross-cutting constraints H3 sub-sections are restricted to the
+       whitelist (Non-goals / Performance budget / Design language /
+       Compliance / Domain terms)
+  L11  Every external file path referenced in spec.md appears under
+       `## References`
 
 Pure stdlib. Exit 0 on PASS; exit 1 with JSON-on-stderr listing of failures
-on FAIL. Output structure:
-
-  { "rule": "L02", "section": "Features", "feature_id": "F03",
-    "line": 42, "message": "..." }
-
-Each failure is one line of JSON for grep / jq friendliness.
+on FAIL.
 """
 from __future__ import annotations
 
@@ -119,6 +123,52 @@ PURE_LAYER_TAGS = {
     "(pure-data)",
 }
 
+# Cross-cutting constraints H3 whitelist (L10).
+CROSS_CUTTING_H3_WHITELIST = {
+    "Non-goals",
+    "Performance budget",
+    "Design language",
+    "Compliance",
+    "Domain terms",
+}
+
+# Technical tokens forbidden in Success (user POV) sub-bullets (L09).
+# A sub-bullet matching any of these is rejected.
+TECH_TOKEN_PATTERNS = [
+    (re.compile(r"\B/[a-z][a-z0-9_\-/{}]+", re.IGNORECASE), "endpoint path"),
+    (re.compile(r"\bdata-testid\b", re.IGNORECASE), "data-testid"),
+    (re.compile(r"\bETag\b", re.IGNORECASE), "ETag"),
+    (re.compile(r"\bHTTP\s+\d{3}\b|\bstatus\s+code\s+\d{3}\b", re.IGNORECASE), "HTTP status code"),
+    (re.compile(r"\b[a-z]+_id\b"), "_id-suffixed identifier"),
+]
+
+# File-path-like tokens in spec.md prose (L11).
+# We detect: backticked paths, [text](path), @path, and bare paths that contain
+# a slash AND end in a known source/doc extension.
+FILE_EXTENSIONS = (
+    ".md",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".sh",
+    ".html",
+    ".css",
+    ".sql",
+)
+PATH_PATTERNS = [
+    # Markdown link: [text](path)
+    re.compile(r"\[[^\]]+\]\(([^)\s]+)\)"),
+    # @-import: @path/to/file.ext
+    re.compile(r"@([a-zA-Z0-9_./\-]+(?:" + "|".join(re.escape(e) for e in FILE_EXTENSIONS) + r"))"),
+    # Backticked path: `path/to/file.ext`
+    re.compile(r"`([a-zA-Z0-9_./\-]+(?:" + "|".join(re.escape(e) for e in FILE_EXTENSIONS) + r"))`"),
+]
+
 
 @dataclass
 class Failure:
@@ -157,7 +207,6 @@ def parse_h2_sections(text: str) -> list[Section]:
     for i, line in enumerate(lines, 1):
         m = re.match(r"^##\s+(.+?)\s*$", line)
         if m and not line.startswith("###"):
-            # close previous
             if current_name is not None:
                 sections.append(
                     Section(
@@ -222,12 +271,17 @@ def parse_features(features_section: Section) -> "OrderedDict[str, dict[str, Any
 
 
 def parse_sprints(sprint_section: Section) -> "OrderedDict[str, dict[str, Any]]":
-    """Returns ordered map of S-id -> { name, delivers, depends_on, smoke, layer_tag, line }."""
+    """Returns ordered map of S-id -> { name, delivers, depends_on, user_story,
+    success_pov_bullets, smoke, layer_tag, line }.
+
+    success_pov_bullets is a list of (absolute_line, text) tuples.
+    """
     sprints: OrderedDict[str, dict[str, Any]] = OrderedDict()
     lines = sprint_section.body.splitlines()
     current_id: str | None = None
     current: dict[str, Any] = {}
     line_offset = sprint_section.start
+    in_success_pov = False
     for i, line in enumerate(lines, 1):
         absolute_line = line_offset + i
         m = re.match(r"^###\s+(S\d{2})\s+—\s+(.+?)\s*$", line)
@@ -235,6 +289,7 @@ def parse_sprints(sprint_section: Section) -> "OrderedDict[str, dict[str, Any]]"
             if current_id is not None:
                 sprints[current_id] = current
             current_id = m.group(1)
+            in_success_pov = False
             name_with_tag = m.group(2).strip()
             tag = None
             for candidate in PURE_LAYER_TAGS:
@@ -249,34 +304,104 @@ def parse_sprints(sprint_section: Section) -> "OrderedDict[str, dict[str, Any]]"
                 "line": absolute_line,
                 "delivers": [],
                 "depends_on": None,
+                "user_story": None,
+                "user_story_line": None,
+                "success_pov_bullets": [],  # list of (line, text)
+                "success_pov_header_line": None,
                 "smoke": None,
+                "smoke_line": None,
                 "reason_single_layer": None,
+                "field_order": [],  # observed order of top-level bullets
             }
-        elif current_id is not None:
-            dm = re.match(r"^-\s*Delivers\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
-            if dm:
-                ids = re.findall(r"F\d{2,3}", dm.group(1))
-                current["delivers"] = ids
+            continue
+        if current_id is None:
+            continue
+
+        dm = re.match(r"^-\s*Delivers\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
+        if dm:
+            ids = re.findall(r"F\d{2,3}", dm.group(1))
+            current["delivers"] = ids
+            current["field_order"].append("Delivers")
+            in_success_pov = False
+            continue
+        dpm = re.match(r"^-\s*Depends\s*on\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
+        if dpm:
+            value = dpm.group(1).strip()
+            if value.lower() == "(none)":
+                current["depends_on"] = []
+            else:
+                current["depends_on"] = re.findall(r"S\d{2}", value)
+            current["field_order"].append("Depends on")
+            in_success_pov = False
+            continue
+        usm = re.match(r"^-\s*User\s+story\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
+        if usm:
+            current["user_story"] = usm.group(1).strip()
+            current["user_story_line"] = absolute_line
+            current["field_order"].append("User story")
+            in_success_pov = False
+            continue
+        spm = re.match(r"^-\s*Success\s*\(user\s+POV\)\s*:\s*$", line, re.IGNORECASE)
+        if spm:
+            current["success_pov_header_line"] = absolute_line
+            current["field_order"].append("Success (user POV)")
+            in_success_pov = True
+            continue
+        if in_success_pov:
+            sub = re.match(r"^\s{2,}-\s*(.+?)\s*$", line)
+            if sub:
+                current["success_pov_bullets"].append((absolute_line, sub.group(1).strip()))
                 continue
-            dpm = re.match(r"^-\s*Depends\s*on\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
-            if dpm:
-                value = dpm.group(1).strip()
-                if value.lower() == "(none)":
-                    current["depends_on"] = []
-                else:
-                    current["depends_on"] = re.findall(r"S\d{2}", value)
-                continue
-            sm = re.match(r"^-\s*Smoke\s*check\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
-            if sm:
-                current["smoke"] = sm.group(1).strip()
-                continue
-            rm = re.match(r"^-\s*Reason\s*for\s*single-layer\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
-            if rm:
-                current["reason_single_layer"] = rm.group(1).strip()
-                continue
+            # any other non-blank line exits success-pov mode
+            if line.strip():
+                in_success_pov = False
+        sm = re.match(r"^-\s*Smoke\s*check\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
+        if sm:
+            current["smoke"] = sm.group(1).strip()
+            current["smoke_line"] = absolute_line
+            current["field_order"].append("Smoke check")
+            in_success_pov = False
+            continue
+        rm = re.match(r"^-\s*Reason\s*for\s*single-layer\s*:\s*(.+?)\s*$", line, re.IGNORECASE)
+        if rm:
+            current["reason_single_layer"] = rm.group(1).strip()
+            in_success_pov = False
+            continue
     if current_id is not None:
         sprints[current_id] = current
     return sprints
+
+
+def check_user_story_cohn(user_story: str) -> bool:
+    """Returns True if user story roughly matches Cohn pattern.
+
+    Accepts both 'As a X, I can Y so that Z' (new) and
+    'As a X, I want to Y' (legacy) — but generator must produce the new form.
+    """
+    if not user_story:
+        return False
+    pattern = re.compile(
+        r"^As\s+an?\s+\S.+?,\s+I\s+(can|want to)\s+\S.+",
+        re.IGNORECASE,
+    )
+    return bool(pattern.match(user_story))
+
+
+def has_tech_token(text: str) -> tuple[bool, str]:
+    """Returns (True, token-name) if text contains any tech token."""
+    for pattern, name in TECH_TOKEN_PATTERNS:
+        if pattern.search(text):
+            return True, name
+    return False, ""
+
+
+def collect_paths_in_text(text: str) -> set[str]:
+    """Extract file paths from text using PATH_PATTERNS."""
+    paths: set[str] = set()
+    for pattern in PATH_PATTERNS:
+        for m in pattern.finditer(text):
+            paths.add(m.group(1))
+    return paths
 
 
 def lint(text: str) -> list[Failure]:
@@ -296,12 +421,10 @@ def lint(text: str) -> list[Failure]:
                 extra={"expected": REQUIRED_H2_ORDER, "actual": actual_names},
             )
         )
-        # Continue with checks where possible.
 
     # --- L07a: Archetype valid ---
     if "Archetype" in name_to_section:
         body = name_to_section["Archetype"].body.strip()
-        # First non-empty line should be the archetype value.
         first_line = next((ln.strip() for ln in body.splitlines() if ln.strip()), "")
         if first_line not in VALID_ARCHETYPES:
             failures.append(
@@ -380,7 +503,6 @@ def lint(text: str) -> list[Failure]:
                     extra={"feature_id": fid},
                 )
             )
-    # Each feature also declares a Sprint field — must match the delivering sprint.
     for fid, fdata in features.items():
         if fdata["sprint"] is None:
             failures.append(
@@ -393,13 +515,18 @@ def lint(text: str) -> list[Failure]:
                 )
             )
 
-    # --- L03: every sprint has Delivers + Depends on + Smoke check ---
+    # --- L03: every sprint has Delivers + Depends on + User story + Success (user POV) + Smoke check, in that order ---
+    expected_order = ["Delivers", "Depends on", "User story", "Success (user POV)", "Smoke check"]
     for sid, sdata in sprints.items():
         missing: list[str] = []
         if not sdata["delivers"]:
             missing.append("Delivers")
         if sdata["depends_on"] is None:
             missing.append("Depends on")
+        if not sdata["user_story"]:
+            missing.append("User story")
+        if sdata["success_pov_header_line"] is None:
+            missing.append("Success (user POV)")
         if not sdata["smoke"]:
             missing.append("Smoke check")
         if missing:
@@ -408,7 +535,19 @@ def lint(text: str) -> list[Failure]:
                     rule="L03",
                     section="Sprint plan",
                     line=sdata["line"],
-                    message=f"Sprint {sid} missing required fields: {', '.join(missing)}",
+                    message=f"Sprint {sid} missing required bullet(s): {', '.join(missing)}",
+                    extra={"sprint_id": sid},
+                )
+            )
+            continue
+        # Order check
+        if sdata["field_order"] != expected_order:
+            failures.append(
+                Failure(
+                    rule="L03",
+                    section="Sprint plan",
+                    line=sdata["line"],
+                    message=f"Sprint {sid} bullets out of order. Expected: {expected_order}; got: {sdata['field_order']}",
                     extra={"sprint_id": sid},
                 )
             )
@@ -418,7 +557,6 @@ def lint(text: str) -> list[Failure]:
         smoke = (sdata["smoke"] or "").lower()
         if not smoke:
             continue
-        # Mechanical phrase ban first (more specific)
         for mech in MECHANICAL_PHRASES:
             if mech in smoke:
                 failures.append(
@@ -431,7 +569,6 @@ def lint(text: str) -> list[Failure]:
                     )
                 )
                 break
-        # Verb prefix check
         if not any(smoke.startswith(verb) for verb in USER_OBSERVABLE_VERBS):
             failures.append(
                 Failure(
@@ -443,22 +580,90 @@ def lint(text: str) -> list[Failure]:
                 )
             )
 
-    # --- L05: sprint deliverables touch >=2 layers OR explicit pure-* tag ---
-    # We need archetype context to decide layers. Heuristic: if every feature in
-    # sprint has the same "primary layer" inferred from its Data model presence and
-    # archetype, it's single-layer. We rely on planner to tag pure-* explicitly;
-    # absence of tag + single-layer-looking sprint -> failure. Implementation:
-    # if no pure-* tag AND no Reason for single-layer line, we ALWAYS pass this rule
-    # at the lint level (we can't infer layers reliably from spec alone). The
-    # downstream evaluator catches missing cross-layer threading at QA time.
-    # However, we DO catch the explicit case: if pure-* tag is set, no further check.
-    # If neither tag nor reason, leave as warning-equivalent (no failure here).
+    # --- L05: pure-* tag check (lint-level passive — see existing rationale) ---
     for sid, sdata in sprints.items():
         if sdata["layer_tag"] and sdata["reason_single_layer"]:
-            # Both tag and reason set — that's redundant but not an error.
             continue
 
-    # --- L08: Domain terms block format (optional sub-heading) ---
+    # --- L09: User story Cohn pattern + Success (user POV) bullet count + tech token check ---
+    for sid, sdata in sprints.items():
+        # User story Cohn pattern
+        if sdata["user_story"] and not check_user_story_cohn(sdata["user_story"]):
+            failures.append(
+                Failure(
+                    rule="L09",
+                    section="Sprint plan",
+                    line=sdata.get("user_story_line") or sdata["line"],
+                    message=f"Sprint {sid} user story does not match Cohn pattern 'As a <role>, I can <action> so that <outcome>.'. Got: '{sdata['user_story']}'",
+                    extra={"sprint_id": sid},
+                )
+            )
+        # Success POV bullet count
+        bullets = sdata["success_pov_bullets"]
+        if sdata["success_pov_header_line"] is not None:
+            if not (3 <= len(bullets) <= 5):
+                failures.append(
+                    Failure(
+                        rule="L09",
+                        section="Sprint plan",
+                        line=sdata["success_pov_header_line"],
+                        message=f"Sprint {sid} Success (user POV) must have 3-5 sub-bullets; got {len(bullets)}",
+                        extra={"sprint_id": sid, "count": len(bullets)},
+                    )
+                )
+            # Each bullet must start with user/system
+            for bline, btext in bullets:
+                first_word = btext.split()[0].lower() if btext.split() else ""
+                if first_word not in ("user", "system"):
+                    failures.append(
+                        Failure(
+                            rule="L09",
+                            section="Sprint plan",
+                            line=bline,
+                            message=f"Sprint {sid} Success (user POV) bullet must start with 'user' or 'system'. Got: '{btext}'",
+                            extra={"sprint_id": sid},
+                        )
+                    )
+                has_tech, token_name = has_tech_token(btext)
+                if has_tech:
+                    failures.append(
+                        Failure(
+                            rule="L09",
+                            section="Sprint plan",
+                            line=bline,
+                            message=f"Sprint {sid} Success (user POV) bullet contains technical token ({token_name}); use user-language only. Got: '{btext}'",
+                            extra={"sprint_id": sid, "token": token_name},
+                        )
+                    )
+
+    # --- L10: Cross-cutting constraints H3 whitelist ---
+    if "Cross-cutting constraints" in name_to_section:
+        cc_section = name_to_section["Cross-cutting constraints"]
+        cc_lines = cc_section.body.splitlines()
+        cc_start = cc_section.start
+        for j, line in enumerate(cc_lines):
+            hm = re.match(r"^###\s+(.+?)\s*$", line)
+            if hm:
+                h3_name = hm.group(1).strip()
+                # Strip parenthetical suffix for L10 check (L08 handles that separately).
+                h3_base = re.sub(r"\s*\(.*?\)\s*$", "", h3_name).strip()
+                if h3_base not in CROSS_CUTTING_H3_WHITELIST:
+                    failures.append(
+                        Failure(
+                            rule="L10",
+                            section="Cross-cutting constraints",
+                            line=cc_start + j + 1,
+                            message=(
+                                f"H3 '{h3_name}' is not in the Cross-cutting whitelist "
+                                f"{sorted(CROSS_CUTTING_H3_WHITELIST)}. Technical "
+                                "carve-outs belong in /loop contract negotiation, "
+                                "not in spec.md."
+                            ),
+                            extra={"h3": h3_name},
+                        )
+                    )
+
+    # --- L08: Domain terms block format ---
     if "Cross-cutting constraints" in name_to_section:
         cc_section = name_to_section["Cross-cutting constraints"]
         cc_lines = cc_section.body.splitlines()
@@ -468,7 +673,6 @@ def lint(text: str) -> list[Failure]:
             if re.match(r"^###\s+Domain\s+terms\s*$", line):
                 dt_idx = j
                 break
-            # Bad heading variants that look like Domain terms but aren't exact.
             if re.match(r"^###\s+Domain\s+terms\s+\(.+\)\s*$", line):
                 failures.append(
                     Failure(
@@ -486,7 +690,6 @@ def lint(text: str) -> list[Failure]:
                 dt_idx = None
                 break
         if dt_idx is not None:
-            # Collect block until next H2/H3.
             block: list[tuple[int, str]] = []
             k = dt_idx + 1
             while k < len(cc_lines) and not re.match(
@@ -503,7 +706,6 @@ def lint(text: str) -> list[Failure]:
                 if not stripped:
                     continue
                 if raw.startswith("  ") and not stripped.startswith("-"):
-                    # Continuation of previous bullet; accept silently.
                     continue
                 m_term = term_bullet_re.match(raw)
                 if not m_term:
@@ -551,7 +753,6 @@ def lint(text: str) -> list[Failure]:
                 )
             )
         else:
-            # At least one item must NOT be mechanical AND should hint at a flow.
             has_behavioral = False
             flow_hints = ["can ", "sees ", "receives ", "completes ", "navigates ", "submits ", "shares ", "exports ", "uploads ", "from "]
             for item in items:
@@ -568,6 +769,43 @@ def lint(text: str) -> list[Failure]:
                         section="Overall success criteria",
                         line=name_to_section["Overall success criteria"].start,
                         message="Overall success criteria has no end-to-end behavioral entry. At least one item should describe a user-observable flow.",
+                    )
+                )
+
+    # --- L11: every external file path appears in References ---
+    if "References" in name_to_section:
+        refs_text = name_to_section["References"].body
+        refs_paths = collect_paths_in_text(refs_text)
+        # Also accept bare path lines as bullets in References.
+        for raw_line in refs_text.splitlines():
+            stripped = raw_line.strip().lstrip("-").strip()
+            if "/" in stripped or any(stripped.endswith(e) for e in FILE_EXTENSIONS):
+                # take the first whitespace-delimited token as the path token
+                token = stripped.split()[0] if stripped else ""
+                if token:
+                    refs_paths.add(token)
+        # Now walk all other sections for path-shaped tokens.
+        for sec in sections:
+            if sec.name == "References":
+                continue
+            found = collect_paths_in_text(sec.body)
+            for path in found:
+                # Heuristic: skip obviously-not-paths
+                if path in refs_paths:
+                    continue
+                # Internal anchors like #section — skip
+                if path.startswith("#"):
+                    continue
+                # External URLs (http://...) — skip; References is for repo paths
+                if path.startswith(("http://", "https://")):
+                    continue
+                failures.append(
+                    Failure(
+                        rule="L11",
+                        section=sec.name,
+                        line=sec.start,
+                        message=f"External path '{path}' appears in {sec.name} but is not listed under ## References",
+                        extra={"path": path},
                     )
                 )
 

@@ -25,8 +25,12 @@ A user-facing capability listed under `## Features` in spec.md as `### F{NN} —
 _Avoid_: task, story (story is reserved for Cohn-pattern user stories within a feature)
 
 **Sprint**:
-An implementation slice listed under `## Sprint plan` in spec.md as `### S{NN} — <name>`. Delivers ≥1 feature; has Depends-on (sequencing) and a Smoke check (one-line user-observable verb). Sprint contracts are negotiated per-sprint inside /loop. Sprints may legitimately be single-layer (UI-only redesign, etc.) when explicitly tagged `(pure-frontend)`/`(pure-backend)`/`(pure-lib)`/`(pure-cli)`/`(pure-data)`.
+An implementation slice listed under `## Sprint plan` in spec.md as `### S{NN} — <name>`. Delivers ≥1 feature; has 5 mandatory bullets in order: Delivers / Depends on / User story (Cohn pattern) / Success (user POV) 3-5 bullets / Smoke check. Sprint contracts are negotiated per-sprint inside /loop. Sprints may legitimately be single-layer (UI-only redesign, etc.) when explicitly tagged `(pure-frontend)`/`(pure-backend)`/`(pure-lib)`/`(pure-cli)`/`(pure-data)`.
 _Avoid_: phase, milestone, iteration
+
+**Success (user POV)**:
+A per-sprint 3-5 bullet list in spec.md describing observable behaviour in **user language only** — no technical tokens (endpoint paths, schema keys, `data-testid`, `ETag`, HTTP status codes). Each bullet starts with `user` or `system`. The anchor source for generator's verification_plan inside /loop. spec_lint.py L09 enforces.
+_Avoid_: AC, testable criteria, technical assertions
 
 **Sprint contract**:
 A per-sprint testable agreement negotiated between generator and evaluator at the start of each sprint inside /loop. Contains done_looks_like[], verification_plan[], criterion_mapping (to the 4 spec.md criteria), thresholds. Append-only entries in `specs/_epic/contracts.jsonl` track lifecycle: `agreed` → `completed` → optional `amended`. Schema at `.claude/schemas/contract.schema.json`.
@@ -41,7 +45,7 @@ The 4-entry rubric in spec.md `## Evaluation criteria`, sourced from the archety
 _Avoid_: AC, success metric, KPI
 
 **ADR** (architecture decision record):
-A MADR-format markdown file under `docs/adr/` recording one architectural decision that passed the three-test gate (hard-to-reverse + surprising + real-trade-off). Frontmatter `status` flows `proposed` → `accepted` → `superseded`; body is immutable from creation. Authored by **planner** (during /init, for spec-level decisions) OR **generator** (during /loop IMPLEMENT, for impl-time decisions); evaluator does not author but may flag undocumented decisions via `standards_axis.findings[].source: "missing_adr"`. /finalize promotes all `proposed` → `accepted` regardless of author.
+A MADR-format markdown file under `docs/adr/` recording one architectural decision that passed the three-test gate (hard-to-reverse + surprising + real-trade-off). Frontmatter `status` flows `proposed` → `accepted` → `superseded`; body is immutable from creation. Authored only by **generator** during /loop IMPLEMENT (v3.8 single-author rule). Planner does NOT author — spec.md stays high-level without architectural decisions. Evaluator does not author but may flag undocumented decisions via `standards_axis.findings[].source: "missing_adr"`. `block_pretool.py` enforces write-deny for planner / evaluator. /finalize promotes all `proposed` → `accepted`.
 _Avoid_: design doc, RFC
 
 **Stack skill**:
@@ -55,6 +59,22 @@ _Avoid_: pre-commit, CI gate
 **Transcript-as-evidence**:
 The pattern where evaluator reads the Claude Code runtime-written subagent transcript JSONL slice (captured by SubagentStop hook) as primary evidence of what the generator did, in preference to any generator-authored narrative. The runtime can't be lied to; the narrative can.
 
+**Research gate**:
+The /loop-start mechanism that drafts per-sprint blindfold codebase questions, runs `question_lint.py` (Q01-Q04 deterministic checks), surfaces to user for approval once, freezes the questions, then dispatches `codebase-fact-finder` subagents per-sprint at sprint kickoff (NOT upfront) so answers reflect the codebase state at that sprint's start. Files: `specs/_epic/_research/S{NN}/_questions.json` (per-sprint frozen questions) + `specs/_epic/_research/S{NN}/<id>.md` (fact-finder output). Replaces /init Phase 1.5.
+_Avoid_: fact-finder dispatch (the act, not the gate), planner research
+
+**next_action**:
+The evaluator-emitted directive in `_evals/S{NN}-R{IR}.json` (and review.yaml) telling generator what to do on FAIL. Values: `proceed` (PASS only) / `refine` (same approach, address findings) / `restart_sprint` (discard, re-design from scratch) / `escalate_to_user` (stop, write failure report). Generator obeys verbatim — does NOT strategic-decide. Evaluator biases toward `restart_sprint` over `refine` when generator's hill-climb is ineffective.
+_Avoid_: strategic decision, pivot decision, generator-decided refine vs pivot
+
+**Anchor**:
+A literal substring from spec.md (Success POV bullet) / intent.md / `_research/S{NN}/*.md` that grounds a contract `done_looks_like[]` statement or `verification_plan[].steps[]` substring. `anchor_ledger.py` verifies each anchor against these sources verbatim, producing `_audit/S{NN}/anchor-ledger-R{R}.tsv`. Un-anchored anchors are direct evidence of over-interpretation.
+_Avoid_: spec reference (broader), assertion (narrower)
+
+**Divergence diff**:
+The post-round report at `_audit/S{NN}/divergence-R{R}.md` listing new identifiers (function names, route literals, class names, schema keys, data-testid values) in the generator's commit that don't appear in any anchor source. Surfaces "what generator invented this round" to maintainer in seconds, not minutes.
+_Avoid_: lint findings (different layer), test failures (different category)
+
 ## Relationships
 
 - A **Feature** is always a **Vertical slice**
@@ -66,6 +86,10 @@ The pattern where evaluator reads the Claude Code runtime-written subagent trans
 - A **Feature** may reference zero or more accepted **ADR**s indirectly via spec.md's `## References`
 - An **ADR** lifecycle: proposed → accepted → superseded; only accepted ADRs are referenced from specs
 - A **Stack skill** is consumed by core skills; the dependency never reverses
+- A **Sprint** has 3-5 **Success (user POV)** bullets in spec.md; per-sprint contract's `verification_plan[]` anchors back to these bullets
+- A **Research gate** runs once at /loop start (question drafting + user approval) plus once per **Sprint** kickoff (fact-finder dispatch)
+- An **Anchor** lives in spec.md / intent.md / `_research/S{NN}/`; contract anchors reference these literally, verified post-round by `anchor_ledger.py`
+- An evaluator FAIL verdict carries a **next_action** directive; generator obeys verbatim
 
 ## Example dialogue
 

@@ -44,12 +44,13 @@ LEAK_RULES: dict[str, tuple[str, str] | None] = {
         r"specs/_(batch|epic)/prd\.md"
         r"|specs/_(batch|epic)/_research-queue\.md"
         r'|specs/_(batch|epic)/_research-findings(/|"|$)'
-        r"|specs/_(batch|epic)/spec\.md",
-        "codebase-fact-finder is blindfolded from the planner's intent artifacts "
-        "(spec.md / prd.md / _research-queue.md). CRISPY discipline: the "
-        "documentarian must not see the ticket. Report what IS in the codebase "
-        "with file:line evidence; opinions and goal-shaped framing leak when "
-        "the ticket is visible.",
+        r"|specs/_(batch|epic)/spec\.md"
+        r"|specs/_epic/intent\.md",
+        "codebase-fact-finder is blindfolded from the user's intent and the "
+        "planner's spec (specs/_epic/intent.md / spec.md / prd.md / "
+        "_research-queue.md). Report what IS in the codebase with file:line "
+        "evidence; opinions and goal-shaped framing leak when the ticket is "
+        "visible.",
     ),
     "planner": None,
     "generator": (
@@ -77,7 +78,7 @@ LEAK_RULES: dict[str, tuple[str, str] | None] = {
 
 # ─── Write-side immutability rules (v3.8) ────────────────────────────────────
 
-WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
+WRITE_TOOLS = {"Write", "Edit", "NotebookEdit", "MultiEdit"}
 
 # Path matcher for spec.md (v3.8 epic dir). Matches the literal path exposed
 # in tool_input["file_path"].
@@ -86,9 +87,52 @@ SPEC_PATH_RE = re.compile(r"specs/_epic/spec\.md$")
 # Path matcher for contracts.jsonl.
 CONTRACTS_PATH_RE = re.compile(r"specs/_epic/contracts\.jsonl$")
 
+# Path matcher for docs/adr/*.md — generator is the sole author.
+ADR_PATH_RE = re.compile(r"(?:^|/)docs/adr/[^/]+\.md$")
+
+# Path matcher for amendment YAML files under _pending/.
+AMENDMENT_PATH_RE = re.compile(r"specs/_epic/_pending/S\d{2}-amendment-v\d+\.yaml$")
+
 # Agents that may NEVER write/edit spec.md. (planner is the only writer; runs
 # during /init only.)
 SPEC_WRITE_DENIED_AGENTS = {"generator", "evaluator", "codebase-fact-finder"}
+
+# Agents that may NEVER write docs/adr/*.md. Generator is the sole author.
+ADR_WRITE_DENIED_AGENTS = {"planner", "evaluator", "codebase-fact-finder"}
+
+ADR_WRITE_DENY_REASON = (
+    "docs/adr/*.md is generator-authored only. Planner does not author ADRs "
+    "(spec stays high-level); evaluator only flags missing ADRs via "
+    "standards-axis findings, never writes. If an architecture decision "
+    "surfaces during /init, planner records it as a `### Domain terms` "
+    "glossary entry or as a Sprint plan user story; if it surfaces during "
+    "REVIEW_CONTRACT or VERIFY, evaluator emits a missing_adr finding and "
+    "generator authors next round."
+)
+
+# Tokens in an amendment YAML's `reason:` field that mark a spec-gap
+# disguised as a contract amendment. Spec.md is immutable; gaps must be
+# escalated to the operator, not amended around.
+AMENDMENT_DENY_REASON_TOKENS = [
+    "spec gap",
+    "spec is wrong",
+    "spec is missing",
+    "spec was wrong",
+    "step is hard",
+    "ship faster",
+    "drop feature",
+    "lower threshold to pass",
+]
+
+AMENDMENT_DENY_REASON = (
+    "Amendment YAML has a `reason:` matching a denied token (spec gap / "
+    "step is hard / ship faster / drop feature / lower threshold). Spec.md "
+    "is immutable during /loop; if you see a spec gap, surface via the "
+    "IMPLEMENT escalate_to_user path so the operator decides whether to "
+    "re-open the epic. Legitimate amendment reasons: verification step "
+    "impossible against running app, threshold mismatch with measurable "
+    "reality."
+)
 
 SPEC_WRITE_DENY_REASON = (
     "specs/_epic/spec.md is immutable through /loop. Only the planner agent "
@@ -137,6 +181,26 @@ def _bash_targets_path(command: str, target_re: re.Pattern[str]) -> bool:
     return False
 
 
+def _amendment_reason_denied(content: str) -> bool:
+    """Return True if amendment YAML content has a `reason:` matching any
+    denied token. Match is case-insensitive; we look at all text following
+    `reason:` up to the next top-level YAML key or end-of-file.
+    """
+    if not content:
+        return False
+    # Pull the reason block. Permissive: any text starting from `reason:` up
+    # to the next line whose first non-whitespace char is a known top-level
+    # key (evidence_ref / proposed_changes / contract_id / sprint).
+    m = re.search(
+        r"(?ms)^reason:\s*\|?\s*\n?(.*?)(?=^\s*(?:evidence_ref|proposed_changes|contract_id|sprint)\s*:|\Z)",
+        content,
+    )
+    if not m:
+        return False
+    reason_text = m.group(1).lower()
+    return any(token in reason_text for token in AMENDMENT_DENY_REASON_TOKENS)
+
+
 def _check_write_immutability(
     agent_type: str, tool_name: str, tool_input: dict
 ) -> tuple[str, str] | None:
@@ -149,16 +213,31 @@ def _check_write_immutability(
             return (SPEC_WRITE_DENY_REASON, "spec.immutable")
         return None  # planner or untyped: allow
 
+    # Direct Write/Edit on docs/adr/*.md
+    if tool_name in WRITE_TOOLS and ADR_PATH_RE.search(file_path):
+        if agent_type in ADR_WRITE_DENIED_AGENTS:
+            return (ADR_WRITE_DENY_REASON, "adr.generator-only")
+        return None  # generator or untyped: allow
+
     # Direct Edit/NotebookEdit on contracts.jsonl (Write is OK — append flow)
     if tool_name in {"Edit", "NotebookEdit"} and CONTRACTS_PATH_RE.search(file_path):
         return (CONTRACTS_EDIT_DENY_REASON, "contracts.append-only")
 
-    # Bash mutations targeting spec.md
+    # Amendment YAML with denied reason — applies to any agent
+    if tool_name in WRITE_TOOLS and AMENDMENT_PATH_RE.search(file_path):
+        content = tool_input.get("content") or tool_input.get("new_string") or ""
+        if _amendment_reason_denied(content):
+            return (AMENDMENT_DENY_REASON, "amendment.spec-gap")
+
+    # Bash mutations targeting spec.md / contracts.jsonl / docs/adr/*
     if tool_name == "Bash":
         cmd = tool_input.get("command", "")
         if _bash_targets_path(cmd, SPEC_PATH_RE):
             if agent_type in SPEC_WRITE_DENIED_AGENTS:
                 return (SPEC_WRITE_DENY_REASON, "spec.immutable.bash")
+        if _bash_targets_path(cmd, ADR_PATH_RE):
+            if agent_type in ADR_WRITE_DENIED_AGENTS:
+                return (ADR_WRITE_DENY_REASON, "adr.generator-only.bash")
         if _bash_targets_path(cmd, CONTRACTS_PATH_RE):
             # contracts.jsonl: allow `>>` (append) and reject only mutating
             # forms (sed -i, tee without -a, mv, cp, > truncate).
