@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 重構分析 — thin-agent + focused-skills</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#30363d;
+    --ink:#e6edf3; --muted:#8b949e; --dim:#6e7681;
+    --cyan:#39c5cf; --green:#3fb950; --red:#f85149; --amber:#d29922;
+    --purple:#a371f7; --blue:#58a6ff; --pink:#db61a2;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,'Segoe UI','Noto Sans TC',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 120px}
+  code{font-family:var(--mono);font-size:.86em;background:#21262d;padding:1px 6px;
+    border-radius:5px;color:#a5d6ff;border:1px solid #30363d}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* hero */
+  header.hero{padding:64px 24px 40px;background:
+    radial-gradient(900px 360px at 18% -10%,rgba(57,197,207,.14),transparent 60%),
+    radial-gradient(700px 320px at 92% 0%,rgba(163,113,247,.12),transparent 55%);
+    border-bottom:1px solid var(--border)}
+  .hero-inner{max-width:1080px;margin:0 auto}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--cyan);margin-bottom:14px}
+  h1{font-size:38px;line-height:1.18;margin:0 0 16px;font-weight:700;letter-spacing:-.5px}
+  h1 .accent{color:var(--cyan)}
+  .sub{color:var(--muted);font-size:17px;max-width:760px}
+  .meta-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+  .tag{font-family:var(--mono);font-size:11.5px;padding:5px 11px;border-radius:20px;
+    background:var(--panel);border:1px solid var(--border);color:var(--muted)}
+
+  /* TOC */
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(13,17,23,.86);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:11px 0}
+  .toc-inner{max-width:1080px;margin:0 auto;padding:0 24px;display:flex;gap:6px;
+    flex-wrap:wrap;font-family:var(--mono);font-size:12.5px}
+  .toc-inner a{color:var(--muted);padding:5px 11px;border-radius:7px;white-space:nowrap}
+  .toc-inner a:hover{background:var(--panel);color:var(--ink);text-decoration:none}
+
+  section{padding-top:56px}
+  h2{font-size:14px;font-family:var(--mono);letter-spacing:.04em;color:var(--cyan);
+    text-transform:uppercase;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+  h2 .num{background:var(--cyan);color:#04222a;width:24px;height:24px;border-radius:6px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+  .h2title{font-size:27px;font-family:var(--sans);font-weight:700;color:var(--ink);
+    margin:0 0 22px;letter-spacing:-.3px}
+  h3{font-size:18px;margin:30px 0 12px;font-weight:650}
+
+  .lead{font-size:17px;color:#c9d4e0}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:22px 24px;margin:16px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}.toc{display:none}h1{font-size:30px}}
+
+  /* callouts */
+  .callout{border-left:3px solid;border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0;
+    background:var(--panel2)}
+  .callout .ico{font-weight:700;font-family:var(--mono);font-size:12px;letter-spacing:.05em;
+    text-transform:uppercase;display:block;margin-bottom:5px}
+  .c-red{border-color:var(--red)} .c-red .ico{color:var(--red)}
+  .c-green{border-color:var(--green)} .c-green .ico{color:var(--green)}
+  .c-amber{border-color:var(--amber)} .c-amber .ico{color:var(--amber)}
+  .c-cyan{border-color:var(--cyan)} .c-cyan .ico{color:var(--cyan)}
+  .c-purple{border-color:var(--purple)} .c-purple .ico{color:var(--purple)}
+
+  blockquote{margin:12px 0;padding:11px 16px;border-left:2px solid var(--dim);
+    color:#aeb9c4;font-style:italic;background:#11151b;border-radius:0 8px 8px 0;font-size:14px}
+  blockquote .src{display:block;font-style:normal;font-family:var(--mono);font-size:11px;
+    color:var(--dim);margin-top:7px}
+
+  /* bloat chart */
+  .chart{margin:8px 0}
+  .bar-row{display:grid;grid-template-columns:200px 1fr 92px;align-items:center;gap:14px;
+    margin:9px 0;font-size:13.5px}
+  .bar-label{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-align:right}
+  .bar-label b{color:var(--ink);font-weight:600}
+  .bar-track{background:#0a0d12;border-radius:6px;height:26px;overflow:hidden;border:1px solid #21262d}
+  .bar-fill{height:100%;border-radius:5px 0 0 5px;display:flex;align-items:center;
+    padding-left:10px;font-family:var(--mono);font-size:11px;color:#04222a;font-weight:700;
+    white-space:nowrap;transition:width .4s}
+  .bar-val{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-align:right}
+  .ref-fill{background:linear-gradient(90deg,#3fb950,#56d364)}
+  .gan-fill{background:linear-gradient(90deg,#1f6feb,#58a6ff)}
+  .apo-fill{background:linear-gradient(90deg,#bb4f30,#f85149)}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--dim);font-weight:600;background:var(--panel2)}
+  tr:hover td{background:#12161c}
+  td code{font-size:.82em}
+  .arrow{color:var(--cyan);font-weight:700}
+
+  /* rule list */
+  ol.rules{counter-reset:r;list-style:none;padding:0;margin:14px 0}
+  ol.rules li{counter-increment:r;position:relative;padding:13px 16px 13px 52px;
+    background:var(--panel);border:1px solid var(--border);border-radius:11px;margin:9px 0}
+  ol.rules li::before{content:counter(r);position:absolute;left:14px;top:13px;
+    width:26px;height:26px;background:var(--purple);color:#1a0a2e;border-radius:7px;
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+    font-weight:700;font-size:13px}
+  ol.rules li b{color:var(--ink)}
+
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .pill{font-family:var(--mono);font-size:11.5px;padding:4px 10px;border-radius:6px;
+    border:1px solid var(--border);background:var(--panel2);color:var(--muted)}
+  .pill.bad{border-color:rgba(248,81,73,.4);color:#ff7b72}
+  .pill.good{border-color:rgba(63,185,80,.4);color:#56d364}
+
+  .kbd{font-family:var(--mono);font-size:12px;background:#0a0d12;border:1px solid #30363d;
+    border-radius:6px;padding:2px 7px;color:#a5d6ff}
+
+  .check-item{display:grid;grid-template-columns:48px 1fr 1fr;gap:12px;padding:11px 14px;
+    border-bottom:1px solid var(--border);align-items:start;font-size:13.5px}
+  .check-item:hover{background:#12161c}
+  .cid{font-family:var(--mono);font-weight:700;color:var(--green)}
+
+  .twocol{column-count:2;column-gap:24px}
+  @media(max-width:760px){.twocol{column-count:1}}
+
+  hr.div{border:0;border-top:1px solid var(--border);margin:0}
+
+  footer{margin-top:80px;padding-top:28px;border-top:1px solid var(--border);
+    color:var(--dim);font-size:12.5px;font-family:var(--mono)}
+  .src-list a{display:block;padding:4px 0;font-size:12.5px}
+
+  .big-num{font-family:var(--mono);font-size:40px;font-weight:700;line-height:1;color:var(--red)}
+  .big-num.g{color:var(--green)}
+  .stat{text-align:center;padding:8px}
+  .stat .cap{font-size:12px;color:var(--muted);margin-top:8px;font-family:var(--mono)}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:760px){.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Harness Analysis · gan-harness × Apollo · 2026-05-31</div>
+    <h1>為什麼 agent 在 negotiate 階段<br><span class="accent">重造輪子</span>,以及怎麼修</h1>
+    <p class="sub">不是你 prompt 沒寫清楚 ——「要用 skill / 要用 strands」這句話<b>被一大包方法論的體積淹沒了</b>。
+    這份報告用 Anthropic 官方原則 + GodotPrompter 範本,給出 thin-agent + focused-skills 的重構規格。</p>
+    <div class="meta-row">
+      <span class="tag">參考範本 GodotPrompter · 73 行 agent</span>
+      <span class="tag">你的 agent · 337–588 行</span>
+      <span class="tag">交付:分析 + 重構規格(不動 code)</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#tldr">TL;DR</a>
+    <a href="#a">A · 物理性 drift</a>
+    <a href="#b">B · reuse 根因</a>
+    <a href="#c">C · GodotPrompter 8 條</a>
+    <a href="#d">D · 重構規格</a>
+    <a href="#e">E · pilot + 驗證</a>
+    <a href="#src">來源</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- TLDR -->
+<section id="tldr">
+  <h2><span class="num">★</span>TL;DR</h2>
+  <div class="h2title">三個獨立問題,三個對應修法</div>
+  <div class="grid3">
+    <div class="card stat">
+      <div class="big-num">9–13×</div>
+      <div class="cap">你的 agent 比參考範本大 9–13 倍。高訊號指令被低訊號方法論淹沒 → context rot。</div>
+    </div>
+    <div class="card stat">
+      <div class="big-num">0</div>
+      <div class="cap">NEGOTIATE 的 input 裡,「現在已經有什麼可重用」的數量 = 0。reuse-vs-build 對 agent 是未定義決策 → 預設造新的。</div>
+    </div>
+    <div class="card stat">
+      <div class="big-num g">~80</div>
+      <div class="cap">重構後 generator agent 目標行數。方法論你 90% 已有對應 skill,問題是「既貼 agent 又放 skill」雙倍佔注意力。</div>
+    </div>
+  </div>
+  <div class="callout c-cyan">
+    <span class="ico">核心論點</span>
+    drift 有兩個獨立成因:<b>(1) 體積</b>(bloat 把指令淹沒,Part A)與 <b>(2) 缺輸入</b>(agent 不知道有什麼可重用,Part B)。
+    瘦身只解決 (1);要真正止住「重造輪子 / 不用 strands」,必須做 Part D3 的 reuse gate。
+  </div>
+</section>
+
+<!-- A -->
+<section id="a">
+  <h2><span class="num">A</span>診斷一</h2>
+  <div class="h2title">你的 drift 是「物理性」的,不是 prompt 沒寫清楚</div>
+  <p class="lead">你說「我在 system prompt 必須說明要使用 skill,結果還是不遵循」。根因不是你沒講,是<b>講的話被淹沒了</b>。</p>
+
+  <h3>Agent 體積對比(bytes,越長越淹沒)</h3>
+  <div class="card chart">
+    <div class="bar-row"><div class="bar-label"><b>GodotPrompter</b> 參考 agent</div>
+      <div class="bar-track"><div class="bar-fill ref-fill" style="width:8%">3.5KB</div></div>
+      <div class="bar-val">785 字 · 73 行</div></div>
+    <div class="bar-row"><div class="bar-label"><b>gan</b> generator</div>
+      <div class="bar-track"><div class="bar-fill gan-fill" style="width:47%">21KB</div></div>
+      <div class="bar-val">337 行</div></div>
+    <div class="bar-row"><div class="bar-label"><b>gan</b> planner</div>
+      <div class="bar-track"><div class="bar-fill gan-fill" style="width:49%">22KB</div></div>
+      <div class="bar-val">454 行</div></div>
+    <div class="bar-row"><div class="bar-label"><b>gan</b> evaluator</div>
+      <div class="bar-track"><div class="bar-fill gan-fill" style="width:82%">37KB</div></div>
+      <div class="bar-val">588 行</div></div>
+    <div class="bar-row"><div class="bar-label"><b>Apollo</b> generator</div>
+      <div class="bar-track"><div class="bar-fill apo-fill" style="width:71%">32KB</div></div>
+      <div class="bar-val">529 行</div></div>
+    <div class="bar-row"><div class="bar-label"><b>Apollo</b> evaluator</div>
+      <div class="bar-track"><div class="bar-fill apo-fill" style="width:100%">45KB</div></div>
+      <div class="bar-val">588 行</div></div>
+  </div>
+  <div class="callout c-red">
+    <span class="ico">加重因子</span>
+    Apollo generator 的 NEGOTIATE input #7 寫著「methodology skills 已 <b>preloaded</b>,full bodies 在你 system prompt 裡」——
+    等於把 6–7 個 handbook 的<b>整個 body 灌進 always-on context</b>。指令還沒讀到,注意力預算已經花完。
+  </div>
+
+  <h3>對照 Anthropic 三條原則</h3>
+  <div class="grid2">
+    <div class="card">
+      <b style="color:var(--amber)">① Attention budget / context rot</b>
+      <blockquote>As the number of tokens in the context window increases, the model's ability to accurately recall information from that context decreases.
+        <span class="src">Effective context engineering for AI agents</span></blockquote>
+      <p style="font-size:13.5px;color:var(--muted);margin:6px 0 0">你那句「要先用 skill」躺在第 200 行,模型早已 recall 不到。</p>
+    </div>
+    <div class="card">
+      <b style="color:var(--amber)">② 最小高訊號集</b>
+      <blockquote>Good context engineering means finding the smallest possible set of high-signal tokens that maximize the likelihood of some desired outcome.
+        <span class="src">Effective context engineering for AI agents</span></blockquote>
+      <p style="font-size:13.5px;color:var(--muted);margin:6px 0 0">你現在是反過來:最大低訊號集。</p>
+    </div>
+    <div class="card">
+      <b style="color:var(--amber)">③ Brittle hardcoded prompt</b>
+      <blockquote>engineers hardcoding complex, brittle logic in their prompts… creates fragility and increases maintenance complexity over time.
+        <span class="src">Effective context engineering for AI agents</span></blockquote>
+      <p style="font-size:13.5px;color:var(--muted);margin:6px 0 0">generator 把 deep-module shape、ADR three-test gate、inner-gate stages、next_action 三分支全 hardcode 在 body —— 這些本該 JIT 載入。</p>
+    </div>
+    <div class="card">
+      <b style="color:var(--amber)">④ 工具/技能重疊 → 不知道用哪個</b>
+      <blockquote>If a human engineer can't definitively say which tool should be used in a given situation, an AI agent can't be expected to do better.
+        <span class="src">Writing effective tools for AI agents</span></blockquote>
+      <p style="font-size:13.5px;color:var(--muted);margin:6px 0 0"><code>generator-handbook</code> 一大包 → 觸發邊界模糊 → agent 乾脆不載,自己重寫。</p>
+    </div>
+  </div>
+  <div class="callout c-green">
+    <span class="ico">結論</span>
+    drift 不是因為你沒下指令,是因為<b>指令和一大包方法論搶同一個注意力預算,而方法論用體積贏了</b>。
+  </div>
+</section>
+
+<!-- B -->
+<section id="b">
+  <h2><span class="num">B</span>診斷二</h2>
+  <div class="h2title">「重造輪子 / 不用 strands」是必然結果,跟 bloat 無關</div>
+  <p class="lead">這是第二個獨立問題。對 Apollo 的結構診斷發現:<b>NEGOTIATE 的 input 清單裡完全沒有「現在已經有什麼」這一項。</b></p>
+
+  <div class="card">
+    <b style="font-family:var(--mono);font-size:12px;color:var(--cyan)">NEGOTIATE 目前讀的 input</b>
+    <div class="pillrow">
+      <span class="pill good">spec.md</span>
+      <span class="pill good">contracts.jsonl</span>
+      <span class="pill good">CONTEXT.md</span>
+      <span class="pill good">ADR</span>
+      <span class="pill good">stack skill references</span>
+    </div>
+    <b style="font-family:var(--mono);font-size:12px;color:var(--red)">完全沒讀</b>
+    <div class="pillrow">
+      <span class="pill bad">✕ codebase</span>
+      <span class="pill bad">✕ component registry</span>
+      <span class="pill bad">✕ 現有 strands subagent 清單</span>
+      <span class="pill bad">✕ CODEMAP.md(只在 /finalize 生成)</span>
+    </div>
+  </div>
+
+  <p>agent 手上沒有「現有元件目錄」,reuse-vs-build 對它就是<b>未定義的決策點</b>。而模型訓練偏誤是 completion ——
+  未定義時就<b>直接造一個新的</b>。你 prompt 寫「要用 strands」沒用,因為它根本不知道<b>哪個</b> strands 可用、長什麼樣、入口在哪。</p>
+
+  <blockquote>When tools overlap in function or have a vague purpose, agents can get confused about which ones to use… Too many tools or overlapping tools can also distract agents from pursuing efficient strategies.
+    <span class="src">Writing effective tools for AI agents</span></blockquote>
+  <blockquote>The agent tended to try to do too much at once—essentially to attempt to one-shot the app.
+    <span class="src">Effective harnesses for long-running agents — 同一份 over-ambition 失敗模式</span></blockquote>
+
+  <div class="callout c-purple">
+    <span class="ico">結論</span>
+    要它 reuse,必須把「可 reuse 的東西」當成 <b>just-in-time input 餵進去</b>,並把 reuse 設成<b>硬性 gate</b>,而不是一句勸告。
+    → 見 <a href="#d3">Part D3</a>。
+  </div>
+</section>
+
+<!-- C -->
+<section id="c">
+  <h2><span class="num">C</span>參考範本</h2>
+  <div class="h2title">GodotPrompter pattern 蒸餾 — 你要抄的 8 條</div>
+  <p class="lead">參考 agent 只有 73 行 / 785 字,卻能驅動 48 個 skill。秘訣:agent body 只放<b>斷言 + 條件式 skill index</b>,how-to 全在 JIT 載入的 skill。</p>
+  <ol class="rules">
+    <li><b>Agent body ≤ 一個螢幕(~70 行)</b>。只留 ① identity 一句 ② modes/triggers ③ principles(斷言,非教學)④ skill index(條件式)⑤ output format。出現 >1 行 code 或 API 表 → 一律外移。</li>
+    <li><b>Principle 是 claim,不是 tutorial</b>。agent 說「avoid Variant boxing」,skill 才示範怎麼做。你 generator 第 162–228 行就是 tutorial 塞錯地方。</li>
+    <li><b>一個 skill = 一個 concern,激進地切</b>。GodotPrompter 把「C#」拆成 <code>csharp-godot</code> + <code>csharp-signals</code> + <code>godot-optimization</code>。對應你說的「skill 該明確而非一大包」。</li>
+    <li><b>skill description 一律 <code>Use when &lt;trigger&gt; — &lt;子題逗號清單&gt;</code></b>。trigger 決定何時載入,清單當 scope 圍籬。最該抄的一條。</li>
+    <li><b>在 agent body 用條件式明文 wire skill</b>:<code>Read skills/X/SKILL.md when &lt;condition&gt;</code>,標一個 <b>Primary</b>。不是 flat frontmatter list。</li>
+    <li><b>skill 之間用 <code>Related skills:</code> 橫向連結</b>。載入的 skill 自己 route 到鄰居,agent 不必認識全部 skill。</li>
+    <li><b>repo/workflow 專屬程序留 agent,domain 知識進 skill</b>。GodotPrompter 把「parity mode 6 步」留 agent(專屬),domain 保持可重用。</li>
+    <li><b>agent description 用 <code>&lt;example&gt;</code> 做 routing,skill description 做 loading</b>。兩個不同受眾:dispatcher 選 agent vs agent 選 skill。</li>
+  </ol>
+  <div class="callout c-green">
+    <span class="ico">Anthropic 背書</span>
+    這正是 Agent Skills 的 progressive disclosure:<b>metadata 永遠載入 → body 觸發時載入 → bundled files 按需載入</b>。
+    <blockquote style="margin-top:8px">keep the core of the skill lean, trusting that Claude will read forms.md only when filling out a form.
+    <span class="src">Equipping agents for the real world with Agent Skills</span></blockquote>
+  </div>
+</section>
+
+<!-- D -->
+<section id="d">
+  <h2><span class="num">D</span>重構規格</h2>
+  <div class="h2title">Target shape — 可直接照做</div>
+
+  <h3 id="d1">D1 · Agent 瘦身 — generator 從 337 → ~80 行</h3>
+  <p>每段都有家。重點:這些方法論你<b>90% 已有對應 skill</b>,現在是「既貼 agent 又放 skill」= 雙倍佔注意力。</p>
+  <table>
+    <thead><tr><th>generator.md 現有段落</th><th>行數</th><th>去處</th></tr></thead>
+    <tbody>
+      <tr><td>Stack discovery 全段</td><td>16–41</td><td><span class="arrow">→</span> stack-skill 機制 + 一句「discover stacks; use <code>## Commands</code> verbatim」</td></tr>
+      <tr><td>NEGOTIATE draft YAML schema</td><td>69–102</td><td><span class="arrow">→</span> <code>contract.schema.json</code>(已存在)· agent 只留指標</td></tr>
+      <tr><td>Six checks self-check</td><td>104–113</td><td><span class="arrow">→</span> <code>generator-handbook</code>(JIT)</td></tr>
+      <tr><td>Mid-flight amendment YAML</td><td>115–135</td><td><span class="arrow">→</span> <code>generator-handbook</code></td></tr>
+      <tr><td>Implementation order §2</td><td>162–169</td><td><span class="arrow">→</span> <code>deep-module-handbook</code>(已有)</td></tr>
+      <tr><td>ADR triggers 全段</td><td>171–228</td><td><span class="arrow">→</span> <code>adr-lifecycle</code>(<b style="color:var(--red)">已有!現在重複貼在 agent</b>)</td></tr>
+      <tr><td>Inner gate stages</td><td>230–238</td><td><span class="arrow">→</span> stack skill <code>## Commands</code></td></tr>
+      <tr><td>next_action 三分支詳解</td><td>249–276</td><td><span class="arrow">→</span> <code>generator-handbook</code></td></tr>
+      <tr><td>Mandatory checklists</td><td>306–326</td><td><span class="arrow">→</span> <code>generator-handbook</code></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:13.5px;color:var(--muted)">瘦身後 agent body 只留:identity + 兩 mode 各 3–5 行 + 條件式 skill index + output format 一行表。</p>
+
+  <h3>D2 · Skill 切分 — 把「一大包」拆成「Use when」可觸發單元</h3>
+  <p><code>generator-handbook</code> 目前是 negotiate + amend + next_action + vertical-slice 一包。建議切三個:</p>
+  <table>
+    <thead><tr><th>新 skill</th><th>description(直接照寫)</th></tr></thead>
+    <tbody>
+      <tr><td><code>gen-contract-negotiation</code></td><td><i>Use when proposing or amending a sprint contract — done_looks_like shape, the six self-checks, criterion_mapping rules</i></td></tr>
+      <tr><td><code>gen-next-action-obedience</code></td><td><i>Use when an evaluator FAIL came back — how to read next_action and execute refine | restart_sprint | escalate verbatim</i></td></tr>
+      <tr><td><code>gen-vertical-slice</code></td><td><i>Use when implementing a sprint — vertical-slice self-check, implementation order, pass-through smell</i></td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-amber"><span class="ico">Anthropic 上限</span>
+    SKILL.md body <b>&lt; 500 行</b>;reference 檔<b>一層深</b>(直接從 SKILL.md 連,避免 Claude 只讀一半);>100 行的 reference 加 table of contents。</div>
+
+  <h3 id="d3">D3 · 修掉 reuse drift(Part B 的解,最重要)</h3>
+  <div class="grid2">
+    <div class="card">
+      <b style="color:var(--cyan)">(a) 給它「現有什麼」的 JIT input</b>
+      <p style="font-size:14px">NEGOTIATE input 清單加第 8 項:</p>
+      <blockquote style="font-style:normal">Component/strands registry — read CODEMAP.md (or a /loop-time component-inventory) listing existing modules + reusable strands subagents with their entry points.</blockquote>
+      <p style="font-size:13px;color:var(--muted)">CODEMAP.md 現在只在 /finalize 生成 → /loop 期間 agent 看不到任何現有元件。要在 <b>/loop start 就生一份輕量 inventory</b>(路徑 + 一行用途,不塞全部 code —— 符合 Anthropic just-in-time / lightweight identifiers)。</p>
+    </div>
+    <div class="card">
+      <b style="color:var(--cyan)">(b) 把 reuse 設成硬 gate</b>
+      <p style="font-size:14px">contract self-check 加第 7 條:</p>
+      <blockquote style="font-style:normal"><b>Reuse-before-build</b> — 每個 done_looks_like[] 若新增 module/subagent,必須註明「checked registry; no existing X covers this because &lt;reason&gt;」。未註明 = evaluator <code>reject</code>。</blockquote>
+      <p style="font-size:13px;color:var(--muted)">把「未定義決策點」變成「<b>必須回答的問題</b>」,擋掉 completion 偏誤。</p>
+    </div>
+  </div>
+
+  <h3>D4 · Strands / MCP 使用準則(對應你「如有 mcp 應該要做」)</h3>
+  <blockquote>subagents… help manage context: subagents use their own isolated context windows, and only send relevant information back.
+    <span class="src">Building agents with the Claude Agent SDK</span></blockquote>
+  <blockquote>MCP… handling authentication and API calls automatically… without writing custom integration code or managing OAuth flows yourself.
+    <span class="src">Building agents with the Claude Agent SDK</span></blockquote>
+  <ul style="font-size:14px;line-height:1.8">
+    <li><b>既有 strands subagent 用單一明確 tool/MCP 入口呼叫</b>,在 agent body 一句不可誤解的契約:<span class="kbd">To run a strands agent, call &lt;tool&gt;; NEVER hand-roll the orchestration.</span> — 對應 Anthropic「consolidate into few high-impact tools」「namespace」。</li>
+    <li><b>subagent 一職責、最小 tool set(least privilege)</b>。Apollo 的 <code>codebase-fact-finder</code> 已是好範例(只讀、blindfold)—— 把 strands 呼叫做成同樣窄的契約。</li>
+  </ul>
+</section>
+
+<!-- E -->
+<section id="e">
+  <h2><span class="num">E</span>落地</h2>
+  <div class="h2title">建議 pilot + 可驗證 check</div>
+  <div class="callout c-cyan"><span class="ico">Pilot 標的</span>
+    <code>generator</code> 的 <b>NEGOTIATE mode</b>(你點名的跑偏現場)。一次只動一個,符合 Anthropic「one feature at a time」的 long-horizon 紀律。</div>
+
+  <p>把 Part A 的失敗模式翻成可驗證 check(落實 CLAUDE.md 第 4 條「定義成功判準、loop until verified」):</p>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="check-item" style="background:var(--panel2)"><div class="cid">ID</div><div><b>Check</b></div><div><b>驗證方式</b></div></div>
+    <div class="check-item"><div class="cid">C1</div><div>agent body ≤ 100 行、無 >1 行 code block</div><div><code>wc -l</code> + 人工掃 code fence</div></div>
+    <div class="check-item"><div class="cid">C2</div><div>每個外移段落在某 skill 有家、且無重複</div><div>grep 確認 agent 不再含 ADR three-test gate 等</div></div>
+    <div class="check-item"><div class="cid">C3</div><div>每個 skill description 符合 <code>Use when … — …</code></div><div>lint skill frontmatter</div></div>
+    <div class="check-item"><div class="cid">C4</div><div>NEGOTIATE input 含 component registry</div><div>讀 input 清單</div></div>
+    <div class="check-item"><div class="cid">C5</div><div>draft 對新增 module 有 reuse 註記</div><div>跑一個真 sprint,看 draft YAML</div></div>
+    <div class="check-item"><div class="cid">C6</div><div>strands 經單一 tool 契約呼叫、無手刻 orchestration</div><div>讀 transcript</div></div>
+  </div>
+
+  <h3>建議下一步(三選一)</h3>
+  <div class="grid3">
+    <div class="card"><b style="color:var(--purple)">① 產出 thin generator 草稿</b><p style="font-size:13px;color:var(--muted)">~80 行完整可貼版 + 切分後 skill frontmatter stub。草稿檔,不覆蓋現有。<b style="color:var(--green)">(我傾向先做這個)</b></p></div>
+    <div class="card"><b style="color:var(--purple)">② D3 registry 機制設計</b><p style="font-size:13px;color:var(--muted)">/loop start 怎麼生 inventory、塞哪個 input。最能止血 reuse drift。</p></div>
+    <div class="card"><b style="color:var(--purple)">③ 全面套用</b><p style="font-size:13px;color:var(--muted)">三個 agent + 全 skill 重切。範圍大,建議 pilot 驗證後再做。</p></div>
+  </div>
+</section>
+
+<!-- sources -->
+<section id="src">
+  <h2><span class="num">§</span>來源</h2>
+  <div class="h2title">全部 primary Anthropic / 官方 + GodotPrompter</div>
+  <div class="card src-list twocol">
+    <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a>
+    <a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a>
+    <a href="https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills">Equipping agents for the real world with Agent Skills</a>
+    <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing effective tools for AI agents</a>
+    <a href="https://www.anthropic.com/engineering/multi-agent-research-system">How we built our multi-agent research system</a>
+    <a href="https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices">Skill authoring best practices (Claude docs)</a>
+    <a href="https://claude.com/blog/building-agents-with-the-claude-agent-sdk">Building agents with the Claude Agent SDK</a>
+    <a href="https://code.claude.com/docs/en/agent-sdk/subagents">Subagents in the SDK (Claude Code docs)</a>
+    <a href="https://www.anthropic.com/news/model-context-protocol">Introducing the Model Context Protocol</a>
+    <a href="https://github.com/jame581/GodotPrompter/blob/master/agents/godot-csharp-engineer.md">GodotPrompter · godot-csharp-engineer.md</a>
+  </div>
+  <div class="callout c-amber"><span class="ico">引用注意</span>
+    Anthropic 引文是經 fetch 摘取的 verbatim/near-verbatim;若要公開引用,請對上方原始 URL 做一次逐字確認。</div>
+</section>
+
+<footer>
+  gan-harness × Apollo-Agent-Harness · thin-agent + focused-skills refactor analysis ·
+  generated 2026-05-31 · 不動現有 code · 本檔位於 <code>_analysis/agent-refactor-report.html</code>
+</footer>
+
+</div>
+</body>
+</html>
