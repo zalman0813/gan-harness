@@ -341,7 +341,7 @@ After all axes per module:
   ├─ Any FAIL? → module contributes FAIL to sprint verdict
   └─ All PASS → module contributes PASS
 
-Sprint-level rollup (per evaluator-handbook):
+Sprint-level rollup (per evaluator.md Mode 2 VERIFY):
   - All modules PASS → consider this slice toward sprint PASS
   - Any module FAIL → contributes FAIL toward sprint verdict;
     final verdict combines with other criterion_mapping signals
@@ -482,8 +482,7 @@ measure rot).
 
 - General evaluator discipline (review_contract for NEGOTIATE,
   transcript-as-evidence, criterion_mapping rollup, threshold check)
-  → inline in `.claude/agents/evaluator.md` + `evaluator-handbook`
-  skill.
+  → inline in `.claude/agents/evaluator.md`.
 - Stack-specific test runner / lint commands → active stack skill's
   `## Commands` table.
 - Verification levels (L1 / L2 / L5) → spec's evaluation criteria +

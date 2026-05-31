@@ -143,8 +143,8 @@ The script:
 
 Read the JSON summary's `missing_barrel_docstrings` and
 `missing_module_docstrings` lists; if non-empty, surface them to the
-user as TODOs for the next epic's generator (per generator-handbook's
-barrel-docstring requirement).
+user as TODOs for the next epic's generator (the barrel-docstring
+convention).
 
 If the script exits 1 because there are no Python packages (e.g.,
 non-Python stack), the active stack skill is responsible for providing

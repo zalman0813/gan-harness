@@ -43,6 +43,30 @@ When a project-specific rule below conflicts with one of these, the
 project-specific rule wins for that scope — but cite which line you're
 overriding and why, so the override is auditable.
 
+## Harness operating rules (for harness subagents)
+
+These apply only when a harness subagent (planner / generator / evaluator /
+fact-finder) runs **inside this repo** — e.g. a test `/loop` in a worktree.
+The thin agents under `.claude/agents/` deliberately do NOT restate these; in
+a target project they arrive via the injected `## Harness operating rules`
+block (`setup-gan-harness-skills/templates/claude-md-skills-block.template.md`).
+This section is the in-repo equivalent so test runs get the same guardrails.
+(Behavioral foundation is the section above — not repeated here.) The
+write-side rules are also enforced by `block_pretool.py` regardless of this prose.
+
+- **Skill-loading.** `skills:` frontmatter *registers* a skill; it is NOT
+  auto-injected. Load a skill body with the Skill tool only when its `Use when`
+  trigger matches. Never `Read` a skill's `references/` files directly.
+- **Write-boundaries.** `specs/_epic/spec.md` immutable (planner-only, at /init);
+  `specs/_epic/contracts.jsonl` append-only by MAIN; `docs/adr/*` generator-only;
+  never read a sibling agent's `.claude/agents/*.md`; `.git/hooks/` denied;
+  `_traces/*` belong to the hook.
+- **Output contract.** Return exactly one line to the parent: a status token
+  (`done` / `blocked` / `escalate`) + key=value naming the artifact; don't echo the mode.
+- **Anti-cheat.** Unspecified → surface the assumption, don't pick a default.
+  "Standard / close enough" → verify the project's actual convention and re-run
+  the check. Done is verified, not believed.
+
 ## Critical: maintainer-only vs target-copied paths
 
 | Path | Setup-copied to target? | If you write here, audience is |

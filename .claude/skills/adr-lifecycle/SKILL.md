@@ -147,4 +147,4 @@ Evaluator does NOT author ADRs. During VERIFY mode it may:
 - Read `docs/adr/` + `docs/adr/index.md` as verification context.
 - Emit `standards_axis.findings[].source: "missing_adr"` when the diff shows an undocumented decision that passes the three-test gate.
 
-Authorship of the flagged ADR is the next round's generator job. See `.claude/agents/evaluator.md > ## Missing-ADR detection (standards-axis source)` for the detection procedure.
+Authorship of the flagged ADR is the next round's generator job. See `.claude/agents/evaluator.md` (Mode 2 VERIFY — the Missing-ADR paragraph) for the detection procedure.

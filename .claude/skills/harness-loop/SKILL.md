@@ -108,7 +108,7 @@ After Phase 0.6, proceed to Phase 1 for sprint S{NN}.
 
 ### Phase 1 — Negotiate (per sprint S{NN})
 
-Both agents auto-load `deep-module-handbook` via their frontmatter — generator follows `generator-slice §1.5`, evaluator follows `evaluator-slice §1.5`. The contract-mechanics handbooks (generator-handbook / evaluator-handbook) compose with these slices.
+Both agents have `deep-module-handbook` registered in frontmatter; they load it via the Skill tool when a sprint touches a module — generator follows `generator-slice §1.5`, evaluator follows `evaluator-slice §1.5`. Contract mechanics are inlined in each agent's own prompt (no separate handbook skill).
 
 For round R = 1, 2, 3, ... (no cap):
 
@@ -135,7 +135,7 @@ For implementation round IR = 1, 2, 3, ... (no cap):
 
 0. **Set trace context** (before the spawn): run `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {IR}`.
 1. **Spawn evaluator** (fresh ctx) with prompt: "Verify sprint S{NN} round IR. Read in locked order: spec.md → contracts.jsonl[latest agreed for S{NN}] → `_traces/S{NN}-gen-R{IR}.jsonl[start:end]` → git diff → `_audit/S{NN}/anchor-ledger-R{IR}.tsv` + `_audit/S{NN}/divergence-R{IR}.md` (if present). Run verification_plan + matrix sensor. Emit `_evals/S{NN}-R{IR}.json` with dual-axis envelope + top-level `next_action`."
-2. Evaluator runs verification; on FAIL determines `next_action` per the rules in `.claude/agents/evaluator.md > ## Next-action determination`.
+2. Evaluator runs verification; on FAIL determines `next_action` per the rules in `.claude/agents/evaluator.md` (Mode 2 VERIFY — the next_action paragraph).
 3. Evaluator writes `_evals/S{NN}-R{IR}.json`:
    - `contract_axis.{criteria, findings, verdict}`
    - `standards_axis.{matrix_sensor, module_design_verification, findings, verdict}`

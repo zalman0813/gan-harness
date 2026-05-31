@@ -37,7 +37,7 @@ A per-sprint testable agreement negotiated between generator and evaluator at th
 _Avoid_: feature-list, AC bundle, test contract
 
 **Archetype**:
-The single-line `## Archetype` field in spec.md naming the kind of artefact this epic produces. One of: `frontend`, `backend`, `library`, `cli`, `data-pipeline`, `hybrid`. Drives the 4 evaluation criteria template (see `.claude/skills/planner-handbook/SKILL.md`).
+The single-line `## Archetype` field in spec.md naming the kind of artefact this epic produces. One of: `frontend`, `backend`, `library`, `cli`, `data-pipeline`, `hybrid`. Drives the 4 evaluation criteria template (see `.claude/agents/planner.md` "Archetype → 4-criteria templates").
 _Avoid_: project type, app type, kind
 
 **Evaluation criteria**:

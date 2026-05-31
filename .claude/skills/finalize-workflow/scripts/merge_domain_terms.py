@@ -15,7 +15,7 @@ The spec.md format is strict (single source of truth: spec_lint.py L08):
     - **<term-with-context>** — <definition that may continue on the
       next line as long as the continuation indents with two spaces>
 
-CONTEXT.md format mirrors what planner-handbook ships:
+CONTEXT.md format mirrors what the planner writes:
 
     ## Language
 

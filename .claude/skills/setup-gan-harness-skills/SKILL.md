@@ -1,6 +1,6 @@
 ---
 name: setup-gan-harness-skills
-description: One-time bootstrap that scaffolds the gan-harness substrate into a target project — copies the .claude/ tree, injects a minimal ### Domain docs block into CLAUDE.md or AGENTS.md, chain-calls stack-skill-creator for each detected stack, and wires produced stack skill names into planner / generator / evaluator frontmatter `skills:` lists. Pocock-style 5-step flow (Explore / Ask one-at-a-time / Confirm / Write / Done). Lazy-creates CONTEXT.md / CODEMAP.md / docs/adr/ on demand by downstream stages, never preempts. Use when the user runs this skill to initialize a fresh target project for gan-harness.
+description: One-time bootstrap that scaffolds the gan-harness substrate into a target project — copies the .claude/ tree, injects the `## Harness operating rules` block (behavioral guardrails + write-boundaries + Domain docs pointers) into CLAUDE.md or AGENTS.md, chain-calls stack-skill-creator for each detected stack, and wires produced stack skill names into planner / generator / evaluator frontmatter `skills:` lists. Pocock-style 5-step flow (Explore / Ask one-at-a-time / Confirm / Write / Done). Lazy-creates CONTEXT.md / CODEMAP.md / docs/adr/ on demand by downstream stages, never preempts. Use when the user runs this skill to initialize a fresh target project for gan-harness.
 disable-model-invocation: true
 ---
 
@@ -31,11 +31,11 @@ not to myself.
 |---|---|
 | "User didn't choose, sane default is fine" | For load-bearing decisions (stack, layout, memory file), ask. For purely cosmetic, default may be fine but say which I picked. |
 | "This file might be needed later, I'll create a stub now" | Lazy creation. No empty stubs for `CONTEXT.md` / `CODEMAP.md` / `docs/adr/index.md` — producer creates on first real content. |
-| "User's edits to `README.md` / `CLAUDE.md` look wrong" | Not my call to revise. They own per-project decisions. I only inject the `### Domain docs` block; I never touch surrounding sections. |
+| "User's edits to `README.md` / `CLAUDE.md` look wrong" | Not my call to revise. They own per-project decisions. I only inject the `## Harness operating rules` block; I never touch surrounding sections. |
 | "Stack detection found nothing, I'll guess from filenames" | No. If detection is empty, surface that to the user and let them name the stack — or skip stack wiring entirely. Inventing a stack creates a wrong skill that drifts forever. |
 | "Section walk is tedious; I'll bulk-ask everything in one prompt" | No. One `AskUserQuestion` per section, with explainer first. The interactive cadence IS the contract; bulk-ask collapses it. |
 | "Agent frontmatter edit is mechanical; I'll inline the change without a script" | Use `wire_stack_skills.py`. Mechanical edits go through the script so behaviour is reproducible and testable. |
-| "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /init /loop etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents auto-load their own handbooks; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
+| "Add a Pipeline / Conventions / Stack section so the main-session Claude knows what /init /loop etc. do and what gan-harness conventions are" | NO. The block is intentionally minimal (3 bullets pointing at CONTEXT.md / docs/adr/ / CODEMAP.md). Slash commands self-document via SKILL.md when invoked; subagents load skills on trigger via the Skill tool; main-session Claude can grep `.claude/commands/`. Pre-explaining bloats CLAUDE.md without giving Claude actionable context. |
 | "Stack skill mentions MCP tools — I'll write `target/.mcp.json`" | NO. `.mcp.json` loads the MCP server into the **main session**, paying its full tool-description context cost (often 100+ tools per server) on every startup, even when only subagents use them. Use **inline `mcpServers:`** in the relevant subagents' frontmatter — server starts only when that subagent is spawned, main session stays clean. (See Phase 4e2.) |
 | "Adding `mcp__<server>__*` to the subagent's `tools:` allowlist is enough" | NO. `tools:` is the *permission filter*; `mcpServers:` is what makes the *server reachable*. Both must be set together. `tools:` alone leaves the server unconnected; `mcpServers:` alone leaves the tools filtered out by the allowlist. Either way the subagent fails with "No such tool available". |
 | "User-global `~/.claude.json` MCP entry propagates to spawned subagents" | NO. Subagents inherit MCP only from servers loaded by the **session itself** (project `.mcp.json` or inline `mcpServers:` in the agent file). User-global config makes MCP available to the interactive main session but does NOT auto-propagate to spawned subagents — this trap fails silently with "No such tool available" and looks like a syntax bug. |
@@ -73,7 +73,7 @@ After successful run:
 - `target/.claude/` — full copy of source `.claude/` minus exclusions
   (`setup-gan-harness-skills/` itself, `__pycache__`, `.DS_Store`)
 - `target/README.md` — from template (only if target had none)
-- `target/CLAUDE.md` or `target/AGENTS.md` — `### Domain docs` block
+- `target/CLAUDE.md` or `target/AGENTS.md` — `## Harness operating rules` block
   injected (created if neither existed; updated in-place if one did)
 - `target/.claude/skills/<stack-name>/` × N — one per confirmed stack,
   produced by chain-called stack-skill-creator
@@ -178,8 +178,8 @@ genuine source checkout will.
 #### Section B — Project identity
 
 > The README.md template needs a project name and one-line description.
-> These appear at the top of the README. (The injected `### Domain docs`
-> block is fixed content; it does not take the project name.)
+> These appear at the top of the README. (The injected `## Harness operating
+> rules` block is fixed content; it does not take the project name.)
 
 Two AskUserQuestion calls (one per field): `name` (kebab-case slug) and
 `one_line_description`.
@@ -187,10 +187,14 @@ Two AskUserQuestion calls (one per field): `name` (kebab-case slug) and
 #### Section C — Memory file
 
 > Claude Code reads either `CLAUDE.md` or `AGENTS.md` (never both) at
-> session start to learn project context. Setup will inject a minimal
-> `### Domain docs` block pointing at CONTEXT.md / docs/adr/ / CODEMAP.md
-> (3 bullets; no Pipeline / Conventions / Stack subsections — those are
-> intentionally omitted; see Common Rationalizations).
+> session start to learn project context. Setup will inject the
+> `## Harness operating rules` block — the always-in-context guardrails
+> every harness subagent runs against (behavioral foundation, skill-loading
+> rule, write-boundaries, output contract, anti-cheat stance) plus a
+> `### Domain docs` pointer to CONTEXT.md / docs/adr/ / CODEMAP.md. The
+> thin agents under `.claude/agents/` rely on this block instead of
+> restating the rules. The Domain docs pointer stays 3 bullets — no
+> Pipeline / Conventions / Stack subsections (see Common Rationalizations).
 
 Branch on Phase 1's `HAS_CLAUDE_MD` / `HAS_AGENTS_MD`:
 - both false → AskUserQuestion: "Create CLAUDE.md or AGENTS.md?"
@@ -263,7 +267,7 @@ Ready to write to <target>:
   .claude/            : copy from <source>/.claude/ (excluding setup-gan-harness-skills/)
   Stack skills        : <STACKS_TO_BUILD — built in 4b, after .claude/ exists>
   README.md           : <new from template / skip — already exists>
-  CLAUDE.md           : <inject ### Domain docs block>
+  CLAUDE.md           : <inject ## Harness operating rules block>
   Wire stacks into    : agents/{planner,generator,evaluator}.md `skills:`
   MCP wiring          : <list of MCP servers + chosen agents, or "none — no stack skill references MCP">
                         (inline mcpServers: + tools: allowlist; NEVER .mcp.json)
@@ -369,15 +373,25 @@ Write to `$PWD/README.md`.
 
 If `HAS_README=true`, skip (the user owns their README).
 
-#### 4d. Memory file `### Domain docs` block
+#### 4d. Memory file `## Harness operating rules` block
 
 Read
 `.claude/skills/setup-gan-harness-skills/templates/claude-md-skills-block.template.md`
-verbatim (no token substitution; the template is fixed content). Then:
+verbatim (no token substitution; the template is fixed content). It
+carries one block: a `## Harness operating rules` H2 with subsections
+(Behavioral foundation / Skill-loading rule / Write-boundaries / Output
+contract / Anti-cheat stance / Domain docs). These are the always-in-context
+guardrails every harness subagent runs against — the thin agents under
+`.claude/agents/` deliberately do NOT restate them, so this injection is
+load-bearing, not cosmetic. Then, into the chosen memory file (`CLAUDE.md`
+or `AGENTS.md`):
 
-- If a `### Domain docs` section already exists in the chosen memory
-  file (`CLAUDE.md` or `AGENTS.md`), update it in-place. Do not touch
-  surrounding sections.
+- If a `## Harness operating rules` section already exists, replace it
+  in-place with the template block. Do not touch surrounding sections.
+- Else if a legacy `### Domain docs` section exists (from a pre-thin-agent
+  setup run) but no `## Harness operating rules`, replace that `### Domain
+  docs` section with the full template block (it now lives inside the new
+  H2).
 - Else append the block at the end of the file.
 - If neither memory file exists, create the chosen one **without any
   YAML frontmatter** — the memory file is plain markdown that Claude
@@ -554,7 +568,7 @@ setup-gan-harness-skills complete — <project_name>
 
 Wrote .claude/                        ✓
 Wrote README.md                       <✓ / skipped — existed>
-Updated <CLAUDE.md|AGENTS.md>         ✓ (### Domain docs block)
+Updated <CLAUDE.md|AGENTS.md>         ✓ (## Harness operating rules block)
 Built stack skills                    <list or "none">
 Wired stacks into agent frontmatter   <✓ / skipped — no stacks>
 MCP wiring (inline mcpServers:)       <list of server→agents pairs, or "none — no stack skill referenced MCP">
@@ -583,14 +597,15 @@ Next: /init  (start your first epic)
 - **Pre-creating `CONTEXT.md` / `CODEMAP.md` / `docs/adr/`.** Lazy
   per locked decision. Stubs are lies.
 - **Editing surrounding sections of an existing CLAUDE.md / AGENTS.md /
-  README.md.** Setup only owns the `### Domain docs` block (and a fresh
-  README from template if missing). Anything else is the user's.
-- **Bloating the injected block.** The `### Domain docs` block is
-  intentionally 3 bullets. Don't add Pipeline / Conventions / Stack
-  subsections back in: subagents auto-load their own handbooks; slash
-  commands self-document at invocation time; main-session Claude can
-  grep `.claude/commands/` if it needs to know what `/init` etc. do.
-  Pre-explaining is documentation, not actionable context.
+  README.md.** Setup only owns the `## Harness operating rules` block (and
+  a fresh README from template if missing). Anything else is the user's.
+- **Bloating the injected block.** The block is exactly the template
+  content — the harness rules plus a 3-bullet `### Domain docs` pointer.
+  Don't add Pipeline / Conventions / Stack subsections back in: subagents
+  load skills on trigger via the Skill tool; slash commands self-document
+  at invocation time; main-session Claude can grep `.claude/commands/` if
+  it needs to know what `/init` etc. do. Pre-explaining is documentation,
+  not actionable context.
 - **Using both CLAUDE.md AND AGENTS.md.** Pocock rule: pick one. Setup
   refuses to proceed if both exist (manual cleanup needed first).
 - **Bulk-asking all sections at once.** Walk one-at-a-time, each with
@@ -628,7 +643,7 @@ Next: /init  (start your first epic)
 - [ ] 4a `.claude/` copied (minus setup-gan-harness-skills, `__pycache__`)
 - [ ] 4b stack skills built into `target/.claude/skills/<name>/` (if any)
 - [ ] 4c README.md present (template-rendered or pre-existing)
-- [ ] 4d CLAUDE.md or AGENTS.md has `### Domain docs` block (no YAML frontmatter added)
+- [ ] 4d CLAUDE.md or AGENTS.md has `## Harness operating rules` block (no YAML frontmatter added)
 - [ ] 4e stack names wired into planner/generator/evaluator frontmatter
 - [ ] 4e2 if any built stack skill referenced `mcp__<server>__` tools: inline `mcpServers:` blocks + `mcp__<server>__*` allowlist entries wired into chosen agents' frontmatter; `target/.mcp.json` NOT written; user reminded to restart session
 - [ ] 4f `.git/hooks/pre-commit` installed + executable

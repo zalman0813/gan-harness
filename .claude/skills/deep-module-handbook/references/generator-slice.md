@@ -10,7 +10,7 @@ red flags, and DDD calibration.
 generator behaviors. The generator's general behavior (e.g.,
 strategic-decide refine-vs-pivot, anti-oscillation, when to call
 `propose_contract` vs `propose_contract_amendment`) lives inline in
-`.claude/agents/generator.md` and in the `generator-handbook` skill.
+`.claude/agents/generator.md`.
 
 ## §1 When the generator consults this slice
 
@@ -216,7 +216,7 @@ in `.claude/agents/generator.md`.
 - Generator's general ambiguity-handling discipline (strategic-decide
   refine-vs-pivot, when to call `propose_contract_amendment`,
   anti-oscillation, vertical-slice self-check) → inline in
-  `.claude/agents/generator.md` + `generator-handbook` skill.
+  `.claude/agents/generator.md`.
 - Stack-specific test runner / barrel / module conventions → active
   stack skill's `references/`.
 - AC interpretation (what to implement) → spec's

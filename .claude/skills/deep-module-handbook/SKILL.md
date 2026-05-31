@@ -83,7 +83,7 @@ concerns into your context.
   `evaluator-slice.md` only. Both read `foundation.md` first.
 - **Planner loading this skill** — vestigial v1 wiring. v3.8 planner
   writes high-level spec.md only and does not design modules. If
-  loaded by mistake, exit and rely on `planner-handbook` instead.
+  loaded by mistake, exit and rely on `.claude/agents/planner.md` instead.
 - **Treating red flags as auto-FAIL** — red flags are investigation
   triggers, not verdicts. They surface as contract-amendment proposals
   or findings in `design_review`; evaluator's threshold check decides.

@@ -47,7 +47,7 @@ ASSUMPTIONS I'M MAKING:
 
 ### Phase 1 — Spawn planner `--produce-grill` (initial round)
 
-The planner agent (auto-loads `planner-handbook`) runs in `--produce-grill` mode. Pass it the path to `specs/_epic/intent.md` and any flags. Note: planner does NOT load `deep-module-handbook` or `adr-lifecycle` in v3.8 — module-level cognition and ADR authoring are /loop concerns.
+The planner agent runs in `--produce-grill` mode. Pass it the path to `specs/_epic/intent.md` and any flags. Note: planner does NOT load `deep-module-handbook` or `adr-lifecycle` in v3.8 — module-level cognition and ADR authoring are /loop concerns; the grill procedure is inlined in the agent prompt.
 
 The planner will:
 
@@ -55,7 +55,7 @@ The planner will:
 - Read `specs/_epic/intent.md` + `CONTEXT.md` + latest archived epics.
 - Draft best-guess answers for every required toggle group (Vision / Tech stack / Archetype / Scope / Sprint plan).
 - For each proposed sprint, draft a Cohn-pattern User story + 3-5 Success (user POV) bullets + Smoke check.
-- Write `specs/_epic/_grill.html` with planner's drafts + tradeoffs + recommended pre-selections per the structure spec'd in `.claude/agents/planner.md > ## Grill artifact`.
+- Write `specs/_epic/_grill.html` with planner's drafts + tradeoffs + recommended pre-selections per the structure spec'd in `.claude/agents/planner.md` (Mode 1 `--produce-grill`).
 - Return `GRILL READY: specs/_epic/_grill.html (round=<R>; toggles=<N>)`.
 
 ### Phase 2 — Surface to user
