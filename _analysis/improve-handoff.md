@@ -1,9 +1,13 @@
 # Improve handoff — thin-agent + focused-skill refactor
 
-> Status: **design converged, partially landed.** One live change committed
-> (stack-skill-creator); the rest are reviewed drafts in `_analysis/` awaiting
-> landing into `.claude/`. This doc carries the background + the rationale + the
-> remaining work so the next session can continue without re-deriving anything.
+> Status: **LANDED in gan-harness + propagated to Apollo.**
+> - gan-harness: all six follow-ups landed, committed `e52411c`
+>   (`refactor(agents): land thin agents + fold handbooks into CLAUDE.md rules`).
+> - Apollo-Agent-Harness: thin agents + CLAUDE.md block + handbook deletion +
+>   two stack skills rebuilt + pattern-skill-creator + reference reconciliation,
+>   on branch `thin-agent-skill-refactor`.
+> The original design rationale is kept below; the live state is in §3, the
+> Apollo propagation in §7. Remaining work is optional (§4 / §7 tails).
 
 ---
 
@@ -109,6 +113,16 @@ Consequences:
 
 ## 4. Follow-up work (ordered)
 
+> **All six landed in gan-harness (commit `e52411c`).** Items 1-6 below are done:
+> pattern-skill-creator shipped; thin agents replaced live; handbooks deleted +
+> refs cleaned; CLAUDE.md "Harness operating rules" block added to the setup
+> template (`claude-md-skills-block.template.md`) + §4d injector + this repo's own
+> CLAUDE.md; harness-loop / init / finalize / adr-lifecycle / deep-module slices
+> reconciled (incl. the 3 broken `agents/*.md > ##` section cross-refs). The
+> README.md + `docs/maintainer/design/*` pre-existing v3.8 staleness was left
+> untouched (flagged, not in scope). The original ordered list is kept below for
+> provenance.
+
 1. **Land `pattern-skill-creator`** → `.claude/skills/pattern-skill-creator/SKILL.md`
    (move the draft; low risk, new non-destructive file).
 2. **Land the three thin agents** → replace `.claude/agents/{generator,planner,evaluator}.md`.
@@ -162,3 +176,55 @@ For each landed thin agent, check it still carries (grep the agent + diff vs old
 - the **write-deny** surfaces (now in CLAUDE.md, but block_pretool still enforces).
 
 "Done" = the harness-loop skill can drive the thin agent end-to-end with no missing token.
+
+---
+
+## 7. Apollo-Agent-Harness propagation (done; branch `thin-agent-skill-refactor`)
+
+Apollo is a live product repo that received the gan-harness substrate earlier, then
+diverged with richer mechanism. The same design was applied there — but Apollo's
+agents are NOT a copy of gan-harness's; they were distilled from Apollo's own bloated
+agents so the divergent machinery survives.
+
+**Thin agents** (`.claude/agents/`): planner 454→77, generator 529→154, evaluator
+588→122. Apollo-specific mechanism preserved verbatim: the **two-gate contract**
+(`inner_gate[]` generator-run + `outer_gate[]` evaluator-run, phase-ordered
+env→integration→e2e→matrix with `depends_on`/`on_fail`), the **inner-gate artifact**
+(`_pending/S{NN}-inner-gate-R{IR}.json`, trusted at VERIFY Phase 0, no unit re-run),
+the **handoff note**, the **AWS env precondition gate** (env-blocker → escalate on
+first occurrence), `criterion_mapping` over outer_gate ids, the **mcpServers**
+frontmatter blocks (Strands / copilotkit / next-devtools / aws-iac), and the existing
+prose output-line formats (Apollo's harness-loop reads files, not the line). Added the
+**reuse-before-build** gate (the motivating fix: call existing Strands/AgentCore
+subagents by their MCP tool, don't hand-roll). Removed the **"already preloaded"**
+false premise and the **"stack_audit = audit FAIL"** fiction (Apollo's
+`log_subagent_stop.py` is pure logging — `progress.tsv` has no stack_audit column).
+
+**CLAUDE.md**: added the `## Harness operating rules` block (behavioral foundation +
+skill-loading + write-boundaries + output contract + anti-cheat, incl. a "reuse first,
+don't hand-roll Strands" row), sitting above Apollo's existing Domain docs / AWS env /
+doc-authoring sections.
+
+**Handbooks**: deleted `generator/planner/evaluator-handbook`; cleaned refs in the kept
+skills (deep-module slices, aws-ephemeral-testinfra, harness-loop, init/finalize-workflow,
+adr-lifecycle) incl. the 3 broken `agents/*.md > ##` cross-refs.
+
+**Stack skills rebuilt** (lightweight, version-anchored, **matched to the codebase** —
+verified live by a subagent, not the skill's prior prose):
+- `nextjs-copilotkit-agui` 416→70 — Next 16.2.6 / React 19.2 / CopilotKit 1.57 (v1
+  root import) / Tailwind v4; **AG-UI consumed as raw SSE, NOT `@ag-ui/client`** (the
+  codebase has no `@ag-ui/*`); version-delta highlights + the field-observed `useCoAgent`
+  setState HAZARD preserved; Commands verbatim. Its three `references/*.md` were
+  reconciled to stop prescribing `@ag-ui/client`.
+- `python-agentcore-strands` 252→63 — Python 3.11 / strands-agents 1.41 /
+  bedrock-agentcore 1.1.5 / **FastAPI 0.115 hand-rolled** (not `BedrockAgentCoreApp`,
+  matching the codebase) / uv; Strands→AG-UI dict-by-toolCallId gotcha + Memory-vs-DynamoDB
+  boundary preserved; Commands verbatim.
+
+**Also**: added `pattern-skill-creator`; fixed the `log_subagent_stop.py` render label
+("Skills preloaded" → "Skills registered (frontmatter — load on trigger)").
+
+**Apollo remaining (optional)**: wire `pattern-skill-creator`/skills into agent
+`## Your Skills` indexes as needed; the `agentcore-browser-live-view` pattern skill's
+`> Related skills:` line (move to agent per SSoT); the `_c`-suffix CopilotKit hook names
+in references left as-is (unverified upstream; look-up-at-decision-time anyway).
