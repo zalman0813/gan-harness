@@ -3,7 +3,7 @@
 grounded in spec.md / _research / intent.md.
 
 For each sprint + round, reads the latest contract YAML, extracts every
-`done_looks_like[]` statement and `verification_plan[].steps[]` substring,
+`done_looks_like[]` statement and `outer_gate[].steps[]` substring,
 and verifies whether the text appears (verbatim, case-sensitive substring)
 in any approved anchor source:
 
@@ -37,8 +37,9 @@ def parse_contract_yaml(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     if yaml is not None:
         return yaml.safe_load(text) or {}
-    # Minimal fallback: pull done_looks_like and verification_plan via regex.
-    result: dict = {"done_looks_like": [], "verification_plan": []}
+    # Minimal fallback: pull done_looks_like via regex (outer_gate steps need
+    # a real YAML parser; without PyYAML the ledger covers done_looks_like only).
+    result: dict = {"done_looks_like": [], "outer_gate": []}
     dll_block = re.search(
         r"^done_looks_like:\s*\n((?:\s*-\s.+\n?)+)",
         text,
@@ -96,10 +97,10 @@ def extract_anchors(contract: dict) -> list[str]:
     for entry in contract.get("done_looks_like") or []:
         if isinstance(entry, str):
             anchors.append(entry)
-    for vp in contract.get("verification_plan") or []:
-        if not isinstance(vp, dict):
+    for og in contract.get("outer_gate") or []:
+        if not isinstance(og, dict):
             continue
-        steps = vp.get("steps") or []
+        steps = og.get("steps") or []
         if isinstance(steps, list):
             for step in steps:
                 if isinstance(step, str):

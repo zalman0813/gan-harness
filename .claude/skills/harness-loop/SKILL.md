@@ -1,6 +1,6 @@
 ---
 name: harness-loop
-description: Drive Stage 2 of the gan-harness v3.8 — walk the sprint plan in specs/_epic/spec.md, dispatch per-sprint research (brownfield), per sprint negotiate a contract (generator+evaluator), implement, evaluate against the contract's verification_plan + 4 archetype criteria. Append to contracts.jsonl. No max round budget; the loop runs until evaluator approves or operator stops based on cost. Make sure to use this skill whenever /loop runs, when the user asks to execute the spec, or when handoff from /init to /finalize needs the running app + verdicts.
+description: Drive Stage 2 of the gan-harness v3.8 — walk the sprint plan in specs/_epic/spec.md, dispatch per-sprint research (brownfield), per sprint negotiate a contract (generator+evaluator), implement, evaluate against the contract's inner_gate + outer_gate + 4 archetype criteria. Append to contracts.jsonl. No max round budget; the loop runs until evaluator approves or operator stops based on cost. Make sure to use this skill whenever /loop runs, when the user asks to execute the spec, or when handoff from /init to /finalize needs the running app + verdicts.
 disable-model-invocation: false
 ---
 
@@ -24,7 +24,7 @@ stops externally.
 ASSUMPTIONS I'M MAKING:
 1. `specs/_epic/spec.md` exists and has been approved at `/init`.
 2. `specs/_epic/intent.md` exists (written at /init Phase 0).
-3. The active stack skill provides a running app and the test runner commands the evaluator's `verification_plan` will reference.
+3. The active stack skill provides a running app and the test runner commands the contract's `inner_gate` / `outer_gate` will reference.
 4. The user has not set a hard cost budget I should respect (if they have, the operator will halt externally).
 
 If `specs/_epic/spec.md` is missing, ABORT. /init must run first.
@@ -113,7 +113,7 @@ Both agents have `deep-module-handbook` registered in frontmatter; they load it 
 For round R = 1, 2, 3, ... (no cap):
 
 0. **Set trace context** (first action this round, before any spawn): run `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {R}`. Skipping ⇒ this round's trace + progress row land as PENDING/Round 0.
-1. **Spawn generator** with prompt: "Propose contract for sprint S{NN}. Read spec.md, `_research/S{NN}/*.md`, recent contracts.jsonl. Write `_pending/S{NN}-draft-v{R}.yaml` with verification_plan length >= 20 steps."
+1. **Spawn generator** with prompt: "Propose contract for sprint S{NN}. Read spec.md, `_research/S{NN}/*.md`, recent contracts.jsonl. Write `_pending/S{NN}-draft-v{R}.yaml` with an `inner_gate[]` (lint/typecheck/unit/smoke — generator-run, hermetic) and an `outer_gate[]` (env/integration/playwright/matrix — evaluator-run, real) sized to the sprint surface: ≥2 outer_gate steps per Success-POV bullet + ≥1 interface-stability check per module; no flat step-count floor."
 2. **Spawn evaluator** (separate fresh ctx) with prompt: "Review the contract draft at `_pending/S{NN}-draft-v{R}.yaml`. Write `_pending/S{NN}-review-v{R}.yaml` with verdict (approve | amend_request | reject) and next_action (proceed_to_implement | refine_contract | restart_contract — mechanically derived from verdict)."
 3. **Check verdict + next_action**:
    - `approve` (next_action: proceed_to_implement) → MAIN merges draft into `contracts.jsonl` with timestamp and `phase: agreed`. Proceed to Phase 2.
@@ -126,18 +126,19 @@ For round R = 1, 2, 3, ... (no cap):
 For implementation round IR = 1, 2, 3, ... (no cap):
 
 0. **Set trace context** (first action this round, before the spawn): run `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {IR}`.
-1. **Spawn generator** with prompt: "Implement sprint S{NN} per agreed contract. Read spec.md, contracts.jsonl[latest agreed for S{NN}], `_research/S{NN}/*.md`. On round IR ≥ 2, also read `_evals/S{NN}-R{IR-1}.json` and obey its `next_action` directive (refine | restart_sprint | escalate_to_user) — generator does NOT strategic-decide. Run inner gate, commit once."
-2. Generator writes code, runs inner gate, commits. Optionally writes `_pending/S{NN}-commit-R{IR}-rationale.yaml` per `.claude/schemas/rationale.schema.md`.
+1. **Spawn generator** with prompt: "Implement sprint S{NN} per agreed contract. Read spec.md, contracts.jsonl[latest agreed for S{NN}], `_research/S{NN}/*.md`. If the contract has a `kind: env` outer_gate step, run the environment precondition gate FIRST — on an env-class blocker, escalate (no commit). On round IR ≥ 2, also read `_evals/S{NN}-R{IR-1}.json` and obey its `next_action` directive (refine | restart_sprint | escalate_to_user) — generator does NOT strategic-decide. Run the inner gate, emit `_pending/S{NN}-inner-gate-R{IR}.json` + `_pending/S{NN}-handoff-R{IR}.md`, commit once."
+2. Generator writes code, runs the inner gate, emits the inner-gate artifact + handoff note, commits. Optionally writes `_pending/S{NN}-commit-R{IR}-rationale.yaml` per `.claude/schemas/rationale.schema.md`. If the generator returns an env-blocker escalate token (no commit), treat as `next_action: escalate_to_user` and go to Phase 4.
 3. SubagentStop hook captures transcript → `_traces/S{NN}-gen-R{IR}.jsonl`.
 4. **Post-round trace strengthening (optional but recommended)**: run `python .claude/skills/harness-loop/scripts/anchor_ledger.py --sprint S{NN} --round {IR}` and `python .claude/skills/harness-loop/scripts/divergence_diff.py --sprint S{NN} --round {IR}`. Reports land in `_audit/S{NN}/`; evaluator reads them during VERIFY.
+5. **MAIN readies the environment for evaluation — only when the round changed the environment.** If the generator updated `RUNBOOK.md` or otherwise altered the environment contract (new/changed durable resource, credential, or provision step), MAIN runs `RUNBOOK.md`'s provision procedure so the live environment matches the committed change BEFORE dispatching the evaluator. The mechanism is whatever `RUNBOOK.md` / the stack skill prescribes (provider-agnostic — this skill names only the obligation, not the command). If provisioning FAILS (synth / rollback / equivalent), that is a generator IaC defect → set `next_action: refine` and loop back to Phase 2 with the failure; do NOT dispatch the evaluator against an un-readied environment. A pure-code round that touched no environment contract skips this step.
 
 ### Phase 3 — Evaluate (per sprint S{NN}, after generator commit)
 
 0. **Set trace context** (before the spawn): run `python .claude/skills/harness-loop/scripts/epic_status.py --set-context S{NN} {IR}`.
-1. **Spawn evaluator** (fresh ctx) with prompt: "Verify sprint S{NN} round IR. Read in locked order: spec.md → contracts.jsonl[latest agreed for S{NN}] → `_traces/S{NN}-gen-R{IR}.jsonl[start:end]` → git diff → `_audit/S{NN}/anchor-ledger-R{IR}.tsv` + `_audit/S{NN}/divergence-R{IR}.md` (if present). Run verification_plan + matrix sensor. Emit `_evals/S{NN}-R{IR}.json` with dual-axis envelope + top-level `next_action`."
+1. **Spawn evaluator** (fresh ctx) with prompt: "Verify sprint S{NN} round IR. Read in locked order: spec.md → contracts.jsonl[latest agreed for S{NN}] → `_pending/S{NN}-inner-gate-R{IR}.json` → `_pending/S{NN}-handoff-R{IR}.md` → `_traces/S{NN}-gen-R{IR}.jsonl[start:end]` → git diff → `RUNBOOK.md` → `_audit/S{NN}/anchor-ledger-R{IR}.tsv` + `_audit/S{NN}/divergence-R{IR}.md` (if present). Phase 0: consume the inner-gate artifact (do NOT re-run unit tests). Then run the `outer_gate` in phase order (env → integration → e2e → matrix) honoring depends_on, plus the matrix sensor. Emit `_evals/S{NN}-R{IR}.json` with dual-axis envelope + top-level `next_action`."
 2. Evaluator runs verification; on FAIL determines `next_action` per the rules in `.claude/agents/evaluator.md` (Mode 2 VERIFY — the next_action paragraph).
 3. Evaluator writes `_evals/S{NN}-R{IR}.json`:
-   - `contract_axis.{criteria, findings, verdict}`
+   - `contract_axis.{inner_gate, criteria, findings, verdict}` (inner_gate from the Phase-0 artifact; criteria roll up the outer_gate)
    - `standards_axis.{matrix_sensor, module_design_verification, findings, verdict}`
    - top-level `verdict` (AND of two axis verdicts)
    - top-level `next_action` (proceed on PASS; refine | restart_sprint | escalate_to_user on FAIL)
@@ -169,9 +170,12 @@ The harness has no max-rounds cap. Operator monitors token spend externally. If 
 
 - `specs/_epic/contracts.jsonl` — append-only contract log.
 - `specs/_epic/_pending/S{NN}-{draft|review}-v{N}.yaml` — ephemeral negotiation artefacts.
+- `specs/_epic/_pending/S{NN}-inner-gate-R{N}.json` — generator's inner-gate result artifact (evaluator trusts it at Phase 0; do NOT re-run units).
+- `specs/_epic/_pending/S{NN}-handoff-R{N}.md` — generator's per-round handoff note (entry points for the evaluator).
 - `specs/_epic/_pending/S{NN}-commit-R{N}-rationale.yaml` — optional pre-commit rationale (generator-authored).
 - `specs/_epic/_pending/S{NN}-failure-R{N}.md` — escalate failure report (generator-authored when `next_action: escalate_to_user`).
 - `specs/_epic/_evals/S{NN}-R{N}.json` — per-round evaluator verdict + `next_action`.
+- `RUNBOOK.md` (repo root) — local dev / environment setup, generator-created/maintained per sprint (updated in the same commit when a round changes the environment contract).
 - `specs/_epic/_research/S{NN}/_questions.json` — per-sprint question list (drafted at /loop start, frozen after user approval).
 - `specs/_epic/_research/S{NN}/<id>.md` — per-sprint fact-finder output (written per-sprint at Phase 0.6).
 - `specs/_epic/_audit/S{NN}/anchor-ledger-R{N}.tsv` — anchor verification ledger.

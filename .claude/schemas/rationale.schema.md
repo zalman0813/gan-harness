@@ -3,7 +3,7 @@
 **Status**: contract for `specs/_epic/_pending/S{NN}-commit-R{R}-rationale.yaml`.
 **Lifecycle**: written by generator before each IMPLEMENT commit; read by evaluator at VERIFY time.
 
-This file forces the generator to articulate **what evidence backs each verification_plan step** before commit, instead of post-hoc rationalisation. The anchor ledger + divergence diff scripts cross-check the rationale against actual diff + traces.
+This file forces the generator to articulate **what evidence backs each `outer_gate` step** before commit, instead of post-hoc rationalisation. The anchor ledger + divergence diff scripts cross-check the rationale against actual diff + traces. (The `inner_gate` is hermetic lint/typecheck/unit/smoke — it needs no per-step anchor; its result lives in the inner-gate artifact.)
 
 ---
 
@@ -13,13 +13,13 @@ This file forces the generator to articulate **what evidence backs each verifica
 contract_id: C-S{NN}-v{R}
 sprint: S{NN}
 round: {R}
-verification_plan_evidence:
-  - vp_step: vp-01
-    evidence_file: tests/test_login.py
+outer_gate_evidence:
+  - og_step: og-01
+    evidence_file: tests/e2e/test_login.py
     evidence_lines: "42-58"
     anchor_used: "user enters email and sees confirmation"
     anchor_verified_at: "spec.md:142"
-  - vp_step: vp-02
+  - og_step: og-02
     evidence_file: src/api/forgot_password.py
     evidence_lines: "15-30"
     anchor_used: "user submits forgot-password form"
@@ -32,8 +32,8 @@ deviations_from_contract: []  # if non-empty, each must explain what changed and
 
 - `contract_id` — verbatim from the active `phase: agreed` contract.
 - `sprint` / `round` — match the active sprint/round.
-- `verification_plan_evidence[]` — one entry per VP step in the contract; missing entries = generator did not exercise that step.
-  - `vp_step` — VP id from contract.
+- `outer_gate_evidence[]` — one entry per `outer_gate` step in the contract; missing entries = generator did not exercise that step.
+  - `og_step` — `outer_gate` step id from contract.
   - `evidence_file` — file:line range where the test or check lives.
   - `evidence_lines` — `<start>-<end>` line range string.
   - `anchor_used` — the literal user-language phrase from spec.md / research / intent the step verifies.
@@ -45,8 +45,8 @@ deviations_from_contract: []  # if non-empty, each must explain what changed and
 
 Without forced pre-commit rationale, generator's reasoning becomes
 post-hoc rationalisation — written after the code is decided. Forcing
-the rationale BEFORE the commit ties each VP step to its evidence
-and surfaces un-anchored claims to evaluator and to anchor_ledger.py.
+the rationale BEFORE the commit ties each `outer_gate` step to its
+evidence and surfaces un-anchored claims to evaluator and to anchor_ledger.py.
 
 ## Related scripts
 

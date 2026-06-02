@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gan-harness/schemas/contract.schema.json",
   "title": "Sprint Contract Entry",
-  "description": "One line of specs/_epic/contracts.jsonl. Append-only log of per-sprint contracts negotiated between generator and evaluator. Lifecycle: agreed (after negotiation) -> completed (after evaluator QA passes) -> amended (rare, only when implementation reveals contract issue and evaluator approves the amendment). Each line is independent JSON.",
+  "description": "One line of specs/_epic/contracts.jsonl. Append-only log of per-sprint contracts negotiated between generator and evaluator. Lifecycle: agreed (after negotiation) -> completed (after evaluator QA passes) -> amended (rare, only when implementation reveals a contract issue and evaluator approves the amendment). Each line is independent JSON. Verification is split into two gates: inner_gate (run by the generator before commit, all-mock, no real external dependency) and outer_gate (run by the evaluator at VERIFY against the real running app + real dependencies). This split mirrors the generator/evaluator test-division: the generator self-verifies logic; the evaluator is the adversarial judge that uses the app.",
   "type": "object",
   "required": ["contract_id", "sprint", "phase", "timestamp"],
   "additionalProperties": false,
@@ -32,61 +32,63 @@
       "items": { "type": "string", "pattern": "^F[0-9]{2,3}$" },
       "minItems": 1,
       "uniqueItems": true,
-      "description": "F-ids from spec.md this sprint delivers. Required for phase=agreed."
+      "description": "F-ids from spec.md this sprint delivers. Required for phase=agreed. Must equal the spec.md sprint's Delivers: list verbatim."
     },
     "done_looks_like": {
       "type": "array",
       "items": { "type": "string", "minLength": 10 },
       "minItems": 1,
-      "description": "Human-readable bulleted statements of what 'done' means for this sprint, per Anthropic v2 negotiation. Required for phase=agreed. Each statement should be a behavioral outcome, not an implementation note. For module-touching sprints, generator ALSO includes one item per module touched using the canonical embedding shape from deep-module-handbook references/generator-slice.md §1.5 (carrying hides_decision, applicability, entry-point budget, Strategy seam, broad interface, bounded context, optional deletion-test pre-commitment). Free-text string format is deliberate (LLM-readable); the canonical embedding gives evaluator a deterministic per-module parse target."
+      "description": "Human-readable bulleted statements of what 'done' means for this sprint. Each statement is a behavioral outcome, not an implementation note. For module-touching sprints, generator ALSO includes one item per module touched using the canonical embedding shape from deep-module-handbook references/generator-slice.md §1.5 (carrying hides_decision, applicability, entry-point budget, Strategy seam, broad interface, bounded context, optional deletion-test pre-commitment). Required for phase=agreed."
     },
-    "verification_plan": {
+    "inner_gate": {
       "type": "array",
-      "items": { "$ref": "#/$defs/verification_step" },
+      "items": { "$ref": "#/$defs/inner_step" },
       "minItems": 1,
-      "description": "Concrete, executable steps the evaluator runs to verify done_looks_like. Required for phase=agreed. Each step has a unique id (vp-NN) referenced by criterion_mapping."
+      "description": "Checks the GENERATOR runs itself before committing. All-mock / hermetic: no real external dependency, no real network. The generator emits _pending/S{NN}-inner-gate-R{IR}.json reporting pass/fail per inner_gate step id. GREEN on every step is the sole precondition for the generator's single commit. The evaluator at VERIFY trusts this artifact (Phase 0) and does NOT re-run unit tests; it re-runs an inner step itself only when the artifact is missing or reports RED. Required for phase=agreed."
+    },
+    "outer_gate": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/outer_step" },
+      "minItems": 1,
+      "description": "Steps the EVALUATOR runs at VERIFY against the real running app and real dependencies. Phased and dependency-ordered: env steps run first, then integration, then e2e, then matrix. A step whose depends_on prerequisite FAILed is marked SKIP, not executed. An env-class failure (permission denied, service unreachable, missing durable resource) carries on_fail: escalate. Required for phase=agreed."
     },
     "criterion_mapping": {
       "type": "object",
       "patternProperties": {
         "^.+$": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^vp-[0-9]{2,3}$" },
+          "items": { "type": "string", "pattern": "^og-[0-9]{2,3}$" },
           "minItems": 1,
-          "description": "verification_plan step ids that contribute evidence for this criterion."
+          "description": "outer_gate step ids that contribute evidence for this criterion."
         }
       },
       "minProperties": 4,
       "maxProperties": 4,
-      "description": "Maps each of the 4 evaluation criteria (from spec.md) to the verification_plan steps that exercise it. All 4 criteria from spec.md MUST appear as keys. Required for phase=agreed."
+      "description": "Maps each of the 4 evaluation criteria (from spec.md) to the outer_gate step ids that exercise it. All 4 criteria from spec.md MUST appear as keys, verbatim case-sensitive. The 4 criteria are evaluator-owned, so the mapping references outer_gate ids only. Required for phase=agreed."
     },
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "playwright_must_pass": {
+        "inner_gate_must_pass": {
+          "const": "all",
+          "description": "The inner gate is binary: every inner_gate step must be GREEN before the generator may commit. Always 'all'."
+        },
+        "integration_must_pass": {
           "oneOf": [
             { "const": "all" },
             { "type": "string", "pattern": "^>=[0-9]+%$" }
           ]
         },
-        "api_must_pass": {
-          "oneOf": [
-            { "const": "all" },
-            { "type": "string", "pattern": "^>=[0-9]+%$" }
-          ]
-        },
-        "test_must_pass": {
+        "e2e_must_pass": {
           "oneOf": [
             { "const": "all" },
             { "type": "string", "pattern": "^>=[0-9]+%$" }
           ]
         },
         "matrix_must_pass": {
-          "oneOf": [
-            { "const": "all" },
-            { "type": "string", "pattern": "^>=[0-9]+%$" }
-          ]
+          "const": "all",
+          "description": "The matrix sensor is binary per category; partial credit is not meaningful. Always 'all'."
         },
         "per_criterion": {
           "type": "object",
@@ -106,14 +108,14 @@
     "amendment_reason": {
       "type": "string",
       "minLength": 20,
-      "description": "Why the contract was amended (e.g., 'spec referenced /api/v1 but planner intended /api/v2'). Required for phase=amended."
+      "description": "Why the contract was amended (e.g., 'env step og-01 found a required service is created on-demand by the runtime and cannot be provisioned ahead of time'). Required for phase=amended."
     }
   },
   "allOf": [
     {
       "if": { "properties": { "phase": { "const": "agreed" } } },
       "then": {
-        "required": ["features_covered", "done_looks_like", "verification_plan", "criterion_mapping", "thresholds"]
+        "required": ["features_covered", "done_looks_like", "inner_gate", "outer_gate", "criterion_mapping", "thresholds"]
       }
     },
     {
@@ -125,44 +127,88 @@
     {
       "if": { "properties": { "phase": { "const": "amended" } } },
       "then": {
-        "required": ["features_covered", "done_looks_like", "verification_plan", "criterion_mapping", "thresholds", "amendment_reason"]
+        "required": ["features_covered", "done_looks_like", "inner_gate", "outer_gate", "criterion_mapping", "thresholds", "amendment_reason"]
       }
     }
   ],
 
   "$defs": {
-    "verification_step": {
+    "inner_step": {
       "type": "object",
       "required": ["id", "kind"],
       "additionalProperties": false,
+      "description": "One generator-run pre-commit check. Hermetic: all-mock, no real external dependency. The generator's _pending/S{NN}-inner-gate-R{IR}.json artifact reports {passed, checks[], failures[]} keyed by these ids.",
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^vp-[0-9]{2,3}$",
-          "description": "Step id, unique within this contract. Referenced by criterion_mapping."
+          "pattern": "^ig-[0-9]{2,3}$",
+          "description": "Inner-gate step id, unique within this contract."
         },
         "kind": {
           "type": "string",
-          "enum": ["playwright", "api", "test", "matrix", "manual"],
-          "description": "What kind of verification. playwright: end-to-end browser flow. api: HTTP request/response. test: unit/integration test runner. matrix: deterministic sensor (perf/race/locale/sca/secret/mutation). manual: human verification (rare, only for vision/aesthetic checks the evaluator can't automate)."
+          "enum": ["lint", "typecheck", "unit", "smoke"],
+          "description": "lint: format + static lint. typecheck: type checker. unit: unit test runner — MUST be all-mock (no real external service, no real network); a unit step that reaches a real service is a contract violation. smoke: app boots and a health endpoint returns 200 (still local — no real external dependency under test)."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this check covers, in one line."
+        },
+        "path": {
+          "type": "string",
+          "description": "Test path for kind=unit (e.g., 'tests/test_project_unit.py')."
+        }
+      }
+    },
+    "outer_step": {
+      "type": "object",
+      "required": ["id", "kind", "phase"],
+      "additionalProperties": false,
+      "description": "One evaluator-run VERIFY step against the real running app / real dependencies. Phased and dependency-ordered.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^og-[0-9]{2,3}$",
+          "description": "Outer-gate step id, unique within this contract. Referenced by criterion_mapping and by depends_on."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["env", "integration", "playwright", "matrix", "manual"],
+          "description": "env: environment precondition — credentials present, required permissions, real services reachable, durable resources exist (per RUNBOOK.md). integration: real dependency exercised from a code/API entry point (e.g., a test hitting a real service). playwright: end-to-end exercised from the browser entry point via Playwright (a real dependency is its precondition, not its classifier — a browser-entry test is e2e even when it needs a real datastore). matrix: deterministic sensor (perf/race/locale/sca/secret/mutation/interface-stability). manual: human-style judgement, rare, only for vision/aesthetic criteria."
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["env", "integration", "e2e", "matrix"],
+          "description": "Verification phase. The evaluator runs phases in order env -> integration -> e2e -> matrix. kind=env -> phase env; kind=integration -> phase integration; kind=playwright -> phase e2e; kind=matrix -> phase matrix; kind=manual -> phase e2e. matrix-phase steps always run regardless of earlier-phase failures."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^og-[0-9]{2,3}$" },
+          "default": [],
+          "description": "outer_gate step ids that must PASS before this step is executed. If any prerequisite FAILed or was SKIPped, this step is marked SKIP and not executed. env steps and matrix steps use [] (no prerequisite). e2e steps typically depend on the env step and the integration steps that establish the data they exercise."
+        },
+        "on_fail": {
+          "type": "string",
+          "enum": ["escalate", "skip_dependents", "record"],
+          "default": "skip_dependents",
+          "description": "What happens when this step FAILs. escalate: an environment-class blocker the generator cannot fix by writing code — the evaluator sets next_action: escalate_to_user (use on env steps). skip_dependents: mark every step depending on this one as SKIP, continue with independent steps (default). record: record the FAIL and continue; dependents still run (use only when a fail does not invalidate downstream steps)."
         },
         "steps": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Ordered steps for kind=playwright|api|manual. Each step is a discrete action or assertion."
+          "description": "Ordered actions/assertions for kind=env|integration|playwright|manual."
         },
         "path": {
           "type": "string",
-          "description": "File path for kind=test (e.g., 'tests/test_project.py')."
+          "description": "Test path for an integration step backed by a test file."
         },
         "checks": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Sensor checks for kind=matrix (e.g., ['perf:budget', 'mutation:>=0.75'])."
+          "description": "Sensor checks for kind=matrix (e.g., ['perf:budget', 'mutation:>=0.75', 'interface-stability:rename-internal-helper-tests-still-pass'])."
         },
         "expected_outcome": {
           "type": "string",
-          "description": "Optional: explicit pass criterion. Default is 'all steps succeed' for playwright/api/manual; 'exit 0' for test; 'all checks pass' for matrix."
+          "description": "Optional explicit pass criterion. Default is 'all steps succeed' for env/integration/playwright/manual; 'all checks pass' for matrix."
         }
       }
     }
